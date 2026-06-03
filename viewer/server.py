@@ -273,10 +273,64 @@ def get_req_resp_records(logs_dir: Path, session_id: str, date: str) -> list[dic
 
 
 # ---------------------------------------------------------------------------
+# Recording status API
+# ---------------------------------------------------------------------------
+
+def get_recording_status(logs_dir: Path, config_path: Path | None = None) -> dict[str, Any]:
+    """Return recording config and health status for the viewer status panel.
+
+    Never includes API keys, auth values, cookies, or sensitive header values.
+    """
+    try:
+        from ccwhat.config import DEFAULT_CONFIG_PATH, load_config
+        cfg_path = config_path or DEFAULT_CONFIG_PATH
+        cfg = load_config(cfg_path)
+    except Exception:
+        cfg = None
+        cfg_path = None
+
+    latest_ts: str | None = None
+    if logs_dir.is_dir():
+        jsonl_files = sorted(logs_dir.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for jf in jsonl_files[:1]:
+            latest_ts = jf.stat().st_mtime.__str__()
+
+    if cfg is None:
+        return {
+            "configValid": False,
+            "configPath": str(cfg_path) if cfg_path else None,
+            "domains": [],
+            "paths": [],
+            "rawLogDir": str(logs_dir),
+            "latestRawLogTimestamp": latest_ts,
+            "redactionSummary": "Default header redaction active",
+            "maxBodyBytes": None,
+            "preset": None,
+        }
+
+    return {
+        "configValid": cfg.is_valid_for_recording(),
+        "configPath": str(cfg_path),
+        "domains": cfg.effective_domains(),
+        "paths": cfg.effective_paths(),
+        "rawLogDir": str(logs_dir),
+        "latestRawLogTimestamp": latest_ts,
+        "redactionSummary": f"{len(cfg.redact_headers)} sensitive headers redacted by default",
+        "maxBodyBytes": cfg.max_body_bytes,
+        "preset": cfg.preset,
+    }
+
+
+# ---------------------------------------------------------------------------
 # HTTP request handler
 # ---------------------------------------------------------------------------
 
-def _make_handler(projects_dir: Path, logs_dir: Path):
+def _make_handler(
+    projects_dir: Path,
+    logs_dir: Path,
+    config_path: Path | None = None,
+    analyzer_cmd: list[str] | tuple[str, ...] | None = None,
+):
     viewer_dir = Path(__file__).parent
 
     class Handler(BaseHTTPRequestHandler):
@@ -355,7 +409,7 @@ def _make_handler(projects_dir: Path, logs_dir: Path):
                 self._send_json({"ok": False, "error": "session not found"}, 404)
                 return
 
-            from deep_ai_analysis.analyzer import (
+            from ccwhat.analyzer import (
                 AnalysisError,
                 build_analysis_prompt,
                 run_mc_analysis,
@@ -363,7 +417,7 @@ def _make_handler(projects_dir: Path, logs_dir: Path):
 
             prompt, truncated = build_analysis_prompt(session)
             try:
-                report, elapsed_ms = run_mc_analysis(prompt)
+                report, elapsed_ms = run_mc_analysis(prompt, cmd=analyzer_cmd)
             except AnalysisError as exc:
                 self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
                 return
@@ -390,7 +444,10 @@ def _make_handler(projects_dir: Path, logs_dir: Path):
                 self._send_file(viewer_dir / _static[path])
                 return
 
-            if path == "/api/projects":
+            if path == "/api/recording/status":
+                self._send_json(get_recording_status(logs_dir, config_path))
+
+            elif path == "/api/projects":
                 self._send_json(get_projects(projects_dir))
 
             elif path.startswith("/api/session/"):
@@ -460,7 +517,7 @@ def _make_handler(projects_dir: Path, logs_dir: Path):
 
             elif path == "/api/export":
                 from urllib.parse import parse_qs
-                from deep_ai_analysis.exporter import build_tar_gz_bytes, default_filename
+                from ccwhat.exporter import build_tar_gz_bytes, default_filename
                 params = parse_qs(query)
                 raw_sessions = params.get("sessions", [""])[0]
                 session_ids = [s.strip() for s in raw_sessions.split(",") if s.strip()]
@@ -505,16 +562,34 @@ def _make_handler(projects_dir: Path, logs_dir: Path):
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def run_server(port: int, projects_dir: Path, logs_dir: Path) -> None:
-    handler = _make_handler(projects_dir, logs_dir)
-    server = HTTPServer(("127.0.0.1", port), handler)
-    url = f"http://127.0.0.1:{port}/claude-log.html"
+def viewer_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}/claude-log.html"
+
+
+def create_server(
+    port: int,
+    projects_dir: Path,
+    logs_dir: Path,
+    config_path: Path | None = None,
+    analyzer_cmd: list[str] | tuple[str, ...] | None = None,
+) -> HTTPServer:
+    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd)
+    return HTTPServer(("127.0.0.1", port), handler)
+
+
+def open_viewer(port: int) -> None:
+    webbrowser.open(viewer_url(port))
+
+
+def run_server(port: int, projects_dir: Path, logs_dir: Path, config_path: Path | None = None) -> None:
+    server = create_server(port, projects_dir, logs_dir, config_path)
+    url = viewer_url(port)
     print(f"Viewer API listening on http://127.0.0.1:{port}")
     print(f"Projects dir : {projects_dir.resolve()}")
     print(f"Logs dir     : {logs_dir.resolve()}")
     print(f"Open viewer  : {url}")
     print("Press Ctrl+C to stop.\n")
-    webbrowser.open(url)
+    open_viewer(port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -15,8 +15,8 @@ from urllib.parse import quote
 
 from click.testing import CliRunner
 
-from deep_ai_analysis.commands.import_ import import_ as import_command
-from deep_ai_analysis.exporter import build_tar_gz_bytes, default_filename
+from ccwhat.commands.import_ import import_ as import_command
+from ccwhat.exporter import build_tar_gz_bytes, default_filename
 from viewer.server import _make_handler, get_session
 
 
@@ -64,11 +64,12 @@ class ExportPackageTests(unittest.TestCase):
 
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
             names = set(tar.getnames())
-            manifest = json.load(tar.extractfile("deep-ai-analysis-export/manifest.json"))  # type: ignore[arg-type]
-            readme = tar.extractfile("deep-ai-analysis-export/README.md").read().decode()  # type: ignore[union-attr]
-            view_command = tar.getmember("deep-ai-analysis-export/view.command")
+            manifest = json.load(tar.extractfile("ccwhat-export/manifest.json"))  # type: ignore[arg-type]
+            readme = tar.extractfile("ccwhat-export/README.md").read().decode()  # type: ignore[union-attr]
+            view_command = tar.getmember("ccwhat-export/view.command")
 
         self.assertEqual(manifest["exportVersion"], "2.0")
+        self.assertEqual(manifest["toolName"], "ccwhat")
         self.assertEqual(manifest["sessionCount"], 2)
         self.assertEqual([s["sessionId"] for s in manifest["sessions"]], [SID_A, SID_B])
         self.assertTrue(manifest["sessions"][0]["included"]["reqResp"])
@@ -76,13 +77,24 @@ class ExportPackageTests(unittest.TestCase):
         self.assertFalse(manifest["sessions"][1]["included"]["reqResp"])
         self.assertEqual(manifest["sessions"][1]["counts"]["reqRespFiles"], 0)
 
-        self.assertIn(f"deep-ai-analysis-export/sessions/{SID_A}/claude-logs/main-session.jsonl", names)
-        self.assertIn(f"deep-ai-analysis-export/sessions/{SID_A}/claude-logs/subagents/agent-one.jsonl", names)
-        self.assertIn(f"deep-ai-analysis-export/sessions/{SID_A}/req-resp/2026-05-29.jsonl", names)
-        self.assertIn(f"deep-ai-analysis-export/sessions/{SID_B}/metadata/session.json", names)
-        self.assertNotIn("deep-ai-analysis-export/claude-logs/main-session.jsonl", names)
-        self.assertIn("导入包中的所有 session", readme)
+        self.assertIn(f"ccwhat-export/sessions/{SID_A}/claude-logs/main-session.jsonl", names)
+        self.assertIn(f"ccwhat-export/sessions/{SID_A}/claude-logs/subagents/agent-one.jsonl", names)
+        self.assertIn(f"ccwhat-export/sessions/{SID_A}/req-resp/2026-05-29.jsonl", names)
+        self.assertIn(f"ccwhat-export/sessions/{SID_B}/metadata/session.json", names)
+        self.assertNotIn("ccwhat-export/claude-logs/main-session.jsonl", names)
+        self.assertIn("ccwhat import", readme)
+        self.assertIn("pip install ccwhat", readme)
         self.assertTrue(view_command.mode & 0o111)
+
+    def test_view_command_uses_ccwhat(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = _build_package(Path(tmp))
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            view_cmd = tar.extractfile("ccwhat-export/view.command")
+            assert view_cmd is not None
+            content = view_cmd.read().decode()
+        self.assertIn("ccwhat import", content)
+        self.assertNotIn("deep-ai-analysis", content)
 
     def test_default_filename_uses_short_id_or_session_count(self) -> None:
         single = default_filename(SID_A, 1)
@@ -115,8 +127,9 @@ class WebExportTests(unittest.TestCase):
                 server.server_close()
 
         with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as tar:
-            manifest = json.load(tar.extractfile("deep-ai-analysis-export/manifest.json"))  # type: ignore[arg-type]
+            manifest = json.load(tar.extractfile("ccwhat-export/manifest.json"))  # type: ignore[arg-type]
         self.assertEqual(manifest["exportVersion"], "2.0")
+        self.assertEqual(manifest["toolName"], "ccwhat")
         self.assertEqual(manifest["sessionCount"], 2)
 
     def test_export_modal_uses_multi_select_controls(self) -> None:
@@ -129,11 +142,41 @@ class WebExportTests(unittest.TestCase):
         self.assertIn("-sessions.tar.gz", html)
         self.assertNotIn('id="exportSessionSel"', html)
 
+    def test_recording_status_api_returns_no_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir, req_resp_dir, _ = _make_source_data(tmp / "source")
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, req_resp_dir))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", "/api/recording/status")
+                response = conn.getresponse()
+                body_bytes = response.read()
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 200)
+        data = json.loads(body_bytes)
+        # Must have these fields
+        self.assertIn("configValid", data)
+        self.assertIn("domains", data)
+        self.assertIn("paths", data)
+        self.assertIn("rawLogDir", data)
+        # Must NOT contain secrets
+        body_str = body_bytes.decode()
+        self.assertNotIn("authorization", body_str.lower().replace("redact", ""))
+        self.assertNotIn("api-key", body_str.lower().replace("redact", "").replace("redact_headers", ""))
+
 
 class ImportPackageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.runner = CliRunner()
-        self.import_module = importlib.import_module("deep_ai_analysis.commands.import_")
+        self.import_module = importlib.import_module("ccwhat.commands.import_")
 
     def _patched_import_dirs(self, tmp: Path):
         imports_dir = tmp / "imports"
@@ -188,6 +231,7 @@ class ImportPackageTests(unittest.TestCase):
             self.assertNotIn('"old": true', old_log.read_text(encoding="utf-8"))
 
     def test_import_legacy_single_session_package(self) -> None:
+        """Import should accept old deep-ai-analysis-export/ root for compatibility."""
         with tempfile.TemporaryDirectory() as tmp_name:
             tmp = Path(tmp_name)
             package_dir = tmp / "deep-ai-analysis-export"
@@ -212,6 +256,21 @@ class ImportPackageTests(unittest.TestCase):
             self.assertTrue((imports_dir / "legacy-project" / f"{SID_A}.jsonl").exists())
             self.assertTrue((raw_dir / SID_A / "2026-05-29.jsonl").exists())
 
+    def test_import_new_ccwhat_export_package(self) -> None:
+        """Import should accept new ccwhat-export/ root."""
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            gz_package = tmp / "package.tar.gz"
+            gz_package.write_bytes(_build_package(tmp / "source"))
+
+            patch_imports, patch_raw, imports_dir, raw_dir = self._patched_import_dirs(tmp)
+            with patch_imports, patch_raw:
+                result = self.runner.invoke(import_command, [str(gz_package), "--force"])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertIn("Imported 2 session(s).", result.output)
+            self.assertTrue((imports_dir / "project-a" / f"{SID_A}.jsonl").exists())
+
     def test_import_plain_tar_package(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_name:
             tmp = Path(tmp_name)
@@ -224,7 +283,7 @@ class ImportPackageTests(unittest.TestCase):
 
             tar_path = tmp / "package.tar"
             with tarfile.open(tar_path, "w") as tar:
-                tar.add(extracted / "deep-ai-analysis-export", arcname="deep-ai-analysis-export")
+                tar.add(extracted / "ccwhat-export", arcname="ccwhat-export")
 
             patch_imports, patch_raw, imports_dir, _ = self._patched_import_dirs(tmp)
             with patch_imports, patch_raw:

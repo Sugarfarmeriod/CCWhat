@@ -170,7 +170,7 @@ message.content[0].content为数组的示例：
         "id": "toolu_bdrk_011va7YhRQr91Xb8MUXbdh3Z",
         "name": "Bash",
         "input": {
-          "command": "python3 -m deep_ai_analysis.cli create-report --session-id 9fcdf91f-3cd3-41c2-9b4a-bdccc17b7025 --output /tmp/test-report.html 2>&1",
+          "command": "python3 -m ccwhat.cli create-report --session-id 9fcdf91f-3cd3-41c2-9b4a-bdccc17b7025 --output /tmp/test-report.html 2>&1",
           "description": "Generate a test report"
         }
       }

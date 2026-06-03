@@ -1,81 +1,59 @@
-# deep-ai-analysis
+# ccwhat
 
-拦截并分析 AI 服务 HTTP/HTTPS 流量的 CLI 工具包。
+Record and view AI coding CLI traffic locally.
 
-## 环境要求
+English | [中文](README.zh.md)
 
-- Python 3.10+
-- [mitmproxy](https://mitmproxy.org/)（通过 `brew install mitmproxy` 安装）
+## Quick start
 
-## 安装
-
-### 一键安装脚本（推荐⭐️⭐️⭐️⭐️⭐️）
+Install or update:
 
 ```bash
-bash <(curl -s https://msstest.sankuai.com/ad-dqe-public/ai-coding-analysis/install.sh)
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash
 ```
 
-或者手动下载后执行：
+Run:
 
 ```bash
-curl -O https://msstest.sankuai.com/ad-dqe-public/ai-coding-analysis/install.sh
-bash install.sh
+ccwhat -- claude
 ```
 
-### 从源码安装（开发模式）
+Uninstall:
 
 ```bash
-git clone ssh://git@git.sankuai.com/~zhoukang04/deep-ai-analysis.git
-cd deep-ai-analysis
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash -s -- uninstall
 ```
 
-## 快速开始 ⭐️⭐️⭐️⭐️⭐️
+The first run will guide you through what model API domain to record. Direct Claude users can choose the Claude preset. Gateway or relay users can enter their own domain, or use discovery mode when unsure.
+
+## What it does
+
+`ccwhat -- claude` starts a local proxy, launches Claude Code through it, records only the domains/paths you confirmed, and stores logs under `~/.ccwhat/`.
+
+It also opens the viewer in your browser. If you close the tab, reopen it with:
 
 ```bash
-# 终端 1 — 启动代理
-deep-ai-analysis proxy
-
-# 终端 2 — 通过代理启动 mc，开始 AI Coding
-deep-ai-analysis start-mc
-
-# 终端 3 — 打开浏览器查看 AI 工作内容
-deep-ai-analysis web-server
+ccwhat web
 ```
 
-## 数据导出
+## Notes
 
-### 方式一：在 Viewer 页面点击导出（推荐）
+- Supports macOS, Linux, and WSL. Windows native is not supported yet.
+- Python 3.10+ and mitmproxy are required; the install script checks them.
+- HTTPS recording requires trusting the mitmproxy CA certificate when prompted.
+- Authorization, cookies, API keys, token/secret/key headers are redacted.
+- Discovery mode stores metadata only, not request or response bodies.
 
-启动 `web-server` 后，打开 `http://127.0.0.1:7789/claude-log.html`，加载任意 session 后，顶栏会出现「导出」按钮：
-
-1. 点击「**导出**」
-2. 在弹窗中确认 session 信息，填写或修改文件名
-3. 点击「**选择位置并导出**」，在系统文件夹选择对话框中选择保存目录
-4. 导出完成后弹窗显示「✓ 已导出」
-
-### 方式二：命令行导出
+## Useful commands
 
 ```bash
-# 查看当前可导出的 session
-deep-ai-analysis export --list
-
-# 导出指定 session
-deep-ai-analysis export <session-id> -o /path/to/export.tar.gz
+ccwhat setup              # change recording config
+ccwhat discover -- claude # find the API endpoint without storing payloads
+ccwhat --no-web -- claude
+ccwhat -- mc --code       # launch any AI coding CLI
+ccwhat export --list      # list recorded sessions
+ccwhat export <session>   # export a session
+ccwhat import <archive> --open
 ```
 
-导出包结构：
-
-```
-<session_id>/
-  claude-log.jsonl          # Claude Code 主日志
-  subagents/                # Subagent 日志（如有）
-  raw-req-resp/             # 原始请求响应（如有）
-    YYYY-MM-DD.jsonl
-```
-
-## 命令说明
-
-```bash
-deep-ai-analysis --help
-```
+Legacy `deep-ai-analysis` exports can still be imported.

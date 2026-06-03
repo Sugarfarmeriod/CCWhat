@@ -1,1 +1,1 @@
-"""Tests for deep-ai-analysis."""
+"""Tests for ccwhat."""

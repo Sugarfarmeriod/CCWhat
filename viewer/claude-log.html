@@ -1684,7 +1684,7 @@ async function doExport() {
     statusEl.style.color = '#56d364';
     statusEl.textContent = `✓ 诊断包导出成功，文件已下载至浏览器默认下载文件夹`;
 
-    document.getElementById('exportImportCmdText').textContent = `deep-ai-analysis import ~/Downloads/${filename} --open`;
+    document.getElementById('exportImportCmdText').textContent = `ccwhat import ~/Downloads/${filename} --open`;
     document.getElementById('exportImportCmd').style.display = '';
     document.getElementById('exportCopyBtn').textContent = '复制导入命令';
 

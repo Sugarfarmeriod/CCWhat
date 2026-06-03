@@ -10,7 +10,7 @@ from http.server import HTTPServer
 from pathlib import Path
 from unittest import mock
 
-from deep_ai_analysis.analyzer import (
+from ccwhat.analyzer import (
     AnalysisError,
     build_analysis_prompt,
     run_mc_analysis,
@@ -88,6 +88,17 @@ class AnalysisCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "empty"):
             run_mc_analysis("prompt", runner=mock.Mock(return_value=empty))
 
+    def test_run_mc_analysis_uses_explicit_command(self) -> None:
+        completed = subprocess.CompletedProcess(["mc", "--code"], 0, stdout="report", stderr="")
+        runner = mock.Mock(return_value=completed)
+
+        report, _ = run_mc_analysis("prompt", runner=runner, cmd=("mc", "--code"))
+
+        self.assertEqual(report, "report")
+        call = runner.call_args
+        self.assertEqual(call.args[0], ["mc", "--code"])
+        self.assertEqual(call.kwargs["input"], "prompt")
+
 
 class AnalyzeApiTests(unittest.TestCase):
     def _post_analyze(self, server: HTTPServer, payload: dict) -> tuple[int, dict]:
@@ -112,7 +123,7 @@ class AnalyzeApiTests(unittest.TestCase):
             thread.start()
             try:
                 completed = subprocess.CompletedProcess(["mc"], 0, stdout="Agent 交互分析报告", stderr="")
-                with mock.patch("deep_ai_analysis.analyzer.subprocess.run", return_value=completed) as run:
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
                     status, payload = self._post_analyze(server, {"sessionId": SID, "turnKeys": ["main:0"]})
             finally:
                 server.shutdown()
@@ -123,9 +134,35 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["report"], "Agent 交互分析报告")
         call = run.call_args
-        self.assertEqual(call.args[0], ["mc", "--code", "-p", "-"])
+        self.assertEqual(call.args[0][:2], ["claude", "-p"])  # default analyzer cmd
         self.assertIn("hello", call.kwargs["input"])
         self.assertIn("helper", call.kwargs["input"])
+
+    def test_analyze_api_uses_managed_viewer_analyzer_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(
+                ("127.0.0.1", 0),
+                _make_handler(projects_dir, tmp / "raw", analyzer_cmd=("mc", "--code")),
+            )
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["mc", "--code"], 0, stdout="report", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
+                    status, payload = self._post_analyze(server, {"sessionId": SID})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["report"], "report")
+        call = run.call_args
+        self.assertEqual(call.args[0], ["mc", "--code"])
+        self.assertIn("hello", call.kwargs["input"])
 
     def test_analyze_api_handles_missing_session_and_mc_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_name:
@@ -139,7 +176,7 @@ class AnalyzeApiTests(unittest.TestCase):
                     server,
                     {"sessionId": "dddddddd-dddd-dddd-dddd-dddddddddddd"},
                 )
-                with mock.patch("deep_ai_analysis.analyzer.subprocess.run", side_effect=FileNotFoundError()):
+                with mock.patch("ccwhat.analyzer.subprocess.run", side_effect=FileNotFoundError()):
                     error_status, error_payload = self._post_analyze(server, {"sessionId": SID})
             finally:
                 server.shutdown()
@@ -149,7 +186,7 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertEqual(missing_status, 404, missing_payload)
         self.assertFalse(missing_payload["ok"])
         self.assertEqual(error_status, 500, error_payload)
-        self.assertEqual(error_payload["code"], "mc_not_found")
+        self.assertEqual(error_payload["code"], "analyzer_not_found")
 
 
 class AnalyzeFrontendTests(unittest.TestCase):
