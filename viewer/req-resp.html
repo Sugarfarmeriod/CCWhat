@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raw Req/Resp Viewer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117; color: #e1e4e8;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 8px 14px; display: flex; align-items: center;
+    gap: 8px; flex-shrink: 0; flex-wrap: wrap;
+  }
+  .topbar h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; white-space: nowrap; }
+  .adv-wrap { position: relative; }
+  .adv-btn {
+    background: #21262d; color: #8b949e;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 8px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .adv-btn:hover { color: #e1e4e8; background: #30363d; }
+  .adv-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px 12px; z-index: 100; min-width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  }
+  .adv-panel.open { display: block; }
+  .adv-panel label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 4px; }
+  .adv-panel .field { width: 100%; }
+  .field {
+    background: #0d1117; color: #e1e4e8;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 8px; font-size: 12px;
+  }
+  .field:focus { outline: none; border-color: #58a6ff; }
+  select.field { cursor: pointer; }
+  .btn {
+    background: #21262d; color: #e1e4e8;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: #30363d; }
+  .badge { font-size: 11px; color: #8b949e; white-space: nowrap; }
+  .nav-links { margin-left: auto; display: flex; gap: 10px; }
+  .nav-link { font-size: 12px; color: #58a6ff; text-decoration: none; white-space: nowrap; }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    display: none; background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    padding: 8px 14px; flex-shrink: 0;
+    gap: 0;
+  }
+  .stats-bar.visible { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; }
+  .stats-group { display: flex; align-items: center; gap: 12px; }
+  .stats-group + .stats-group { padding-left: 20px; border-left: 1px solid #21262d; }
+  .stat-item { display: flex; flex-direction: column; }
+  .stat-label { font-size: 10px; color: #484f58; margin-bottom: 1px; }
+  .stat-value { font-size: 13px; font-weight: 600; color: #e1e4e8; font-family: monospace; }
+  .stat-value.accent { color: #79c0ff; }
+  .sparkline-wrap { display: flex; align-items: center; gap: 6px; padding-left: 20px; border-left: 1px solid #21262d; position: relative; }
+  .sparkline-label { font-size: 10px; color: #484f58; white-space: nowrap; }
+  .spark-tooltip {
+    display: none; position: fixed;
+    background: #1c2230; border: 1px solid #30363d; border-radius: 4px;
+    padding: 4px 8px; font-size: 11px; color: #e1e4e8; font-family: monospace;
+    pointer-events: none; white-space: nowrap; z-index: 200;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  }
+  .spark-tooltip.show { display: block; }
+
+  /* ── Main layout ── */
+  .main { flex: 1; display: flex; overflow: hidden; }
+
+  /* ── Left: record list ── */
+  .list-panel {
+    width: 380px; flex-shrink: 0;
+    border-right: 1px solid #30363d;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .record-list { flex: 1; overflow-y: auto; }
+
+  .record-item {
+    padding: 9px 12px; border-bottom: 1px solid #161b22;
+    cursor: pointer; transition: background .1s;
+  }
+  .record-item:hover { background: #161b22; }
+  .record-item.active { background: #1a2535; border-left: 3px solid #58a6ff; padding-left: 9px; }
+
+  .ri-row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 11px; }
+  .ri-lineno { font-size: 10px; color: #484f58; font-family: monospace; flex-shrink: 0; min-width: 28px; }
+  .ri-ts { color: #8b949e; }
+  .ri-method { font-weight: 700; font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #21262d; color: #79c0ff; }
+  .ri-status { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #21262d; color: #8b949e; }
+  .ri-status.ok { background: #1a2e1a; color: #56d364; }
+  .ri-status.err { background: #3d1010; color: #f85149; }
+  .sse-badge { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: #1a2440; color: #79c0ff; }
+  .ri-url { font-size: 11px; color: #6e7681; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── Right: detail ── */
+  .detail-panel { flex: 1; overflow-y: auto; padding: 14px; }
+  .empty-detail { height: 100%; display: flex; align-items: center; justify-content: center; color: #484f58; font-size: 13px; }
+
+  /* Section */
+  .section { border: 1px solid #30363d; border-radius: 7px; margin-bottom: 10px; overflow: hidden; }
+
+  /* Tabbed section */
+  .tab-section { border: 1px solid #30363d; border-radius: 7px; margin-bottom: 10px; overflow: hidden; }
+  .tab-section-hdr {
+    background: #161b22; padding: 0 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #30363d;
+  }
+  .tab-bar { display: flex; gap: 0; overflow-x: auto; }
+  .tab-btn {
+    padding: 7px 12px; font-size: 12px; cursor: pointer;
+    color: #8b949e; border-bottom: 2px solid transparent;
+    white-space: nowrap; user-select: none; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .tab-btn:hover { color: #e1e4e8; }
+  .tab-btn.active { color: #f0f6fc; border-bottom-color: #58a6ff; }
+  .tab-section-toggle { font-size: 11px; color: #58a6ff; cursor: pointer; padding: 7px 0; white-space: nowrap; }
+  .tab-pane { display: none; padding: 10px 12px; }
+  .tab-pane.active { display: block; }
+  .tab-section-body.hidden .tab-pane { display: none; }
+  .sec-hdr {
+    background: #161b22; padding: 7px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+  .sec-title { font-size: 12px; font-weight: 600; color: #f0f6fc; }
+  .sec-toggle { font-size: 11px; color: #58a6ff; }
+  .sec-body { padding: 10px 12px; border-top: 1px solid #21262d; }
+  .sec-body.hidden { display: none; }
+
+  /* Info grid */
+  .info-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px 10px; font-size: 12px; }
+  .ig-k { color: #8b949e; }
+  .ig-v { color: #e1e4e8; word-break: break-all; font-family: monospace; font-size: 11px; }
+
+  /* Headers table */
+  .headers-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .headers-table td { padding: 3px 6px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  .headers-table td:first-child { color: #79c0ff; width: 220px; word-break: break-all; }
+  .headers-table td:last-child { color: #adbac7; word-break: break-all; }
+
+  /* Raw / JSON content */
+  /* JSON tree */
+  .json-tree { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 11px; line-height: 1.7; }
+  .jt-node { }
+  .jt-toggle {
+    display: inline-block; width: 14px; text-align: center;
+    cursor: pointer; color: #58a6ff; user-select: none; flex-shrink: 0;
+  }
+  .jt-toggle:hover { color: #79c0ff; }
+  .jt-key { color: #79c0ff; }
+  .jt-str { color: #a5d6ff; }
+  .jt-num { color: #f2cc60; }
+  .jt-bool { color: #ff7b72; }
+  .jt-null { color: #ff7b72; }
+  .jt-punct { color: #6e7681; }
+  .jt-summary { color: #6e7681; font-style: italic; cursor: pointer; }
+  .jt-summary:hover { color: #8b949e; }
+  .jt-children { margin-left: 16px; border-left: 1px solid #21262d; padding-left: 6px; }
+  .jt-children.hidden { display: none; }
+  .jt-row { display: flex; align-items: flex-start; }
+
+  .raw-block {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 11px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all;
+    background: #0d1117; border-radius: 4px; padding: 8px;
+    max-height: 400px; overflow-y: auto;
+  }
+  .json-key    { color: #79c0ff; }
+  .json-str    { color: #a5d6ff; }
+  .json-num    { color: #f2cc60; }
+  .json-bool   { color: #ff7b72; }
+  .json-null   { color: #ff7b72; }
+  .json-punct  { color: #e1e4e8; }
+
+  /* SSE events */
+  .sse-event {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 11px; color: #adbac7;
+    border-bottom: 1px solid #161b22; padding: 4px 0;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .sse-event:last-child { border-bottom: none; }
+
+  /* Placeholder / spinner */
+  .placeholder { color: #484f58; font-size: 13px; padding: 20px; text-align: center; }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid #30363d;
+    border-top-color: #58a6ff; border-radius: 50%;
+    animation: spin .6s linear infinite; margin: 24px auto; display: block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Markdown rendered */
+  .md-view { font-size: 12px; line-height: 1.7; color: #e1e4e8; padding: 4px 0; }
+  .md-view h1,.md-view h2,.md-view h3 { color: #f0f6fc; margin: 8px 0 4px; font-size: 13px; }
+  .md-view p { margin: 4px 0; }
+  .md-view code { background:#21262d; padding:1px 4px; border-radius:3px; font-family:monospace; font-size:11px; }
+  .md-view pre { background:#0d1117; border:1px solid #21262d; border-radius:4px; padding:8px; margin:6px 0; overflow-x:auto; font-size:11px; font-family:monospace; }
+  .md-view ul,.md-view ol { padding-left:18px; margin:4px 0; }
+  .md-view li { margin:2px 0; }
+  .md-view strong { color:#f0f6fc; }
+  .md-view em { color:#adbac7; }
+  /* md toggle switch */
+  .md-switch {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: 6px; cursor: pointer; user-select: none;
+  }
+  .md-switch-label { font-size: 10px; color: #6e7681; }
+  .md-switch-track {
+    position: relative; width: 32px; height: 16px;
+    background: #30363d; border-radius: 8px;
+    transition: background .2s;
+  }
+  .md-switch-track.on { background: #1f6feb; }
+  .md-switch-thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #e1e4e8; transition: left .2s;
+  }
+  .md-switch-track.on .md-switch-thumb { left: 18px; }
+  .md-switch-right { font-size: 10px; color: #6e7681; }
+
+  /* Tool expand rows */
+  .tool-row { border-bottom:1px solid #21262d; }
+  .tool-row:last-child { border-bottom:none; }
+  .tool-hdr { display:flex; align-items:center; gap:6px; padding:5px 0; cursor:pointer; user-select:none; }
+  .tool-hdr:hover .tool-name { color:#f0f6fc; }
+  .tool-arrow { font-size:9px; color:#58a6ff; }
+  .tool-name { font-size:11px; color:#e3b341; font-weight:600; }
+  .tool-desc { font-size:11px; color:#6e7681; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tool-detail { padding:6px 0 8px 14px; display:none; }
+  .tool-detail.open { display:block; }
+  .tool-schema { font-family:monospace; font-size:11px; color:#adbac7; white-space:pre-wrap; background:#0d1117; border-radius:4px; padding:6px; max-height:200px; overflow-y:auto; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+  /* Messages diff */
+  .msg-diff-item {
+    padding: 6px 8px; border-radius: 4px; margin-bottom: 6px;
+    border-left: 3px solid #30363d;
+  }
+  .msg-diff-item:last-child { margin-bottom: 0; }
+  .msg-diff-item.role-user { border-left-color: #56d364; }
+  .msg-diff-item.role-assistant { border-left-color: #79c0ff; }
+  .msg-diff-role {
+    font-size: 10px; font-weight: 600; margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .msg-diff-item.role-user .msg-diff-role { color: #56d364; }
+  .msg-diff-item.role-assistant .msg-diff-role { color: #79c0ff; }
+  .msg-diff-block { font-size: 11px; color: #adbac7; margin-bottom: 3px; }
+  .msg-diff-block:last-child { margin-bottom: 0; }
+  .msg-diff-type {
+    display: inline-block; font-size: 10px; padding: 0 4px;
+    border-radius: 3px; background: #21262d; color: #8b949e; margin-right: 4px;
+  }
+
+  /* Format button (shown on jt-row hover for long strings) */
+  .fmt-btn {
+    opacity: 0; pointer-events: none;
+    margin-left: 6px; padding: 0 5px; height: 16px; line-height: 16px;
+    font-size: 10px; cursor: pointer;
+    background: #21262d; color: #79c0ff;
+    border: 1px solid #30363d; border-radius: 3px;
+    white-space: nowrap; flex-shrink: 0;
+    transition: opacity .1s;
+  }
+  .jt-row:hover .fmt-btn { opacity: 1; pointer-events: auto; }
+  .fmt-btn:hover { background: #30363d; }
+
+  /* Format overlay */
+  #fmtOverlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.65); z-index: 9999;
+    align-items: center; justify-content: center;
+  }
+  #fmtOverlay.open { display: flex; }
+  .fmt-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    width: min(90vw, 900px); max-height: 85vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .fmt-card-hdr {
+    background: #0d1117; padding: 8px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #30363d; flex-shrink: 0;
+  }
+  .fmt-card-title { font-size: 12px; font-weight: 600; color: #f0f6fc; }
+  .fmt-card-mode {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: #21262d; color: #79c0ff; margin-left: 8px;
+  }
+  .fmt-card-close {
+    background: none; border: none; color: #8b949e; font-size: 16px;
+    cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .fmt-card-close:hover { color: #e1e4e8; }
+  .fmt-card-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+
+  /* Source filter chips */
+  .source-filter-wrap { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .source-chip {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; cursor: pointer;
+    user-select: none; border: 1px solid transparent; transition: opacity .1s;
+  }
+  .source-chip.off { opacity: .4; }
+  .source-chip-main { background: #1a2440; color: #79c0ff; border-color: #1f4070; }
+  .source-chip-agent { background: #2d1f3a; color: #bc8cff; border-color: #4a2d6a; }
+  .source-chip-unknown { background: #21262d; color: #8b949e; border-color: #30363d; }
+  .source-loading { font-size: 11px; color: #58a6ff; display: flex; align-items: center; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Raw Req/Resp Viewer</h1>
+  <div class="adv-wrap" id="advWrap">
+    <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
+    <div class="adv-panel" id="advPanel">
+      <label>API URL</label>
+      <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址">
+      <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="filterTitleReq" checked onchange="renderList();renderStats()">
+        <label for="filterTitleReq" style="font-size:11px;color:#e1e4e8;cursor:pointer;margin:0">过滤 title 生成请求</label>
+      </div>
+    </div>
+  </div>
+  <select class="field" id="sessionSel" style="max-width:280px" onchange="onSessionChange()">
+    <option value="">— session —</option>
+  </select>
+  <select class="field" id="dateSel" style="width:130px" onchange="loadRecords()">
+    <option value="">— date —</option>
+  </select>
+  <div class="source-filter-wrap" id="sourceFilterWrap"></div>
+  <input class="field" id="searchBox" placeholder="搜索 message ID 或 URL…" oninput="renderList()" style="width:220px">
+  <button class="btn" onclick="init()">刷新</button>
+  <span class="badge" id="countBadge"></span>
+  <div class="nav-links">
+    <a class="nav-link" href="claude-log.html">Claude Log</a>
+  </div>
+</div>
+
+<!-- Format overlay (singleton) -->
+<div id="fmtOverlay">
+  <div class="fmt-card">
+    <div class="fmt-card-hdr">
+      <span>
+        <span class="fmt-card-title">格式化预览</span>
+        <span class="fmt-card-mode" id="fmtMode"></span>
+      </span>
+      <button class="fmt-card-close" onclick="closeFormatOverlay()">✕</button>
+    </div>
+    <div class="fmt-card-body" id="fmtBody"></div>
+  </div>
+</div>
+
+<div class="stats-bar" id="statsBar"></div>
+
+<div class="main">
+  <div class="list-panel">
+    <div class="record-list" id="recordList">
+      <div class="placeholder">选择 session 和日期后加载</div>
+    </div>
+  </div>
+  <div class="detail-panel" id="detailPanel">
+    <div class="empty-detail">← 点击列表项查看详情</div>
+  </div>
+</div>
+
+<script>
+let allRecords = [];
+let selectedIdx = -1;
+// Source filter: set of active sources ('main', agentId, 'unknown'), null = all active
+let activeSourceFilters = null;
+
+function toggleAdv() {
+  document.getElementById('advPanel').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('advWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('advPanel').classList.remove('open');
+  }
+});
+
+function apiBase() {
+  return (document.getElementById('apiUrl').value || window.location.origin).replace(/\/$/, '');
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtTs(ts) {
+  if (!ts) return '';
+  try { return new Date(ts).toLocaleString('zh-CN', {hour12: false}); } catch { return ts; }
+}
+function trunc(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }
+
+// ── Syntax highlight JSON ──────────────────────────────────────────────────
+function syntaxHighlightJson(obj) {
+  const json = JSON.stringify(obj, null, 2);
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\],:])/g,
+    match => {
+      if (/^"/.test(match)) {
+        return /:$/.test(match)
+          ? `<span class="json-key">${esc(match)}</span>`
+          : `<span class="json-str">${esc(match)}</span>`;
+      }
+      if (/true|false/.test(match)) return `<span class="json-bool">${match}</span>`;
+      if (/null/.test(match)) return `<span class="json-null">${match}</span>`;
+      if (/^-?\d/.test(match)) return `<span class="json-num">${match}</span>`;
+      return `<span class="json-punct">${esc(match)}</span>`;
+    }
+  );
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────
+async function init() {
+  const params = new URLSearchParams(location.search);
+  // Pre-fill search box from URL query param ?q=
+  const urlQ = params.get('q');
+  if (urlQ) {
+    const sb = document.getElementById('searchBox');
+    if (sb) sb.value = urlQ;
+  }
+  const urlSession = params.get('session');
+  const urlDate = params.get('date');
+
+  try {
+    const resp = await fetch(`${apiBase()}/api/req-resp/sessions`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const sel = document.getElementById('sessionSel');
+    const cur = urlSession || sel.value;
+    sel.innerHTML = '<option value="">— session —</option>';
+    for (const s of data.sessions || []) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = trunc(s.id, 36);
+      opt.dataset.dates = JSON.stringify(s.dates);
+      if (s.id === cur) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    if (cur && sel.value === cur) {
+      onSessionChange(urlDate);
+    } else if (!cur && data.sessions?.length === 1) {
+      sel.value = data.sessions[0].id;
+      onSessionChange();
+    }
+  } catch(e) {
+    document.getElementById('recordList').innerHTML =
+      `<div class="placeholder" style="color:#f85149">连接失败: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Session change ─────────────────────────────────────────────────────────
+function onSessionChange(restoreDate) {
+  const sel = document.getElementById('sessionSel');
+  const opt = sel.options[sel.selectedIndex];
+  const dateSel = document.getElementById('dateSel');
+  dateSel.innerHTML = '<option value="">— date —</option>';
+
+  if (opt && opt.dataset.dates) {
+    const dates = JSON.parse(opt.dataset.dates);
+    for (const d of dates) {
+      const o = document.createElement('option');
+      o.value = d; o.textContent = d;
+      dateSel.appendChild(o);
+    }
+    if (restoreDate && dates.includes(restoreDate)) {
+      dateSel.value = restoreDate;
+      loadRecords();
+      return;
+    }
+    // Auto-select latest date
+    if (dates.length > 0) {
+      dateSel.value = dates[dates.length - 1];
+      loadRecords();
+    }
+  }
+}
+
+// ── Load records ──────────────────────────────────────────────────────────
+async function loadRecords() {
+  const session = document.getElementById('sessionSel').value;
+  const date = document.getElementById('dateSel').value;
+  if (!session || !date) return;
+
+  document.getElementById('recordList').innerHTML = '<span class="spinner"></span>';
+  document.querySelectorAll('.spark-tooltip').forEach(el => el.remove());
+
+  try {
+    const resp = await fetch(
+      `${apiBase()}/api/req-resp/records?session=${encodeURIComponent(session)}&date=${encodeURIComponent(date)}`
+    );
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    allRecords = data.records || [];
+    selectedIdx = -1;
+    activeSourceFilters = null;
+    document.getElementById('recordList').innerHTML = '<span class="spinner"></span>';
+    document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">← 点击列表项查看详情</div>';
+    // Wait for source resolution before rendering list
+    await fetchAllSources(session);
+  } catch(e) {
+    document.getElementById('recordList').innerHTML =
+      `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Stats bar ─────────────────────────────────────────────────────────────
+function fmtN(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderStats() {
+  const bar = document.getElementById('statsBar');
+  const filterTitle = document.getElementById('filterTitleReq')?.checked ?? true;
+  const ssRecs = allRecords.filter(r => {
+    if (!r.is_sse || !r.sse_events?.length) return false;
+    if (filterTitle && isTitleGenReq(r)) return false;
+    if (activeSourceFilters !== null) {
+      const src = r._source ?? 'unknown';
+      if (activeSourceFilters !== src) return false;
+    }
+    return true;
+  });
+  if (!ssRecs.length) { bar.className = 'stats-bar'; bar.innerHTML = ''; return; }
+
+  let totalOutput = 0, totalInput = 0, totalCacheRead = 0, totalCacheCreate = 0;
+  const totalInPerReq = [];  // [{v, line}]
+
+  for (const r of ssRecs) {
+    const { usage } = parseSseEvents(r.sse_events);
+    const line = r._fileLine ?? null;
+    if (!usage) { totalInPerReq.push({ v: 0, line }); continue; }
+    const out = usage.output_tokens || 0;
+    const totalIn = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+    totalOutput    += out;
+    totalInput     += usage.input_tokens || 0;
+    totalCacheRead += usage.cache_read_input_tokens || 0;
+    totalCacheCreate += usage.cache_creation_input_tokens || 0;
+    totalInPerReq.push({ v: totalIn, line });
+  }
+
+  const n = totalInPerReq.length;
+
+  bar.className = 'stats-bar visible';
+  bar.innerHTML =
+    `<div class="stats-group">` +
+      `<div class="stat-item"><span class="stat-label">请求数</span><span class="stat-value accent">${ssRecs.length}</span></div>` +
+    `</div>` +
+    `<div class="stats-group">` +
+      `<div class="stat-item"><span class="stat-label">output</span><span class="stat-value">${fmtN(totalOutput)}</span></div>` +
+      `<div class="stat-item"><span class="stat-label">input</span><span class="stat-value">${fmtN(totalInput)}</span></div>` +
+    `</div>` +
+    `<div class="stats-group">` +
+      `<div class="stat-item"><span class="stat-label">cache_read</span><span class="stat-value">${fmtN(totalCacheRead)}</span></div>` +
+      `<div class="stat-item"><span class="stat-label">cache_create</span><span class="stat-value">${fmtN(totalCacheCreate)}</span></div>` +
+    `</div>`;
+
+  // Sparkline — built as DOM for interactivity
+  if (n >= 2) {
+    const W = 160, H = 32, pad = 2;
+    const max = Math.max(...totalInPerReq.map(d => d.v), 1);
+    const coords = totalInPerReq.map((d, i) => ({
+      x: pad + (i / (n - 1)) * (W - pad * 2),
+      y: H - pad - (d.v / max) * (H - pad * 2),
+      v: d.v,
+      line: d.line,
+    }));
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.style.display = 'block'; svg.style.cursor = 'crosshair';
+
+    const poly = document.createElementNS(NS, 'polyline');
+    poly.setAttribute('points', coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '));
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', '#58a6ff');
+    poly.setAttribute('stroke-width', '1.5');
+    poly.setAttribute('stroke-linejoin', 'round');
+    poly.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(poly);
+
+    // Hover dot
+    const dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('r', '3'); dot.setAttribute('fill', '#58a6ff');
+    dot.style.display = 'none';
+    svg.appendChild(dot);
+
+    // Tooltip div
+    const tip = document.createElement('div');
+    tip.className = 'spark-tooltip';
+    document.body.appendChild(tip);
+
+    // Hit areas per data point
+    const slotW = (W - pad * 2) / n;
+    coords.forEach((c, i) => {
+      const hit = document.createElementNS(NS, 'rect');
+      hit.setAttribute('x', (c.x - slotW / 2).toFixed(1));
+      hit.setAttribute('y', '0');
+      hit.setAttribute('width', slotW.toFixed(1));
+      hit.setAttribute('height', H);
+      hit.setAttribute('fill', 'transparent');
+      hit.addEventListener('mouseenter', ev => {
+        dot.setAttribute('cx', c.x.toFixed(1));
+        dot.setAttribute('cy', c.y.toFixed(1));
+        dot.style.display = '';
+        tip.textContent = `${c.line != null ? 'L' + c.line : '#' + (i + 1)}  总输入: ${c.v.toLocaleString()}`;
+        tip.classList.add('show');
+      });
+      hit.addEventListener('mousemove', ev => {
+        tip.style.left = (ev.clientX + 12) + 'px';
+        tip.style.top  = (ev.clientY - 28) + 'px';
+      });
+      hit.addEventListener('mouseleave', () => {
+        dot.style.display = 'none';
+        tip.classList.remove('show');
+      });
+      svg.appendChild(hit);
+    });
+
+    // Clean up tooltip when bar is re-rendered
+    svg.addEventListener('remove', () => tip.remove());
+
+    const wrap = document.createElement('div');
+    wrap.className = 'sparkline-wrap';
+    const label = document.createElement('span');
+    label.className = 'sparkline-label';
+    label.textContent = '总输入/req';
+    wrap.appendChild(label);
+    wrap.appendChild(svg);
+    bar.appendChild(wrap);
+  }
+}
+
+// ── Title generation request filter ──────────────────────────────────────
+// ── Source filter ──────────────────────────────────────────────────────────
+async function fetchAllSources(sessionId) {
+  const wrap = document.getElementById('sourceFilterWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<span class="source-loading"><span class="spinner" style="width:10px;height:10px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:4px"></span>来源查询中…</span>';
+  document.getElementById('recordList').innerHTML = '<span class="spinner"></span>';
+
+  const sseRecs = allRecords.map((r, i) => ({ r, i })).filter(({ r }) => r.is_sse && r._message_id);
+  await Promise.all(sseRecs.map(async ({ r }) => {
+    try {
+      const res = await fetch(`${apiBase()}/api/message-source/${encodeURIComponent(sessionId)}/${encodeURIComponent(r._message_id)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.source === 'main') r._source = 'main';
+      else if (data.source === 'subagent') r._source = data.agentId || 'unknown-agent';
+    } catch {}
+  }));
+
+  renderSourceFilter();
+  renderList();
+  renderStats();
+}
+
+function renderSourceFilter() {
+  const wrap = document.getElementById('sourceFilterWrap');
+  if (!wrap) return;
+
+  // Collect distinct sources from SSE records
+  const sourceSet = new Map(); // source -> count
+  for (const r of allRecords) {
+    if (!r.is_sse) continue;
+    const src = r._source ?? null;
+    if (src === null) continue;
+    sourceSet.set(src, (sourceSet.get(src) || 0) + 1);
+  }
+
+  if (sourceSet.size === 0) { wrap.innerHTML = ''; return; }
+
+  // Init filter state: default to main only (null = all)
+  if (activeSourceFilters === null) {
+    activeSourceFilters = sourceSet.has('main') ? 'main' : null;
+  }
+
+  const totalCount = [...sourceSet.values()].reduce((a, b) => a + b, 0);
+
+  wrap.innerHTML = '';
+
+  function refreshChips() {
+    wrap.querySelectorAll('.source-chip').forEach(c => {
+      const s = c.dataset.src;
+      const active = s === '__all__' ? activeSourceFilters === null : activeSourceFilters === s;
+      c.classList.toggle('off', !active);
+    });
+  }
+
+  // 全部 chip
+  const allChip = document.createElement('span');
+  allChip.className = `source-chip source-chip-unknown` + (activeSourceFilters === null ? '' : ' off');
+  allChip.textContent = `全部 (${totalCount})`;
+  allChip.dataset.src = '__all__';
+  allChip.onclick = () => {
+    activeSourceFilters = null;
+    refreshChips();
+    renderList(); renderStats();
+  };
+  wrap.appendChild(allChip);
+
+  const sorted = [...sourceSet.entries()].sort(([a], [b]) => {
+    if (a === 'main') return -1;
+    if (b === 'main') return 1;
+    return a.localeCompare(b);
+  });
+  for (const [src, count] of sorted) {
+    const chip = document.createElement('span');
+    const isMain = src === 'main';
+    chip.className = `source-chip ${isMain ? 'source-chip-main' : 'source-chip-agent'}` + (activeSourceFilters === src ? '' : ' off');
+    chip.textContent = `${isMain ? '🤖 Main' : '🔧 ' + src} (${count})`;
+    chip.dataset.src = src;
+    chip.title = src;
+    chip.onclick = () => {
+      activeSourceFilters = src;
+      refreshChips();
+      renderList(); renderStats();
+    };
+    wrap.appendChild(chip);
+  }
+}
+
+function isTitleGenReq(r) {
+  try {
+    const body = JSON.parse(r.request?.body || '{}');
+    const system = body.system;
+    if (!Array.isArray(system)) return false;
+    return system.some(s =>
+      s.type === 'text' &&
+      typeof s.text === 'string' &&
+      s.text.startsWith('Generate a concise, sentence-case title')
+    );
+  } catch { return false; }
+}
+
+// ── Render list ────────────────────────────────────────────────────────────
+function renderList() {
+  const list = document.getElementById('recordList');
+  const q = (document.getElementById('searchBox')?.value || '').trim().toLowerCase();
+
+  const filterTitle = document.getElementById('filterTitleReq')?.checked ?? true;
+  const visible = allRecords.map((r, i) => ({ r, i })).filter(({ r }) => {
+    if (filterTitle && isTitleGenReq(r)) return false;
+    if (activeSourceFilters !== null) {
+      const src = r._source ?? 'unknown';
+      if (activeSourceFilters !== src) return false;
+    }
+    if (!q) return true;
+    const msgId = (r._message_id || '').toLowerCase();
+    const url = (r.url || '').toLowerCase();
+    return msgId.includes(q) || url.includes(q);
+  });
+
+  document.getElementById('countBadge').textContent =
+    q ? `${visible.length} / ${allRecords.length} 条` : `${allRecords.length} 条`;
+
+  if (allRecords.length === 0) {
+    list.innerHTML = '<div class="placeholder">无记录</div>';
+    return;
+  }
+  if (visible.length === 0) {
+    list.innerHTML = '<div class="placeholder">无匹配记录</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  visible.forEach(({ r, i }) => {
+    const el = document.createElement('div');
+    el.className = 'record-item' + (i === selectedIdx ? ' active' : '');
+    el.dataset.idx = i;
+
+    const status = r.response?.status || 0;
+    const statusCls = status >= 200 && status < 300 ? 'ok' : status >= 400 ? 'err' : '';
+    const isSSE = r.is_sse;
+
+    let urlDisplay = r.url || '';
+    try { urlDisplay = new URL(r.url).pathname; } catch {}
+
+    let totalInTokens = '', outTokens = '';
+    if (isSSE && r.sse_events?.length) {
+      const { usage } = parseSseEvents(r.sse_events);
+      if (usage) {
+        const v = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+        if (v > 0) totalInTokens = fmtN(v);
+        const o = usage.output_tokens || 0;
+        if (o > 0) outTokens = fmtN(o);
+      }
+    }
+
+    el.innerHTML =
+      `<div class="ri-row1">` +
+        `<span class="ri-lineno">#${i + 1}</span>` +
+        `<span class="ri-ts">${esc(fmtTs(r.timestamp))}</span>` +
+        `<span class="ri-method">${esc(r.method || '')}</span>` +
+        `<span class="ri-status ${statusCls}">${status}</span>` +
+        (isSSE ? `<span class="sse-badge">SSE</span>` : '') +
+        (totalInTokens || outTokens
+          ? `<span style="font-size:10px;color:#6e7681;margin-left:auto;font-family:monospace;display:flex;gap:6px">` +
+            (totalInTokens ? `<span title="总输入 tokens">in:${totalInTokens}</span>` : '') +
+            (outTokens ? `<span title="output tokens">out:${outTokens}</span>` : '') +
+            `</span>`
+          : '') +
+      `</div>` +
+      `<div class="ri-url">${esc(urlDisplay)}</div>`;
+
+    el.onclick = () => selectRecord(i);
+    list.appendChild(el);
+  });
+}
+
+// ── Select record ─────────────────────────────────────────────────────────
+function selectRecord(idx) {
+  selectedIdx = idx;
+  document.querySelectorAll('.record-item').forEach(el =>
+    el.classList.toggle('active', Number(el.dataset.idx) === idx));
+  renderDetail(allRecords[idx], idx);
+  // Async: fetch message source and update badge
+  const r = allRecords[idx];
+  const msgId = r._message_id;
+  const sessionId = document.getElementById('sessionSel').value;
+  if (msgId && sessionId) {
+    fetch(`${apiBase()}/api/message-source/${encodeURIComponent(sessionId)}/${encodeURIComponent(msgId)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data || !data.source) return;
+        const badge = document.getElementById('msgSourceBadge');
+        if (!badge) return;
+        if (data.source === 'main') {
+          badge.textContent = '🤖 Main Session';
+          badge.style.background = '#1a2440'; badge.style.color = '#79c0ff';
+        } else {
+          badge.textContent = `🔧 Agent: ${data.agentId || 'unknown'}`;
+          badge.style.background = '#2d1f3a'; badge.style.color = '#bc8cff';
+        }
+        badge.style.display = 'inline-block';
+        const hint = badge.nextElementSibling;
+        if (hint) hint.style.display = 'none';
+      })
+      .catch(() => {});
+  }
+}
+
+// ── Section helper ─────────────────────────────────────────────────────────
+function mkSection(title, renderFn, collapsed = false) {
+  const sec = document.createElement('div');
+  sec.className = 'section';
+  const hdr = document.createElement('div');
+  hdr.className = 'sec-hdr';
+  hdr.innerHTML = `<span class="sec-title">${title}</span><span class="sec-toggle">${collapsed ? '展开' : '收起'}</span>`;
+  const body = document.createElement('div');
+  body.className = 'sec-body' + (collapsed ? ' hidden' : '');
+  renderFn(body);
+  hdr.onclick = () => {
+    const h = body.classList.toggle('hidden');
+    hdr.querySelector('.sec-toggle').textContent = h ? '展开' : '收起';
+  };
+  sec.appendChild(hdr); sec.appendChild(body);
+  return sec;
+}
+
+// ── Minimal markdown renderer ─────────────────────────────────────────────
+function renderMarkdown(text) {
+  // Escape HTML first, then apply markdown patterns
+  let s = String(text ?? '');
+  // Code fences
+  s = s.replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) => `<pre>${escRaw(code)}</pre>`);
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${escRaw(c)}</code>`);
+  // Bold
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Headings
+  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // Unordered list items
+  s = s.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  s = s.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+  // Line breaks → paragraphs
+  s = s.split(/\n{2,}/).map(p => {
+    p = p.trim();
+    if (!p || p.startsWith('<')) return p;
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+  return s;
+}
+function escRaw(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Create a text block div with raw/markdown toggle
+function mkTextWithMdToggle(text) {
+  const wrap = document.createElement('div');
+  let showMd = true;
+
+  // Switch: "Raw  [○——]  Markdown"
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;align-items:center;margin-bottom:4px';
+
+  const sw = document.createElement('span');
+  sw.className = 'md-switch';
+  sw.innerHTML =
+    `<span class="md-switch-label">Raw</span>` +
+    `<span class="md-switch-track on"><span class="md-switch-thumb"></span></span>` +
+    `<span class="md-switch-right" style="color:#58a6ff">Markdown</span>`;
+
+  const track = sw.querySelector('.md-switch-track');
+  const rightLabel = sw.querySelector('.md-switch-right');
+  const leftLabel = sw.querySelector('.md-switch-label');
+
+  const mdDiv = document.createElement('div');
+  mdDiv.className = 'md-view';
+  mdDiv.innerHTML = renderMarkdown(text);
+
+  const rawDiv = document.createElement('div');
+  rawDiv.className = 'raw-block';
+  rawDiv.style.display = 'none';
+  rawDiv.textContent = text;
+
+  sw.onclick = () => {
+    showMd = !showMd;
+    track.classList.toggle('on', showMd);
+    leftLabel.style.color = showMd ? '#6e7681' : '#58a6ff';
+    rightLabel.style.color = showMd ? '#58a6ff' : '#6e7681';
+    mdDiv.style.display = showMd ? '' : 'none';
+    rawDiv.style.display = showMd ? 'none' : '';
+  };
+
+  bar.appendChild(sw);
+  wrap.appendChild(bar);
+  wrap.appendChild(mdDiv);
+  wrap.appendChild(rawDiv);
+  return wrap;
+}
+
+// ── Format overlay ────────────────────────────────────────────────────────
+const FMT_MIN_LEN = 80;
+
+function showFormatOverlay(str) {
+  const overlay = document.getElementById('fmtOverlay');
+  const body = document.getElementById('fmtBody');
+  const modeEl = document.getElementById('fmtMode');
+  body.innerHTML = '';
+
+  let parsed;
+  try { parsed = JSON.parse(str); } catch { parsed = undefined; }
+
+  if (parsed !== undefined) {
+    modeEl.textContent = 'JSON';
+    body.appendChild(renderJsonTree(parsed, 0, 2));
+  } else {
+    modeEl.textContent = 'Markdown';
+    const div = document.createElement('div');
+    div.className = 'md-view';
+    div.innerHTML = renderMarkdown(str);
+    body.appendChild(div);
+  }
+
+  overlay.classList.add('open');
+}
+
+function closeFormatOverlay() {
+  document.getElementById('fmtOverlay').classList.remove('open');
+}
+
+// Close on backdrop click
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('fmtOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeFormatOverlay();
+  });
+});
+// Close on Esc
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeFormatOverlay();
+});
+
+// ── JSON tree renderer (collapsible, default 3 levels open) ───────────────
+function renderJsonTree(value, depth, maxOpen) {
+  const el = document.createElement('div');
+  el.className = 'jt-node';
+
+  if (value === null) {
+    el.innerHTML = `<span class="jt-null">null</span>`;
+    return el;
+  }
+  if (typeof value === 'boolean') {
+    el.innerHTML = `<span class="jt-bool">${value}</span>`;
+    return el;
+  }
+  if (typeof value === 'number') {
+    el.innerHTML = `<span class="jt-num">${esc(String(value))}</span>`;
+    return el;
+  }
+  if (typeof value === 'string') {
+    const row = document.createElement('div');
+    row.className = 'jt-row';
+    const strSpan = document.createElement('span');
+    strSpan.className = 'jt-str';
+    strSpan.textContent = JSON.stringify(value);
+    row.appendChild(strSpan);
+    if (value.length >= FMT_MIN_LEN) {
+      const btn = document.createElement('button');
+      btn.className = 'fmt-btn';
+      btn.textContent = '格式化';
+      btn.onclick = e => { e.stopPropagation(); showFormatOverlay(value); };
+      row.appendChild(btn);
+    }
+    el.appendChild(row);
+    return el;
+  }
+
+  const isArray = Array.isArray(value);
+  const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
+  const openBrace = isArray ? '[' : '{';
+  const closeBrace = isArray ? ']' : '}';
+
+  if (entries.length === 0) {
+    el.innerHTML = `<span class="jt-punct">${openBrace}${closeBrace}</span>`;
+    return el;
+  }
+
+  const collapsed = depth >= maxOpen;
+  const summary = isArray
+    ? `Array(${entries.length})`
+    : `{${entries.slice(0, 3).map(([k]) => k).join(', ')}${entries.length > 3 ? '…' : ''}}`;
+
+  // Row: toggle + open brace + (if collapsed) summary
+  const row = document.createElement('div');
+  row.className = 'jt-row';
+
+  const toggle = document.createElement('span');
+  toggle.className = 'jt-toggle';
+  toggle.textContent = collapsed ? '▶' : '▼';
+
+  const braceOpen = document.createElement('span');
+  braceOpen.className = 'jt-punct';
+  braceOpen.textContent = openBrace;
+
+  const summaryEl = document.createElement('span');
+  summaryEl.className = 'jt-summary';
+  summaryEl.textContent = ` ${summary} `;
+  if (!collapsed) summaryEl.style.display = 'none';
+
+  row.appendChild(toggle);
+  row.appendChild(braceOpen);
+  row.appendChild(summaryEl);
+  el.appendChild(row);
+
+  // Children container
+  const children = document.createElement('div');
+  children.className = 'jt-children' + (collapsed ? ' hidden' : '');
+
+  for (let idx = 0; idx < entries.length; idx++) {
+    const [key, val] = entries[idx];
+    const childRow = document.createElement('div');
+    childRow.className = 'jt-row';
+
+    const keyEl = document.createElement('span');
+    if (!isArray) {
+      keyEl.innerHTML = `<span class="jt-key">${esc(JSON.stringify(key))}</span><span class="jt-punct">: </span>`;
+    }
+
+    const childNode = renderJsonTree(val, depth + 1, maxOpen);
+
+    // Trailing comma
+    const comma = document.createElement('span');
+    comma.className = 'jt-punct';
+    comma.textContent = idx < entries.length - 1 ? ',' : '';
+
+    const childWrap = document.createElement('div');
+    childWrap.style.cssText = 'display:flex;align-items:flex-start;width:100%';
+    if (!isArray) childWrap.appendChild(keyEl);
+    childWrap.appendChild(childNode);
+    childWrap.appendChild(comma);
+    children.appendChild(childWrap);
+  }
+
+  // Close brace
+  const braceClose = document.createElement('div');
+  braceClose.innerHTML = `<span class="jt-punct">${closeBrace}</span>`;
+  el.appendChild(children);
+  el.appendChild(braceClose);
+
+  // Toggle click
+  toggle.onclick = () => {
+    const isHidden = children.classList.toggle('hidden');
+    toggle.textContent = isHidden ? '▶' : '▼';
+    summaryEl.style.display = isHidden ? '' : 'none';
+  };
+  summaryEl.onclick = toggle.onclick;
+
+  return el;
+}
+
+// ── Build per-event annotation (parsed summary shown under each raw event) ──
+function buildSseEventAnnotations(events, parsed) {
+  // Returns { eventIndex: htmlString }
+  const annotations = {};
+
+  // Track accumulated text/json per block index during replay
+  const blockText = {};   // index -> accumulated text
+  const blockJson = {};   // index -> accumulated partial_json
+  const blockMeta = {};   // index -> {type, name, id}
+
+  events.forEach((ev, evIdx) => {
+    for (const line of ev.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      const raw = line.slice(5).trim();
+      if (raw === '[DONE]') continue;
+      let d; try { d = JSON.parse(raw); } catch { continue; }
+      const type = d.type;
+
+      if (type === 'content_block_start') {
+        const idx = d.index;
+        const cb = d.content_block || {};
+        blockMeta[idx] = { type: cb.type, name: cb.name, id: cb.id };
+        blockText[idx] = '';
+        blockJson[idx] = '';
+        const badge = cb.type === 'text'
+          ? `<span style="color:#56d364;font-weight:600">text</span>`
+          : `<span style="color:#79c0ff;font-weight:600">tool_use</span>`;
+        annotations[evIdx] = `▸ block[${idx}] ${badge}${cb.name ? ` <span style="color:#e3b341">${esc(cb.name)}</span>` : ''}${cb.id ? ` <span style="color:#484f58;font-family:monospace">${esc(cb.id)}</span>` : ''}`;
+
+      } else if (type === 'content_block_delta') {
+        const idx = d.index;
+        const delta = d.delta || {};
+        const meta = blockMeta[idx] || {};
+        if (delta.type === 'text_delta' && delta.text) {
+          blockText[idx] = (blockText[idx] || '') + delta.text;
+          const preview = blockText[idx].slice(-60);
+          annotations[evIdx] = `▸ block[${idx}] text: <span style="color:#adbac7">…${esc(preview)}</span>`;
+        } else if (delta.type === 'input_json_delta' && delta.partial_json) {
+          blockJson[idx] = (blockJson[idx] || '') + delta.partial_json;
+          const preview = blockJson[idx].slice(-60);
+          annotations[evIdx] = `▸ block[${idx}] <span style="color:#e3b341">${esc(meta.name || 'tool_use')}</span> input: <span style="color:#adbac7">…${esc(preview)}</span>`;
+        }
+      } else if (type === 'content_block_stop') {
+        const idx = d.index;
+        annotations[evIdx] = `▸ block[${idx}] stop`;
+      } else if (type === 'message_start') {
+        const u = d.message?.usage;
+        annotations[evIdx] = u ? `▸ message_start usage: in=${u.input_tokens} out=${u.output_tokens}` : '▸ message_start';
+      } else if (type === 'message_delta') {
+        const sr = d.delta?.stop_reason;
+        const u = d.usage;
+        annotations[evIdx] = `▸ message_delta` +
+          (sr ? ` stop_reason=<b style="color:#e1e4e8">${esc(sr)}</b>` : '') +
+          (u ? ` out=${u.output_tokens} cache_read=${u.cache_read_input_tokens}` : '');
+      } else if (type === 'message_stop') {
+        annotations[evIdx] = '▸ message_stop';
+      } else if (type === 'ping') {
+        annotations[evIdx] = '▸ ping';
+      }
+    }
+  });
+  return annotations;
+}
+
+// ── Parse SSE events ──────────────────────────────────────────────────────
+function parseSseEvents(events) {
+  // blocks: index -> {type, name, id, text, inputJson}
+  const blocks = {};
+  let stopReason = null;
+  let usage = null;
+
+  for (const ev of events) {
+    for (const line of ev.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      const raw = line.slice(5).trim();
+      if (raw === '[DONE]') continue;
+      let d;
+      try { d = JSON.parse(raw); } catch { continue; }
+
+      const type = d.type;
+      if (type === 'content_block_start') {
+        const idx = d.index;
+        const cb = d.content_block || {};
+        blocks[idx] = { type: cb.type || 'unknown', name: cb.name || null, id: cb.id || null, text: '', inputJson: '' };
+      } else if (type === 'content_block_delta') {
+        const idx = d.index;
+        const delta = d.delta || {};
+        if (!blocks[idx]) blocks[idx] = { type: 'unknown', name: null, id: null, text: '', inputJson: '' };
+        if (delta.type === 'text_delta' && delta.text) {
+          blocks[idx].text += delta.text;
+        } else if (delta.type === 'input_json_delta' && delta.partial_json) {
+          blocks[idx].inputJson += delta.partial_json;
+        }
+      } else if (type === 'message_delta') {
+        if (d.delta?.stop_reason) stopReason = d.delta.stop_reason;
+        if (d.usage) usage = { ...usage, ...d.usage };
+      } else if (type === 'message_start') {
+        if (d.message?.usage) usage = { ...d.message.usage, ...usage };
+      }
+    }
+  }
+
+  // Build contents array in index order
+  const contents = Object.entries(blocks)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, b]) => {
+      const item = { type: b.type };
+      if (b.name) item.name = b.name;
+      if (b.id) item.id = b.id;
+      if (b.type === 'text') {
+        item.text = b.text;
+      } else if (b.type === 'tool_use') {
+        item.text = b.text;
+        try { item.input = JSON.parse(b.inputJson); } catch { item.input = b.inputJson; }
+      }
+      return item;
+    });
+
+  return { contents, stopReason, usage };
+}
+
+// ── Render detail ──────────────────────────────────────────────────────────
+// ── Messages diff ──────────────────────────────────────────────────────────
+function getPrevRecord(idx) {
+  // Find previous SSE record that's not a context reset (messages count not drastically lower)
+  for (let i = idx - 1; i >= 0; i--) {
+    const r = allRecords[i];
+    if (!r.is_sse) continue;
+    if (isTitleGenReq(r)) continue;
+    return r;
+  }
+  return null;
+}
+
+function parseMsgs(r) {
+  try { return JSON.parse(r.request?.body || '{}').messages || []; }
+  catch { return []; }
+}
+
+function diffMessages(curMsgs, prevMsgs) {
+  // Returns {added: [...], removed: N}
+  if (!prevMsgs.length) return { added: curMsgs, removed: 0 };
+  const delta = curMsgs.length - prevMsgs.length;
+  if (delta > 0) return { added: curMsgs.slice(-delta), removed: 0 };
+  if (delta < 0) return { added: [], removed: -delta };
+  return { added: [], removed: 0 };
+}
+
+function renderMsgBlock(b, blockIdx) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-diff-block';
+
+  // Header: [index] type-badge name id
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+  const idxSpan = `<span style="font-size:10px;color:#484f58;font-family:monospace">[${blockIdx}]</span>`;
+  const typeBadge = b.type === 'text'
+    ? `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#1a2e1a;color:#56d364">text</span>`
+    : b.type === 'tool_use'
+      ? `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#1a2440;color:#79c0ff">tool_use</span>`
+      : b.type === 'tool_result'
+        ? `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#1a2e1a;color:#56d364">tool_result</span>`
+        : `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#21262d;color:#8b949e">${esc(b.type)}</span>`;
+  hdr.innerHTML = idxSpan + typeBadge +
+    (b.name ? `<span style="font-size:11px;color:#e3b341">${esc(b.name)}</span>` : '') +
+    (b.tool_use_id ? `<span style="font-size:10px;color:#484f58;font-family:monospace">${esc(b.tool_use_id)}</span>` : '') +
+    (b.id ? `<span style="font-size:10px;color:#484f58;font-family:monospace">${esc(b.id)}</span>` : '');
+  wrap.appendChild(hdr);
+
+  if (b.type === 'text' && b.text) {
+    wrap.appendChild(mkTextWithMdToggle(b.text));
+  } else if (b.type === 'tool_use' && b.input != null) {
+    const tree = document.createElement('div');
+    tree.className = 'json-tree';
+    tree.style.cssText = 'max-height:200px;overflow-y:auto;padding:4px;background:#0d1117;border-radius:4px';
+    tree.appendChild(typeof b.input === 'object'
+      ? renderJsonTree(b.input, 0, 2)
+      : (() => { const d = document.createElement('div'); d.textContent = String(b.input); return d; })());
+    wrap.appendChild(tree);
+  } else if (b.type === 'tool_result') {
+    const content = typeof b.content === 'string' ? b.content : JSON.stringify(b.content, null, 2);
+    wrap.appendChild(mkTextWithMdToggle(content));
+  }
+
+  return wrap;
+}
+
+
+function renderDetail(r, idx) {
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = '';
+
+  const req = r.request || {};
+  const resp = r.response || {};
+  const reqHeaders = req.headers || {};
+  const respHeaders = resp.headers || {};
+  const traceId = respHeaders['M-TraceId'] || '';
+
+  // 1. Overview
+  panel.appendChild(mkSection('概览', body => {
+    body.innerHTML = `<div class="info-grid">
+      <div class="ig-k">时间</div><div class="ig-v">${esc(fmtTs(r.timestamp))}</div>
+      <div class="ig-k">方法 / 状态</div><div class="ig-v">${esc(r.method || '')} ${resp.status || ''}</div>
+      <div class="ig-k">URL</div><div class="ig-v">${esc(r.url || '')}</div>
+      <div class="ig-k">Domain</div><div class="ig-v">${esc(r.domain || '')}</div>
+      <div class="ig-k">SSE</div><div class="ig-v">${r.is_sse ? `是（${r.sse_events?.length || 0} events）` : '否'}</div>
+      ${traceId ? `<div class="ig-k">M-TraceId</div><div class="ig-v">${esc(traceId)}</div>` : ''}
+      ${r._message_id ? `<div class="ig-k">来源</div><div class="ig-v"><span id="msgSourceBadge" style="display:none;font-size:11px;padding:1px 7px;border-radius:4px;font-weight:600"></span><span style="font-size:11px;color:#484f58"> 查询中…</span></div>` : ''}
+    </div>`;
+  }));
+
+  // 2. Request headers
+  panel.appendChild(mkSection(`请求 Headers（${Object.keys(reqHeaders).length}）`, body => {
+    const tbl = document.createElement('table');
+    tbl.className = 'headers-table';
+    for (const [k, v] of Object.entries(reqHeaders)) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(k)}</td><td>${esc(v)}</td>`;
+      tbl.appendChild(tr);
+    }
+    body.appendChild(tbl);
+  }, true));
+
+  // 3. Request body — parsed sections + raw JSON tree
+  const reqBody = req.body || '';
+  if (reqBody) {
+    let reqJson = null;
+    try { reqJson = JSON.parse(reqBody); } catch {}
+
+    if (reqJson) {
+      const msgs = reqJson.messages || [];
+      const lastMsg = msgs[msgs.length - 1];
+      const sysBlocks = reqJson.system || [];
+      const tools = reqJson.tools || [];
+
+      // Compute diff label
+      const _prev = idx != null ? getPrevRecord(idx) : null;
+      const _prevMsgs = _prev ? parseMsgs(_prev) : [];
+      const _diff = diffMessages(msgs, _prevMsgs);
+      const diffLabel = _diff.removed > 0
+        ? `增量 (+${_diff.added.length} -${_diff.removed})`
+        : `增量 (+${_diff.added.length})`;
+
+      // Build tabs: Message | System | Tools | 增量 | 原始
+      const tabs = [
+        { id: 'msg',  label: `Message (${msgs.length})` },
+        { id: 'sys',  label: `System (${sysBlocks.length})` },
+        { id: 'tool', label: `Tools (${tools.length})` },
+        { id: 'diff', label: diffLabel },
+        { id: 'raw',  label: '原始' },
+      ];
+
+      const tabSec = document.createElement('div');
+      tabSec.className = 'tab-section';
+
+      // Header with tab bar + collapse toggle
+      const tabHdr = document.createElement('div');
+      tabHdr.className = 'tab-section-hdr';
+      const tabBar = document.createElement('div');
+      tabBar.className = 'tab-bar';
+      tabs.forEach((t, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
+        btn.textContent = t.label;
+        btn.dataset.tab = t.id;
+        btn.onclick = () => {
+          tabBar.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          tabSec.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+          tabSec.querySelector(`.tab-pane[data-tab="${t.id}"]`).classList.add('active');
+          copyJsonBtn.style.display = t.id === 'raw' ? 'inline-block' : 'none';
+        };
+        tabBar.appendChild(btn);
+      });
+      const toggle = document.createElement('span');
+      toggle.className = 'tab-section-toggle';
+      toggle.textContent = '收起';
+
+      const copyJsonBtn = document.createElement('button');
+      copyJsonBtn.className = 'btn';
+      copyJsonBtn.style.cssText = 'display:none;font-size:11px;padding:2px 8px;margin-right:6px';
+      copyJsonBtn.textContent = '复制 JSON';
+      copyJsonBtn.onclick = () => {
+        navigator.clipboard.writeText(JSON.stringify(reqJson, null, 2)).then(() => {
+          copyJsonBtn.textContent = '已复制！';
+          setTimeout(() => { copyJsonBtn.textContent = '复制 JSON'; }, 1500);
+        }).catch(() => {
+          copyJsonBtn.textContent = '复制失败';
+          setTimeout(() => { copyJsonBtn.textContent = '复制 JSON'; }, 1500);
+        });
+      };
+
+      const hdrRight = document.createElement('div');
+      hdrRight.style.cssText = 'display:flex;align-items:center;flex-shrink:0';
+      hdrRight.appendChild(copyJsonBtn);
+      hdrRight.appendChild(toggle);
+      tabHdr.appendChild(tabBar);
+      tabHdr.appendChild(hdrRight);
+      tabSec.appendChild(tabHdr);
+
+      const tabBody = document.createElement('div');
+      tabBody.className = 'tab-section-body';
+      toggle.onclick = () => {
+        const h = tabBody.classList.toggle('hidden');
+        toggle.textContent = h ? '展开' : '收起';
+        // show/hide active pane
+        tabBody.querySelectorAll('.tab-pane').forEach(p => {
+          p.style.display = h ? 'none' : (p.classList.contains('active') ? 'block' : 'none');
+        });
+      };
+
+      // ── Tab: Message ──────────────────────────────────────────────────────
+      const msgPane = document.createElement('div');
+      msgPane.className = 'tab-pane active'; msgPane.dataset.tab = 'msg';
+      if (lastMsg) {
+        const roleLabel = document.createElement('div');
+        roleLabel.style.cssText = 'font-size:11px;color:#8b949e;margin-bottom:6px';
+        roleLabel.textContent = `role: ${lastMsg.role}`;
+        msgPane.appendChild(roleLabel);
+
+        const content = lastMsg.content;
+        if (typeof content === 'string') {
+          msgPane.appendChild(mkTextWithMdToggle(content));
+        } else if (Array.isArray(content)) {
+          content.forEach((blk, i) => {
+            const bDiv = document.createElement('div');
+            bDiv.style.cssText = 'margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #21262d';
+            if (i === content.length - 1) bDiv.style.borderBottom = 'none';
+            const bType = blk.type || '?';
+            const badge = `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;background:#21262d;color:#8b949e;margin-right:6px">${esc(bType)}</span>`;
+            if (bType === 'text') {
+              const text = blk.text || '';
+              const isSystem = text.startsWith('<system-reminder') || text.startsWith('<local-command');
+              if (isSystem) {
+                bDiv.innerHTML = badge + `<span style="font-size:11px;color:#484f58">[system-reminder, ${text.length} chars]</span>`;
+              } else {
+                bDiv.innerHTML = badge;
+                bDiv.appendChild(mkTextWithMdToggle(text));
+              }
+            } else if (bType === 'tool_result') {
+              const c = blk.content;
+              const errMark = blk.is_error ? ' <span style="color:#f85149">error</span>' : '';
+              bDiv.innerHTML = badge + `<span style="font-size:11px;color:#79c0ff">${esc(blk.tool_use_id || '')}</span>${errMark}`;
+              const pre = document.createElement('div');
+              pre.className = 'raw-block'; pre.style.marginTop = '4px';
+              pre.textContent = typeof c === 'string' ? c : JSON.stringify(c, null, 2);
+              bDiv.appendChild(pre);
+            } else {
+              bDiv.innerHTML = badge;
+              const pre = document.createElement('div');
+              pre.className = 'raw-block'; pre.style.marginTop = '4px';
+              pre.textContent = JSON.stringify(blk, null, 2);
+              bDiv.appendChild(pre);
+            }
+            msgPane.appendChild(bDiv);
+          });
+        }
+      }
+      tabBody.appendChild(msgPane);
+
+      // ── Tab: System ───────────────────────────────────────────────────────
+      const sysPane = document.createElement('div');
+      sysPane.className = 'tab-pane'; sysPane.dataset.tab = 'sys';
+      sysBlocks.forEach((s, i) => {
+        const sDiv = document.createElement('div');
+        sDiv.style.cssText = 'margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #21262d';
+        if (i === sysBlocks.length - 1) sDiv.style.borderBottom = 'none';
+        sDiv.innerHTML = `<span style="font-size:10px;color:#484f58;font-family:monospace">[${i}]</span>`;
+        sDiv.appendChild(mkTextWithMdToggle(s.text || ''));
+        sysPane.appendChild(sDiv);
+      });
+      tabBody.appendChild(sysPane);
+
+      // ── Tab: Tools ────────────────────────────────────────────────────────
+      const toolPane = document.createElement('div');
+      toolPane.className = 'tab-pane'; toolPane.dataset.tab = 'tool';
+      tools.forEach(t => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'tool-row';
+
+        const hdr = document.createElement('div');
+        hdr.className = 'tool-hdr';
+        hdr.innerHTML =
+          `<span class="tool-arrow">▶</span>` +
+          `<span class="tool-name">${esc(t.name || '')}</span>` +
+          `<span class="tool-desc">${esc(t.description || '')}</span>`;
+
+        const detail = document.createElement('div');
+        detail.className = 'tool-detail';
+        if (t.description) {
+          const descDiv = document.createElement('div');
+          descDiv.appendChild(mkTextWithMdToggle(t.description));
+          detail.appendChild(descDiv);
+        }
+        if (t.input_schema) {
+          const schemaLabel = document.createElement('div');
+          schemaLabel.style.cssText = 'font-size:10px;color:#484f58;margin:6px 0 2px';
+          schemaLabel.textContent = 'input_schema';
+          const schemaDiv = document.createElement('div');
+          schemaDiv.className = 'tool-schema';
+          schemaDiv.textContent = JSON.stringify(t.input_schema, null, 2);
+          detail.appendChild(schemaLabel);
+          detail.appendChild(schemaDiv);
+        }
+
+        hdr.onclick = () => {
+          const open = detail.classList.toggle('open');
+          hdr.querySelector('.tool-arrow').textContent = open ? '▼' : '▶';
+        };
+
+        rowDiv.appendChild(hdr);
+        rowDiv.appendChild(detail);
+        toolPane.appendChild(rowDiv);
+      });
+      tabBody.appendChild(toolPane);
+
+      // ── Tab: 增量 ─────────────────────────────────────────────────────────
+      const diffPane = document.createElement('div');
+      diffPane.className = 'tab-pane'; diffPane.dataset.tab = 'diff';
+      if (idx != null) {
+        const diffContent = document.createElement('div');
+        diffContent.style.padding = '4px 0';
+        const prev = getPrevRecord(idx);
+        const curMsgs = parseMsgs(r);
+        const prevMsgs = prev ? parseMsgs(prev) : [];
+        const diff = diffMessages(curMsgs, prevMsgs);
+        if (diff.removed > 0) {
+          const removedEl = document.createElement('div');
+          removedEl.style.cssText = 'font-size:11px;color:#f85149;padding:6px 8px;background:#3d1010;border-radius:4px;margin-bottom:8px';
+          removedEl.textContent = `⚠ 减少了 ${diff.removed} 条消息（context 截断或对话重置）`;
+          diffContent.appendChild(removedEl);
+        }
+        if (!diff.added.length && diff.removed === 0) {
+          diffContent.innerHTML += `<div style="font-size:12px;color:#484f58;padding:8px 0">无变化</div>`;
+        }
+        for (const msg of diff.added) {
+          const item = document.createElement('div');
+          item.className = `msg-diff-item role-${msg.role || 'unknown'}`;
+          const roleEl = document.createElement('div');
+          roleEl.className = 'msg-diff-role';
+          roleEl.textContent = msg.role || 'unknown';
+          item.appendChild(roleEl);
+          const content = Array.isArray(msg.content)
+            ? msg.content
+            : [{ type: 'text', text: String(msg.content || '') }];
+          content.forEach((b, bi) => item.appendChild(renderMsgBlock(b, bi)));
+          diffContent.appendChild(item);
+        }
+        diffPane.appendChild(diffContent);
+      }
+      tabBody.appendChild(diffPane);
+
+      // ── Tab: 原始 ─────────────────────────────────────────────────────────
+      const rawPane = document.createElement('div');
+      rawPane.className = 'tab-pane'; rawPane.dataset.tab = 'raw';
+      const tree = document.createElement('div');
+      tree.className = 'json-tree';
+      tree.style.cssText = 'max-height:500px;overflow-y:auto;padding:4px';
+      tree.appendChild(renderJsonTree(reqJson, 0, 3));
+      rawPane.appendChild(tree);
+      tabBody.appendChild(rawPane);
+
+      tabSec.appendChild(tabBody);
+      panel.appendChild(tabSec);
+
+    } else {
+      // Non-JSON body
+      panel.appendChild(mkSection('请求 Body', body => {
+        const pre = document.createElement('div');
+        pre.className = 'raw-block'; pre.textContent = reqBody;
+        body.appendChild(pre);
+      }, true));
+    }
+  }
+
+  // 4. Response headers
+  panel.appendChild(mkSection(`响应 Headers（${Object.keys(respHeaders).length}）`, body => {
+    const tbl = document.createElement('table');
+    tbl.className = 'headers-table';
+    for (const [k, v] of Object.entries(respHeaders)) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(k)}</td><td>${esc(v)}</td>`;
+      tbl.appendChild(tr);
+    }
+    body.appendChild(tbl);
+  }, true));
+
+  // 5. SSE events or response body
+  if (r.is_sse && r.sse_events?.length) {
+    const parsed = parseSseEvents(r.sse_events);
+    const eventAnnotations = buildSseEventAnnotations(r.sse_events, parsed);
+
+    // Tab section: 原始 | 解析
+    const sseSec = document.createElement('div');
+    sseSec.className = 'tab-section';
+
+    const sseHdr = document.createElement('div');
+    sseHdr.className = 'tab-section-hdr';
+    const sseTabBar = document.createElement('div');
+    sseTabBar.className = 'tab-bar';
+
+    [
+      { id: 'sse-parsed', label: `解析（${parsed.contents.length} blocks）` },
+      { id: 'sse-raw',    label: `原始（${r.sse_events.length} events）` },
+    ].forEach((t, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
+      btn.textContent = t.label;
+      btn.onclick = () => {
+        sseTabBar.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        sseSec.querySelectorAll('.sse-pane').forEach(p => p.classList.remove('active'));
+        sseSec.querySelector(`.sse-pane[data-tab="${t.id}"]`).classList.add('active');
+      };
+      sseTabBar.appendChild(btn);
+    });
+
+    const sseToggle = document.createElement('span');
+    sseToggle.className = 'tab-section-toggle';
+    sseToggle.textContent = '收起';
+    sseHdr.appendChild(sseTabBar);
+    sseHdr.appendChild(sseToggle);
+    sseSec.appendChild(sseHdr);
+
+    const sseBody = document.createElement('div');
+    sseBody.className = 'tab-section-body';
+    sseToggle.onclick = () => {
+      const h = sseBody.classList.toggle('hidden');
+      sseToggle.textContent = h ? '展开' : '收起';
+      sseBody.querySelectorAll('.sse-pane').forEach(p => {
+        p.style.display = h ? 'none' : (p.classList.contains('active') ? 'block' : 'none');
+      });
+    };
+
+    // ── Tab: 解析 ─────────────────────────────────────────────────────────
+    const parsedPane = document.createElement('div');
+    parsedPane.className = 'sse-pane tab-pane active'; parsedPane.dataset.tab = 'sse-parsed';
+
+    parsed.contents.forEach((item, idx) => {
+      const blockDiv = document.createElement('div');
+      blockDiv.style.cssText = 'margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #21262d';
+      if (idx === parsed.contents.length - 1) blockDiv.style.borderBottom = 'none';
+
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+      hdr.innerHTML =
+        `<span style="font-size:10px;color:#484f58;font-family:monospace">[${idx}]</span>` +
+        `<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;${item.type==='text'?'background:#1a2e1a;color:#56d364':'background:#1a2440;color:#79c0ff'}">${esc(item.type)}</span>` +
+        (item.name ? `<span style="font-size:11px;color:#e3b341">${esc(item.name)}</span>` : '') +
+        (item.id ? `<span style="font-size:10px;color:#484f58;font-family:monospace">${esc(item.id)}</span>` : '');
+      blockDiv.appendChild(hdr);
+
+      if (item.type === 'text' && item.text) {
+        blockDiv.appendChild(mkTextWithMdToggle(item.text));
+      } else if (item.type === 'tool_use' && item.input != null) {
+        const tree = document.createElement('div');
+        tree.className = 'json-tree';
+        tree.style.cssText = 'max-height:200px;overflow-y:auto;padding:4px;background:#0d1117;border-radius:4px';
+        if (typeof item.input === 'object') {
+          tree.appendChild(renderJsonTree(item.input, 0, 2));
+        } else {
+          tree.textContent = String(item.input);
+        }
+        blockDiv.appendChild(tree);
+      }
+      parsedPane.appendChild(blockDiv);
+    });
+
+    // stop_reason + usage footer
+    const meta = document.createElement('div');
+    meta.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid #30363d';
+    if (parsed.stopReason) {
+      meta.innerHTML += `<span style="background:#21262d;border-radius:4px;padding:2px 8px;font-size:11px;color:#8b949e">stop_reason <b style="color:#e1e4e8">${esc(parsed.stopReason)}</b></span>`;
+    }
+    if (parsed.usage) {
+      for (const [k, v] of Object.entries(parsed.usage)) {
+        if (v != null) meta.innerHTML += `<span style="background:#21262d;border-radius:4px;padding:2px 8px;font-size:11px;color:#8b949e">${esc(k)} <b style="color:#e1e4e8">${v?.toLocaleString?.() ?? v}</b></span>`;
+      }
+    }
+    if (meta.innerHTML) parsedPane.appendChild(meta);
+    sseBody.appendChild(parsedPane);
+
+    // ── Tab: 原始 ─────────────────────────────────────────────────────────
+    const rawPane = document.createElement('div');
+    rawPane.className = 'sse-pane tab-pane'; rawPane.dataset.tab = 'sse-raw';
+    r.sse_events.forEach((ev, evIdx) => {
+      const evDiv = document.createElement('div');
+      evDiv.style.cssText = 'margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #161b22';
+      const rawDiv = document.createElement('div');
+      rawDiv.className = 'sse-event';
+      rawDiv.textContent = ev;
+      evDiv.appendChild(rawDiv);
+      const ann = eventAnnotations[evIdx];
+      if (ann) {
+        const annDiv = document.createElement('div');
+        annDiv.style.cssText = 'margin-top:3px;padding:4px 8px;background:#1a2535;border-radius:4px;font-size:11px';
+        annDiv.innerHTML = ann;
+        evDiv.appendChild(annDiv);
+      }
+      rawPane.appendChild(evDiv);
+    });
+    sseBody.appendChild(rawPane);
+
+    sseSec.appendChild(sseBody);
+    panel.appendChild(sseSec);
+  } else {
+    const respBody = resp.body || '';
+    if (respBody) {
+      panel.appendChild(mkSection('响应 Body', body => {
+        const pre = document.createElement('div');
+        pre.className = 'raw-block';
+        try { pre.innerHTML = syntaxHighlightJson(JSON.parse(respBody)); }
+        catch { pre.textContent = respBody; }
+        body.appendChild(pre);
+      }));
+    }
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

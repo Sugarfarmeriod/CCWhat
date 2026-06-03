@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Log</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117; color: #e1e4e8;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 8px 14px; display: flex; align-items: center;
+    gap: 8px; flex-shrink: 0;
+  }
+  .topbar h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; white-space: nowrap; }
+  .adv-wrap { position: relative; }
+  .adv-btn {
+    background: #21262d; color: #8b949e;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 8px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .adv-btn:hover { color: #e1e4e8; background: #30363d; }
+  .adv-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px 12px; z-index: 100; min-width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  }
+  .adv-panel.open { display: block; }
+  .adv-panel label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 4px; }
+  .adv-panel .field { width: 100%; }
+  .field {
+    background: #0d1117; color: #e1e4e8;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 8px; font-size: 12px;
+  }
+  .field:focus { outline: none; border-color: #58a6ff; }
+  select.field { cursor: pointer; }
+  .btn {
+    background: #21262d; color: #e1e4e8;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: #30363d; }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  .btn:disabled:hover { background: #21262d; }
+  .badge { font-size: 11px; color: #8b949e; white-space: nowrap; }
+  .nav-links { margin-left: auto; display: flex; gap: 10px; }
+  .nav-link { font-size: 12px; color: #58a6ff; text-decoration: none; white-space: nowrap; }
+
+  /* ── Main layout ── */
+  .main { flex: 1; display: flex; overflow: hidden; }
+
+  /* ── Left: entry list ── */
+  .list-panel {
+    width: 380px; flex-shrink: 0;
+    border-right: 1px solid #30363d;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .entry-list { flex: 1; overflow-y: auto; }
+
+  /* Tree group header */
+  .tree-group-hdr {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    background: #161b22; border-bottom: 1px solid #30363d;
+    cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1;
+  }
+  .tree-arrow { font-size: 13px; color: #58a6ff; transition: transform .15s; }
+  .tree-arrow.open { transform: rotate(90deg); }
+  .tree-group-label { font-size: 12px; font-weight: 600; color: #f0f6fc; }
+  .tree-group-desc { font-size: 11px; color: #8b949e; }
+  .tree-group-count { font-size: 10px; color: #6e7681; background: #21262d; border-radius: 8px; padding: 1px 6px; margin-left: auto; }
+  .tree-group-body.hidden { display: none; }
+  .tree-item { padding-left: 18px; }
+
+  /* Turn header (user prompt root) */
+  .turn-hdr {
+    display: flex; align-items: flex-start; gap: 5px;
+    padding: 6px 10px 5px 22px;
+    border-bottom: 1px solid #21262d;
+    cursor: pointer; user-select: none;
+    background: #0f1117;
+  }
+  .turn-hdr:hover { background: #161b22; }
+  .turn-arrow { font-size: 12px; color: #58a6ff; margin-top: 1px; transition: transform .15s; flex-shrink: 0; }
+  .turn-arrow.open { transform: rotate(90deg); }
+  .turn-hdr-content { flex: 1; min-width: 0; }
+  .turn-hdr-row1 { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+  .turn-lineno { font-size: 10px; color: #484f58; font-family: monospace; flex-shrink: 0; }
+  .turn-summary { font-size: 12px; color: #e1e4e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .turn-count { font-size: 10px; color: #484f58; flex-shrink: 0; }
+  .turn-body.hidden { display: none; }
+  /* Children of a turn — deeper indent with visual distinction */
+  .turn-child {
+    padding-left: 30px;
+    border-left: 2px solid #e6edf3;
+    margin-left: 10px;
+    background: #161b22;
+  }
+  .turn-child:hover { background: #1c2230; }
+  .turn-child.active { background: #1a2535 !important; border-left-color: #58a6ff; }
+
+  .entry-item {
+    padding: 8px 10px; border-bottom: 1px solid #161b22;
+    cursor: pointer; transition: background .1s;
+  }
+  .entry-item:hover { background: #161b22; }
+  .entry-item.active { background: #1a2535; border-left: 3px solid #58a6ff; padding-left: 7px; }
+
+  .ei-row1 { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .ei-ts { font-size: 10px; color: #8b949e; }
+
+  /* Type badges */
+  .type-badge {
+    font-size: 10px; font-weight: 600; padding: 1px 5px;
+    border-radius: 3px; white-space: nowrap;
+  }
+  .type-user     { background: #1a2e1a; color: #56d364; }
+  .type-assistant{ background: #1a2440; color: #79c0ff; }
+  .type-system   { background: #2d1f3a; color: #bc8cff; }
+  .type-attachment { background: #2d2408; color: #e3b341; }
+  .type-permission-mode      { background: #2d1f1f; color: #ffa198; }
+  .type-file-history-snapshot{ background: #1a1a2e; color: #8b8fff; }
+  .type-queue-operation { background: #1d2d1d; color: #7ee787; }
+  .type-other    { background: #21262d; color: #8b949e; }
+
+  .sidechain-badge {
+    font-size: 9px; padding: 1px 4px; border-radius: 3px;
+    background: #30363d; color: #6e7681;
+  }
+  .ei-summary {
+    font-size: 11px; color: #adbac7;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ei-uuid { font-size: 10px; color: #484f58; font-family: monospace; }
+
+  /* ── Right: detail ── */
+  .detail-panel { flex: 1; overflow-y: auto; padding: 14px; }
+  .empty-detail {
+    height: 100%; display: flex; align-items: center;
+    justify-content: center; color: #484f58; font-size: 13px;
+  }
+
+  .detail-meta {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .detail-type { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .detail-ts { font-size: 12px; color: #8b949e; }
+  .detail-uuid { font-size: 11px; color: #484f58; font-family: monospace; }
+  .agent-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: #2d1f3a; color: #bc8cff; border: 1px solid #6e40c9;
+    font-family: monospace; white-space: nowrap;
+  }
+  .skill-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: #1a2e1a; color: #56d364; border: 1px solid #2ea043;
+    white-space: nowrap;
+  }
+
+  /* Section */
+  .section { border: 1px solid #30363d; border-radius: 7px; margin-bottom: 10px; overflow: hidden; }
+  .sec-hdr {
+    background: #161b22; padding: 7px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+  .sec-title { font-size: 12px; font-weight: 600; color: #f0f6fc; }
+  .sec-toggle { font-size: 11px; color: #58a6ff; }
+  .sec-body { padding: 10px 12px; border-top: 1px solid #21262d; background: #161b22; }
+  .sec-body.content-bg { background: #1c2230; }
+  .sec-body.hidden { display: none; }
+
+  /* Content blocks */
+  .content-text {
+    font-size: 13px; line-height: 1.65; color: #e1e4e8;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .tool-row {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 5px 0; border-bottom: 1px solid #21262d; font-size: 12px;
+  }
+  .tool-row:last-child { border-bottom: none; }
+  .tool-name { color: #79c0ff; font-weight: 600; min-width: 120px; }
+  .tool-input { color: #adbac7; font-family: monospace; font-size: 11px; word-break: break-all; }
+
+  /* Type filter checkboxes */
+  .type-filters { display: flex; gap: 5px; align-items: center; }
+  .type-check {
+    display: flex; align-items: center; gap: 3px;
+    font-size: 11px; cursor: pointer; user-select: none;
+    padding: 2px 7px; border-radius: 4px;
+    border: 1px solid #30363d; background: #0d1117; color: #6e7681;
+    transition: all .1s;
+  }
+  .type-check input { display: none; }
+  .type-check.checked-user     { background: #1a2e1a; border-color: #56d364; color: #56d364; }
+  .type-check.checked-assistant{ background: #1a2440; border-color: #79c0ff; color: #79c0ff; }
+  .type-check.checked-system   { background: #2d1f3a; border-color: #bc8cff; color: #bc8cff; }
+  .type-check.checked-attachment{ background: #2d2408; border-color: #e3b341; color: #e3b341; }
+  .type-check.checked-permission-mode       { background: #2d1f1f; border-color: #ffa198; color: #ffa198; }
+  .type-check.checked-file-history-snapshot { background: #1a1a2e; border-color: #8b8fff; color: #8b8fff; }
+  .type-check.checked-queue-operation { background: #1d2d1d; border-color: #7ee787; color: #7ee787; }
+  .type-check.checked-other    { background: #21262d; border-color: #8b949e; color: #8b949e; }
+
+  /* Line number */
+  .ei-lineno { font-size: 10px; color: #484f58; font-family: monospace; min-width: 28px; text-align: right; flex-shrink: 0; }
+
+  /* Raw JSON — syntax highlighted */
+  .raw-json {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 11px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all;
+    background: #0d1117; border-radius: 4px; padding: 10px;
+    max-height: 9999px; overflow-y: auto;
+  }
+  .json-key    { color: #79c0ff; }
+  .json-str    { color: #a5d6ff; }
+  .json-num    { color: #f2cc60; }
+  .json-bool   { color: #ff7b72; }
+  .json-null   { color: #ff7b72; }
+  .json-punct  { color: #e1e4e8; }
+
+  /* Info grid */
+  .info-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px 10px; font-size: 12px; }
+  .ig-k { color: #8b949e; }
+  .ig-v { color: #e1e4e8; word-break: break-all; font-family: monospace; font-size: 11px; }
+
+  /* Placeholder / spinner */
+  .placeholder { color: #484f58; font-size: 13px; padding: 20px; text-align: center; }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid #30363d;
+    border-top-color: #58a6ff; border-radius: 50%;
+    animation: spin .6s linear infinite; margin: 24px auto; display: block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+  .md-view { font-size: 13px; line-height: 1.7; color: #e1e4e8; padding: 4px 0; }
+  .md-view h1,.md-view h2,.md-view h3,.md-view h4,.md-view h5,.md-view h6 { color: #f0f6fc; margin: 14px 0 7px; line-height: 1.35; }
+  .md-view h1 { font-size: 20px; padding-bottom: 8px; border-bottom: 1px solid #30363d; }
+  .md-view h2 { font-size: 17px; padding-bottom: 5px; border-bottom: 1px solid #21262d; }
+  .md-view h3 { font-size: 15px; }
+  .md-view h4,.md-view h5,.md-view h6 { font-size: 14px; }
+  .md-view p { margin: 7px 0; }
+  .md-view code { background:#21262d; padding:1px 4px; border-radius:3px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:11px; }
+  .md-view pre { background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:10px 12px; margin:10px 0; overflow-x:auto; font-size:12px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height:1.55; }
+  .md-view pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+  .md-view pre[data-lang]::before {
+    content: attr(data-lang); display: block; color: #8b949e; font-size: 10px;
+    text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0;
+  }
+  .md-view ul,.md-view ol { padding-left:22px; margin:7px 0; }
+  .md-view li { margin:3px 0; }
+  .md-view strong { color:#f0f6fc; }
+  .md-view em { color:#adbac7; }
+  .md-view blockquote { border-left: 3px solid #30363d; padding: 6px 10px; margin: 10px 0; color: #adbac7; background: #161b22; border-radius: 0 4px 4px 0; }
+  .md-view .md-table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid #30363d; border-radius: 6px; }
+  .md-view table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+  .md-view th { background: #161b22; color: #f0f6fc; font-weight: 600; text-align: left; }
+  .md-view th,.md-view td { padding: 7px 9px; border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; vertical-align: top; }
+  .md-view th:last-child,.md-view td:last-child { border-right: none; }
+  .md-view tr:last-child td { border-bottom: none; }
+  .md-view .md-mermaid-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; padding: 12px; }
+  .md-view .md-mermaid { min-width: 520px; text-align: center; color: #e1e4e8; }
+  .md-view .md-mermaid svg { max-width: 100%; height: auto; }
+  .md-view .md-mermaid-fallback { margin: 0; }
+  .analysis-report { max-width: 980px; margin: 0 auto; }
+  .analysis-report .md-view { line-height: 1.65; }
+  .analysis-status {
+    border: 1px solid #30363d; border-radius: 7px; padding: 14px;
+    background: #161b22; color: #adbac7; font-size: 13px;
+  }
+  .analysis-status.error { color: #ffa198; border-color: #8e3434; }
+  .analysis-actions { display: flex; gap: 8px; margin-left: auto; }
+
+  /* ── Export modal ── */
+  .export-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.65); z-index: 9999;
+    align-items: center; justify-content: center;
+  }
+  .export-overlay.open { display: flex; }
+  .export-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    width: min(480px, 95vw); overflow: hidden;
+  }
+  .export-card-hdr {
+    background: #0d1117; padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #30363d;
+  }
+  .export-card-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .export-card-close {
+    background: none; border: none; color: #8b949e;
+    font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .export-card-close:hover { color: #e1e4e8; }
+  .export-card-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .export-field-label { font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+  .export-field-value {
+    font-size: 12px; color: #adbac7; font-family: monospace;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 4px;
+    padding: 5px 8px; word-break: break-all;
+  }
+  .export-checklist { display: flex; flex-direction: column; gap: 6px; }
+  .export-check-label { font-size: 12px; color: #c9d1d9; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .export-check-label input[type=checkbox] { accent-color: #388bfd; cursor: pointer; }
+  .export-check-label input[type=checkbox]:disabled { cursor: default; opacity: 0.5; }
+  .export-session-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .export-session-count { margin-left: auto; font-size: 11px; color: #8b949e; }
+  .export-session-list {
+    max-height: 190px; overflow: auto; border: 1px solid #30363d; border-radius: 4px;
+    background: #0d1117; padding: 6px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .export-session-project { font-size: 11px; color: #8b949e; padding: 5px 4px 2px; }
+  .export-session-row {
+    display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 6px;
+    padding: 5px 6px; border-radius: 4px; color: #c9d1d9; cursor: pointer;
+  }
+  .export-session-row:hover { background: #161b22; }
+  .export-session-row input { margin: 0; accent-color: #388bfd; }
+  .export-session-row input:disabled { cursor: default; opacity: 0.5; }
+  .export-session-main { font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .export-session-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  #exportFilename:disabled { cursor: default; opacity: 0.7; }
+  .export-import-cmd { background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .export-import-cmd-text { font-size: 11px; font-family: monospace; color: #58a6ff; word-break: break-all; }
+  .export-import-actions { display: flex; gap: 6px; }
+  .export-action-btn { font-size: 11px; padding: 3px 8px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; cursor: pointer; }
+  .export-action-btn:hover { background: #30363d; }
+  .export-card-footer {
+    padding: 10px 14px; border-top: 1px solid #30363d;
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .export-btn-cancel {
+    background: #21262d; color: #e1e4e8; border: 1px solid #30363d;
+    border-radius: 5px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .export-btn-cancel:hover { background: #30363d; }
+  .export-btn-confirm {
+    background: #1f6feb; color: #fff; border: none;
+    border-radius: 5px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .export-btn-confirm:hover { background: #388bfd; }
+  .export-btn-confirm:disabled { background: #21262d; color: #484f58; cursor: default; }
+  .export-status { font-size: 11px; color: #8b949e; margin-top: 2px; min-height: 16px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Claude Log</h1>
+  <div class="adv-wrap" id="advWrap">
+    <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
+    <div class="adv-panel" id="advPanel">
+      <label>API URL</label>
+      <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址">
+    </div>
+  </div>
+  <select class="field" id="projectSel" onchange="onProjectChange()">
+    <option value="">— project —</option>
+  </select>
+  <select class="field" id="sessionSel" style="max-width:280px" onchange="loadSession()">
+    <option value="">— session —</option>
+  </select>
+  <input class="field" id="searchBox" placeholder="搜索…" oninput="renderList()" style="width:130px">
+  <div class="type-filters" id="typeFilters">
+    <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
+    <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
+    <label class="type-check" data-type="system"><input type="checkbox">system</label>
+    <label class="type-check" data-type="attachment"><input type="checkbox">attachment</label>
+    <label class="type-check" data-type="permission-mode"><input type="checkbox">permission-mode</label>
+    <label class="type-check" data-type="file-history-snapshot"><input type="checkbox">file-history-snapshot</label>
+    <label class="type-check" data-type="queue-operation"><input type="checkbox">queue-operation</label>
+    <label class="type-check checked-other" data-type="other"><input type="checkbox" checked>other</label>
+  </div>
+  <button class="btn" onclick="init()">刷新</button>
+  <button class="btn" id="analyzeBtn" onclick="analyzeCurrentSession()" disabled
+          title="临时调用 Claude Code 分析当前 session">分析当前 Session</button>
+  <button class="btn" id="exportBtn" onclick="openExportModal()" disabled
+          style="background:#1f6feb" title="导出当前 session 的日志和请求响应">导出</button>
+  <span class="badge" id="countBadge"></span>
+  <div class="nav-links">
+    <a class="nav-link" href="req-resp.html">Raw Req/Resp</a>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="export-overlay" id="exportOverlay" onclick="onExportOverlayClick(event)">
+  <div class="export-card">
+    <div class="export-card-hdr">
+      <span class="export-card-title">导出对话记录</span>
+      <button class="export-card-close" onclick="closeExportModal()">✕</button>
+    </div>
+    <div class="export-card-body">
+      <div>
+        <div class="export-field-label">选择 Session</div>
+        <div class="export-session-tools">
+          <button class="export-action-btn" id="exportSelectCurrentBtn" onclick="selectCurrentExportSession()">当前</button>
+          <button class="export-action-btn" id="exportSelectAllBtn" onclick="selectAllExportSessions()">全选</button>
+          <button class="export-action-btn" id="exportClearBtn" onclick="clearExportSessions()">清空</button>
+          <span class="export-session-count" id="exportSessionCount"></span>
+        </div>
+        <div class="export-session-list" id="exportSessionList"></div>
+      </div>
+      <div>
+        <div class="export-field-label">文件名</div>
+        <input class="field" id="exportFilename" type="text" style="width:100%;font-size:12px"
+               placeholder="export-YYYYMMDD-HHmmss.tar.gz">
+      </div>
+      <div>
+        <div class="export-field-label">包含内容</div>
+        <div class="export-checklist">
+          <label class="export-check-label">
+            <input type="checkbox" id="chkClaudeLogs" checked disabled> Claude Code 主日志（必选）
+          </label>
+          <label class="export-check-label">
+            <input type="checkbox" id="chkSubagentLogs" checked> Subagent 日志（如有）
+          </label>
+          <label class="export-check-label">
+            <input type="checkbox" id="chkReqResp" checked> 原始请求响应（如有）
+          </label>
+        </div>
+      </div>
+      <div class="export-status" id="exportStatus"></div>
+      <div class="export-import-cmd" id="exportImportCmd" style="display:none">
+        <div class="export-field-label">发给别人后，对方运行（导入包内所有 session）：</div>
+        <div class="export-import-cmd-text" id="exportImportCmdText"></div>
+        <div class="export-import-actions">
+          <button class="export-action-btn" id="exportCopyBtn" onclick="copyImportCmd()">复制导入命令</button>
+        </div>
+      </div>
+    </div>
+    <div class="export-card-footer">
+      <button class="export-btn-cancel" onclick="closeExportModal()">取消</button>
+      <button class="export-btn-confirm" id="exportConfirmBtn" onclick="doExport()">导出并下载</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="list-panel">
+    <div class="entry-list" id="entryList">
+      <div class="placeholder">选择 project 和 session 后加载</div>
+    </div>
+  </div>
+  <div class="detail-panel" id="detailPanel">
+    <div class="empty-detail">← 点击左侧列表项查看原始日志</div>
+  </div>
+</div>
+
+<script>
+function escRaw(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function renderMarkdownInline(text) {
+  const codeSpans = [];
+  let s = String(text ?? '').replace(/`([^`]+)`/g, (_, code) => {
+    const token = `\u0000CODE${codeSpans.length}\u0000`;
+    codeSpans.push(`<code>${escRaw(code)}</code>`);
+    return token;
+  });
+  s = escRaw(s);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  codeSpans.forEach((html, i) => {
+    s = s.replace(`\u0000CODE${i}\u0000`, html);
+  });
+  return s;
+}
+
+function splitMarkdownTableRow(line) {
+  let row = line.trim();
+  if (row.startsWith('|')) row = row.slice(1);
+  if (row.endsWith('|')) row = row.slice(0, -1);
+  return row.split('|').map(cell => cell.trim());
+}
+
+function isMarkdownTableSeparator(line) {
+  const cells = splitMarkdownTableRow(line);
+  return cells.length > 1 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
+function renderMarkdown(text) {
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
+  const html = [];
+
+  const renderList = (tag, items) => {
+    html.push(`<${tag}>${items.map(item => `<li>${renderMarkdownInline(item)}</li>`).join('')}</${tag}>`);
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i += 1; continue; }
+
+    const fence = line.match(/^```([A-Za-z0-9_-]+)?\s*$/);
+    if (fence) {
+      const lang = fence[1] || '';
+      const code = [];
+      i += 1;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length) i += 1;
+      if (lang.toLowerCase() === 'mermaid') {
+        html.push(`<div class="md-mermaid-wrap"><div class="md-mermaid">${escRaw(code.join('\n'))}</div></div>`);
+        continue;
+      }
+      const langAttr = lang ? ` data-lang="${escRaw(lang)}"` : '';
+      html.push(`<pre class="md-code-block"${langAttr}><code>${escRaw(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderMarkdownInline(heading[2].trim())}</h${level}>`);
+      i += 1;
+      continue;
+    }
+
+    if (i + 1 < lines.length && line.includes('|') && isMarkdownTableSeparator(lines[i + 1])) {
+      const headers = splitMarkdownTableRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+        rows.push(splitMarkdownTableRow(lines[i]));
+        i += 1;
+      }
+      const thead = headers.map(cell => `<th>${renderMarkdownInline(cell)}</th>`).join('');
+      const tbody = rows.map(row =>
+        `<tr>${headers.map((_, idx) => `<td>${renderMarkdownInline(row[idx] || '')}</td>`).join('')}</tr>`
+      ).join('');
+      html.push(`<div class="md-table-wrap"><table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table></div>`);
+      continue;
+    }
+
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (unordered) {
+      const items = [];
+      while (i < lines.length) {
+        const item = lines[i].match(/^\s*[-*+]\s+(.+)$/);
+        if (!item) break;
+        items.push(item[1]);
+        i += 1;
+      }
+      renderList('ul', items);
+      continue;
+    }
+
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+    if (ordered) {
+      const items = [];
+      while (i < lines.length) {
+        const item = lines[i].match(/^\s*\d+\.\s+(.+)$/);
+        if (!item) break;
+        items.push(item[1]);
+        i += 1;
+      }
+      renderList('ol', items);
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const parts = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        parts.push(lines[i].replace(/^>\s?/, ''));
+        i += 1;
+      }
+      html.push(`<blockquote>${renderMarkdownInline(parts.join(' '))}</blockquote>`);
+      continue;
+    }
+
+    const paragraph = [line.trim()];
+    i += 1;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^```/.test(lines[i]) &&
+      !/^(#{1,6})\s+/.test(lines[i]) &&
+      !/^\s*[-*+]\s+/.test(lines[i]) &&
+      !/^\s*\d+\.\s+/.test(lines[i]) &&
+      !/^>\s?/.test(lines[i])
+    ) {
+      if (i + 1 < lines.length && lines[i].includes('|') && isMarkdownTableSeparator(lines[i + 1])) break;
+      paragraph.push(lines[i].trim());
+      i += 1;
+    }
+    html.push(`<p>${renderMarkdownInline(paragraph.join(' '))}</p>`);
+  }
+
+  return html.join('');
+}
+
+function fallbackMermaidBlock(node, reason) {
+  const source = node.textContent || '';
+  const pre = document.createElement('pre');
+  pre.className = 'md-code-block md-mermaid-fallback';
+  pre.setAttribute('data-lang', reason ? `mermaid (${reason})` : 'mermaid');
+  const code = document.createElement('code');
+  code.textContent = source;
+  pre.appendChild(code);
+
+  const wrap = node.closest('.md-mermaid-wrap');
+  if (wrap) {
+    wrap.innerHTML = '';
+    wrap.appendChild(pre);
+  } else {
+    node.replaceWith(pre);
+  }
+}
+
+function renderMermaidBlocks(root) {
+  const nodes = Array.from(root.querySelectorAll('.md-mermaid'));
+  if (!nodes.length) return;
+
+  if (!window.mermaid || typeof window.mermaid.run !== 'function') {
+    nodes.forEach(node => fallbackMermaidBlock(node, 'library unavailable'));
+    return;
+  }
+
+  try {
+    window.mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'strict'
+    });
+    Promise.resolve(window.mermaid.run({ nodes })).catch(() => {
+      nodes.forEach(node => {
+        if (!node.querySelector('svg')) fallbackMermaidBlock(node, 'render failed');
+      });
+    });
+  } catch (err) {
+    nodes.forEach(node => fallbackMermaidBlock(node, 'render failed'));
+  }
+}
+
+let allProjects = [];
+// Groups: [{id, label, desc, entries: [{...entry, _gid, _idx}]}]
+// allEntries: flat index for detail lookup by _idx
+let groups = [];
+let allEntries = [];
+let selectedIdx = -1;
+// Track collapsed state per group id
+const groupCollapsed = {};
+const analysisReports = {};
+let analysisInFlight = false;
+
+function toggleAdv() {
+  document.getElementById('advPanel').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('advWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('advPanel').classList.remove('open');
+  }
+});
+
+function apiBase() {
+  return (document.getElementById('apiUrl').value || window.location.origin).replace(/\/$/, '');
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtTs(ts) {
+  if (!ts) return '';
+  try { return new Date(ts).toLocaleString('zh-CN', {hour12:false}); } catch { return ts; }
+}
+function trunc(s, n) { s = String(s??''); return s.length>n ? s.slice(0,n)+'…' : s; }
+
+// ── Type filter checkboxes ────────────────────────────────────────────────
+document.getElementById('typeFilters').addEventListener('click', e => {
+  const label = e.target.closest('label');
+  if (!label) return;
+  // Toggle checkbox (click on label already toggles it, but we need to update style)
+  // Use setTimeout 0 so checkbox state is updated before we read it
+  setTimeout(() => {
+    const cb = label.querySelector('input');
+    const type = label.dataset.type;
+    if (cb.checked) {
+      label.classList.add(`checked-${type}`);
+    } else {
+      label.classList.remove(`checked-${type}`);
+    }
+    renderList();
+  }, 0);
+});
+
+function getActiveTypes() {
+  const active = new Set();
+  document.querySelectorAll('#typeFilters label').forEach(label => {
+    if (label.querySelector('input').checked) active.add(label.dataset.type);
+  });
+  return active;
+}
+
+// ── JSON syntax highlighter ───────────────────────────────────────────────
+function syntaxHighlightJson(obj) {
+  const json = JSON.stringify(obj, null, 2);
+  // Tokenize and colorize
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\],:])/g,
+    match => {
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          // key
+          return `<span class="json-key">${esc(match)}</span>`;
+        }
+        return `<span class="json-str">${esc(match)}</span>`;
+      }
+      if (/true|false/.test(match)) return `<span class="json-bool">${match}</span>`;
+      if (/null/.test(match)) return `<span class="json-null">${match}</span>`;
+      if (/^-?\d/.test(match)) return `<span class="json-num">${match}</span>`;
+      return `<span class="json-punct">${esc(match)}</span>`;
+    }
+  );
+}
+
+// ── Init: load projects ──────────────────────────────────────────────────
+async function init() {
+  try {
+    const resp = await fetch(`${apiBase()}/api/projects`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    allProjects = await resp.json();
+
+    const sel = document.getElementById('projectSel');
+    const curProject = sel.value;
+    const curSession = document.getElementById('sessionSel').value;
+    sel.innerHTML = '<option value="">— project —</option>';
+    for (const p of allProjects) {
+      const opt = document.createElement('option');
+      opt.value = p.projectDir;
+      opt.textContent = p.projectDir;
+      if (p.projectDir === curProject) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    if (!curProject && allProjects.length === 1) {
+      sel.value = allProjects[0].projectDir;
+      onProjectChange();
+    } else if (curProject) {
+      // Refresh session list, restore previous session selection, reload entries
+      onProjectChange(curSession);
+    }
+  } catch(e) {
+    document.getElementById('entryList').innerHTML =
+      `<div class="placeholder" style="color:#f85149">连接失败: ${esc(e.message)}</div>`;
+  }
+}
+
+function fmtSessionLabel(s) {
+  const id = typeof s === 'string' ? s : s.id;
+  const first = typeof s === 'object' && s.firstTimestamp ? fmtTs(s.firstTimestamp) : null;
+  const last  = typeof s === 'object' && s.lastTimestamp  ? fmtTs(s.lastTimestamp)  : null;
+  const times = first ? (last && last !== first ? `${first} ~ ${last}` : first) : '';
+  return times ? `${id}  (${times})` : id;
+}
+
+function onProjectChange(restoreSession) {
+  resetAnalysisState();
+  const projectDir = document.getElementById('projectSel').value;
+  const proj = allProjects.find(p => p.projectDir === projectDir);
+  const sel = document.getElementById('sessionSel');
+  sel.innerHTML = '<option value="">— session —</option>';
+  if (proj) {
+    for (const s of proj.sessions) {
+      const id = typeof s === 'string' ? s : s.id;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = fmtSessionLabel(s);
+      opt.title = id;
+      sel.appendChild(opt);
+    }
+    if (restoreSession) {
+      sel.value = restoreSession;
+      if (sel.value) { loadSession(); return; }
+    }
+    if (proj.sessions.length === 1) {
+      sel.value = typeof proj.sessions[0] === 'string' ? proj.sessions[0] : proj.sessions[0].id;
+      loadSession();
+    }
+  }
+}
+
+// ── Load session entries ─────────────────────────────────────────────────
+async function loadSession() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId) return;
+
+  resetAnalysisState();
+  document.getElementById('entryList').innerHTML = '<span class="spinner"></span>';
+  document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">加载中…</div>';
+
+  try {
+    const resp = await fetch(`${apiBase()}/api/session/${sessionId}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    // Build groups: main + each subagent
+    groups = [];
+    allEntries = [];
+
+    // Main session group
+    const mainEntries = (data.main || [])
+      .slice().sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
+    const mainGroup = { id: 'main', label: '🤖 Main Session', desc: data.sessionId?.slice(0,8) || '', entries: [] };
+    for (const e of mainEntries) {
+      const idx = allEntries.length;
+      const tagged = { ...e, _source: 'main', _gid: 'main', _idx: idx };
+      allEntries.push(tagged);
+      mainGroup.entries.push(tagged);
+    }
+    groups.push(mainGroup);
+
+    // Subagent groups
+    for (const sa of data.subagents || []) {
+      const gid = `sa-${sa.agentId}`;
+      const saEntries = (sa.entries || [])
+        .slice().sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
+      groupCollapsed[gid] = true;  // subagents collapsed by default
+      const saGroup = {
+        id: gid,
+        label: sa.meta?.description ? `🔧 ${trunc(sa.meta.description, 28)}` : `🔧 agent-${sa.agentId.slice(0,8)}`,
+        desc: sa.meta?.agentType || '',
+        entries: [],
+      };
+      for (const e of saEntries) {
+        const idx = allEntries.length;
+        const tagged = { ...e, _source: gid, _gid: gid, _agentDesc: sa.meta?.description, _idx: idx };
+        allEntries.push(tagged);
+        saGroup.entries.push(tagged);
+      }
+      groups.push(saGroup);
+    }
+
+    selectedIdx = -1;
+    renderList();
+    document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">← 点击列表项查看原始日志</div>';
+
+    // Enable export button
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.disabled = false;
+    updateAnalyzeButton();
+  } catch(e) {
+    document.getElementById('entryList').innerHTML =
+      `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
+  }
+}
+
+function resetAnalysisState() {
+  analysisInFlight = false;
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  if (analyzeBtn) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '分析当前 Session';
+  }
+}
+
+function currentAnalysisSessionId() {
+  return document.getElementById('sessionSel').value;
+}
+
+function currentAnalysisReport() {
+  const sessionId = currentAnalysisSessionId();
+  return sessionId ? analysisReports[sessionId] : null;
+}
+
+function updateAnalyzeButton() {
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  if (!analyzeBtn) return;
+  const sessionId = currentAnalysisSessionId();
+  if (!sessionId) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '分析当前 Session';
+    return;
+  }
+  analyzeBtn.disabled = analysisInFlight;
+  analyzeBtn.textContent = analysisInFlight
+    ? '分析中…'
+    : (analysisReports[sessionId] ? '查看分析报告' : '分析当前 Session');
+}
+
+function renderAnalysisStatus(message, isError=false, cachedReport=null) {
+  const panel = document.getElementById('detailPanel');
+  const action = cachedReport
+    ? `<div style="margin-top:10px"><button class="btn" onclick="showCachedAnalysisReport()">查看上一次报告</button></div>`
+    : '';
+  panel.innerHTML = `<div class="analysis-status${isError ? ' error' : ''}">${esc(message)}${action}</div>`;
+}
+
+function renderAnalysisReport(cachedReport) {
+  const panel = document.getElementById('detailPanel');
+  const wrap = document.createElement('div');
+  wrap.className = 'analysis-report';
+
+  const meta = document.createElement('div');
+  meta.className = 'detail-meta';
+  meta.innerHTML =
+    `<span class="detail-type">当前 Session 分析报告</span>` +
+    `<span class="detail-ts">${esc(cachedReport.createdAt)}</span>` +
+    `<span class="detail-ts">${esc(Math.round(cachedReport.elapsedMs / 1000))}s</span>` +
+    (cachedReport.truncated ? `<span class="sidechain-badge">输入已截断</span>` : '');
+  const actions = document.createElement('div');
+  actions.className = 'analysis-actions';
+  actions.innerHTML = `<button class="btn" onclick="reanalyzeCurrentSession()">重新分析</button>`;
+  meta.appendChild(actions);
+  wrap.appendChild(meta);
+
+  const body = document.createElement('div');
+  body.className = 'md-view';
+  body.innerHTML = renderMarkdown(cachedReport.report);
+  wrap.appendChild(body);
+
+  panel.innerHTML = '';
+  panel.appendChild(wrap);
+  renderMermaidBlocks(body);
+}
+
+function showCachedAnalysisReport() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId) return;
+  const cached = analysisReports[sessionId];
+  if (cached) {
+    renderAnalysisReport(cached);
+  } else {
+    analyzeCurrentSession();
+  }
+  updateAnalyzeButton();
+}
+
+async function requestSessionAnalysis(sessionId) {
+  const resp = await fetch(`${apiBase()}/api/analyze`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sessionId}),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) {
+    throw new Error(data.error || `HTTP ${resp.status}`);
+  }
+  return {
+    report: data.report || '',
+    elapsedMs: data.elapsedMs || 0,
+    truncated: Boolean(data.truncated),
+    createdAt: new Date().toLocaleString('zh-CN', {hour12: false}),
+  };
+}
+
+async function runAnalysisForCurrentSession({preserveCached=false} = {}) {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || analysisInFlight) return;
+  const previous = analysisReports[sessionId] || null;
+  analysisInFlight = true;
+  updateAnalyzeButton();
+  renderAnalysisStatus('正在临时调用 Claude Code 分析当前 session...');
+
+  try {
+    const cached = await requestSessionAnalysis(sessionId);
+    analysisReports[sessionId] = cached;
+    renderAnalysisReport(cached);
+  } catch (e) {
+    if (preserveCached && previous) {
+      analysisReports[sessionId] = previous;
+      renderAnalysisStatus(`重新分析失败：${e.message}`, true, previous);
+    } else {
+      renderAnalysisStatus(`分析失败：${e.message}`, true);
+    }
+  } finally {
+    analysisInFlight = false;
+    updateAnalyzeButton();
+  }
+}
+
+function analyzeCurrentSession() {
+  if (currentAnalysisReport()) {
+    showCachedAnalysisReport();
+    return;
+  }
+  runAnalysisForCurrentSession();
+}
+
+function reanalyzeCurrentSession() {
+  runAnalysisForCurrentSession({preserveCached: true});
+}
+
+// ── Render list ──────────────────────────────────────────────────────────
+const knownTypes = new Set(['user','assistant','system','attachment','permission-mode','file-history-snapshot','queue-operation']);
+// Track collapsed state per turn key (gid + ':' + turnIdx)
+const turnCollapsed = {};
+
+function entryMatchesFilter(e) {
+  const activeTypes = getActiveTypes();
+  const bucket = knownTypes.has(e.type) ? e.type : 'other';
+  if (!activeTypes.has(bucket)) return false;
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  if (q) {
+    const hay = JSON.stringify(e).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+// Split group entries into turns: each turn starts at a real user-text entry.
+// Also tags each entry with _turnKey for auto-expand on selectEntry.
+function buildTurns(entries, gid) {
+  const turns = [];
+  let current = null;
+  let turnIdx = 0;
+
+  for (const e of entries) {
+    const isRealUser = e.type === 'user' && (
+      (typeof e.message?.content === 'string' && e.message.content.trim().length > 0) ||
+      (Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'text' || b.type === 'image'))
+    );
+
+    if (isRealUser) {
+      current = { root: e, children: [], _turnIdx: turnIdx++ };
+      const tk = `${gid}:${current._turnIdx}`;
+      e._turnKey = tk;
+      turns.push(current);
+    } else if (current) {
+      e._turnKey = `${gid}:${current._turnIdx}`;
+      current.children.push(e);
+    } else {
+      // Preamble before first user message
+      if (!turns.length) {
+        current = { root: null, children: [], _isPreamble: true, _turnIdx: turnIdx++ };
+        turns.push(current);
+      }
+      e._turnKey = `${gid}:${current._turnIdx}`;
+      current.children.push(e);
+    }
+  }
+  return turns;
+}
+
+// Returns [{group, filteredEntries}]
+function getFilteredGroups() {
+  return groups.map(g => ({
+    group: g,
+    entries: g.entries.filter(entryMatchesFilter),
+  })).filter(({entries}) => entries.length > 0);
+}
+
+function summarize(e) {
+  const type = e.type;
+  if (type === 'user') {
+    const c = e.message?.content;
+    if (typeof c === 'string') return trunc(c, 80);
+    if (Array.isArray(c)) {
+      const texts = c.filter(b => b.type==='text' && !b.text?.startsWith('<system-reminder') && !b.text?.startsWith('<local-command'));
+      if (texts.length) return trunc(texts.map(b=>b.text).join(' '), 80);
+      const types = [...new Set(c.map(b=>b.type))];
+      return `[${types.join(', ')}]`;
+    }
+    return '';
+  }
+  if (type === 'assistant') {
+    const c = e.message?.content || [];
+    const texts = c.filter(b=>b.type==='text').map(b=>trunc(b.text,40));
+    const tools = c.filter(b=>b.type==='tool_use').map(b=>b.name);
+    const parts = [];
+    if (texts.length) parts.push(texts[0]);
+    if (tools.length) parts.push(`[${tools.slice(0,3).join(', ')}${tools.length>3?'…':''}]`);
+    return parts.join(' ') || `[${c.map(b=>b.type).join(', ')}]`;
+  }
+  if (type === 'system') return e.subtype || '';
+  if (type === 'attachment') return e.attachment?.type || '';
+  return type;
+}
+
+// Extract agentId from entry.toolUseResult.agentId
+function extractAgentId(entry) {
+  if (entry.type !== 'user') return null;
+  return entry.toolUseResult?.agentId || null;
+}
+
+function makeEntryEl(e, extraClass) {
+  const idx = e._idx;
+  const el = document.createElement('div');
+  el.className = `entry-item ${extraClass}` + (idx === selectedIdx ? ' active' : '');
+  el.dataset.idx = idx;
+  const typeCls = knownTypes.has(e.type) ? `type-${e.type}` : 'type-other';
+  const msgId = e.type === 'assistant' ? e.message?.id : null;
+  const rawLink = msgId
+    ? `<a href="req-resp.html?q=${encodeURIComponent(msgId)}${e.sessionId ? '&session='+encodeURIComponent(e.sessionId) : ''}${e.timestamp ? '&date='+encodeURIComponent(e.timestamp.slice(0,10)) : ''}" target="_blank"
+         onclick="event.stopPropagation()"
+         style="font-size:10px;color:#58a6ff;text-decoration:none;padding:1px 5px;
+                border:1px solid #30363d;border-radius:3px;white-space:nowrap;margin-left:4px">原始数据 ↗</a>`
+    : '';
+  const agentId = extractAgentId(e);
+  const agentBadge = agentId
+    ? `<span class="agent-badge">🤖 agent: ${esc(agentId)}</span>`
+    : '';
+  const skillName = e.type === 'user' && e.toolUseResult && e.toolUseResult.commandName
+    ? e.toolUseResult.commandName
+    : null;
+  const skillBadge = skillName
+    ? `<span class="skill-badge">⚡ skill: ${esc(skillName)}</span>`
+    : '';
+  const extraBadges = [agentBadge, skillBadge].filter(Boolean).join(' ');
+  el.innerHTML =
+    `<div class="ei-row1">` +
+      `<span class="ei-lineno">${e._fileLine != null ? '#'+e._fileLine : ''}</span>` +
+      `<span class="ei-ts">${esc(fmtTs(e.timestamp))}</span>` +
+      `<span class="type-badge ${typeCls}">${esc(e.type||'?')}</span>` +
+      rawLink +
+    `</div>` +
+    (extraBadges ? `<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">${extraBadges}</div>` : '') +
+    `<div class="ei-summary">${esc(summarize(e))}</div>`;
+  el.onclick = () => selectEntry(idx);
+  return el;
+}
+
+function renderList() {
+  const filteredGroups = getFilteredGroups();
+  const list = document.getElementById('entryList');
+
+  const totalFiltered = filteredGroups.reduce((n, {entries}) => n + entries.length, 0);
+  document.getElementById('countBadge').textContent = `${totalFiltered} / ${allEntries.length}`;
+
+  if (filteredGroups.length === 0) {
+    list.innerHTML = '<div class="placeholder">无匹配条目</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+
+  for (const {group, entries} of filteredGroups) {
+    const isGroupCollapsed = groupCollapsed[group.id] ?? false;
+
+    // ── Group header ────────────────────────────────────────────────────────
+    const grpHdr = document.createElement('div');
+    grpHdr.className = 'tree-group-hdr';
+    grpHdr.dataset.gid = group.id;
+    grpHdr.innerHTML =
+      `<span class="tree-arrow ${isGroupCollapsed ? '' : 'open'}">▶</span>` +
+      `<span class="tree-group-label">${esc(group.label)}</span>` +
+      (group.desc ? `<span class="tree-group-desc">${esc(group.desc)}</span>` : '') +
+      `<span class="tree-group-count">${entries.length}</span>`;
+    grpHdr.onclick = () => {
+      groupCollapsed[group.id] = !groupCollapsed[group.id];
+      const gbody = list.querySelector(`.tree-group-body[data-gid="${group.id}"]`);
+      const arrow = grpHdr.querySelector('.tree-arrow');
+      if (groupCollapsed[group.id]) { gbody.classList.add('hidden'); arrow.classList.remove('open'); }
+      else { gbody.classList.remove('hidden'); arrow.classList.add('open'); }
+    };
+    list.appendChild(grpHdr);
+
+    // ── Group body ──────────────────────────────────────────────────────────
+    const grpBody = document.createElement('div');
+    grpBody.className = 'tree-group-body' + (isGroupCollapsed ? ' hidden' : '');
+    grpBody.dataset.gid = group.id;
+
+    // Build turns from the filtered entries (keep file order)
+    const turns = buildTurns(entries, group.id);
+
+    turns.forEach((turn, turnIdx) => {
+      const turnKey = `${group.id}:${turnIdx}`;
+      // Default collapsed: main session turns start collapsed; subagents already collapsed at group level
+      const isTurnCollapsed = turnCollapsed[turnKey] ?? (group.id === 'main');
+
+      // ── Preamble: flat items, no turn header ─────────────────────────────
+      if (turn._isPreamble) {
+        for (const e of turn.children) {
+          if (!entryMatchesFilter(e)) continue;
+          grpBody.appendChild(makeEntryEl(e, 'tree-item'));
+        }
+        return;
+      }
+
+      // ── Turn header (user root) ──────────────────────────────────────────
+      const rootEntry = turn.root;
+      const hasChildren = turn.children.filter(e => entryMatchesFilter(e)).length > 0;
+      const turnLabel = summarize(rootEntry);
+      const turnLineNo = rootEntry._fileLine != null ? `#${rootEntry._fileLine}` : '';
+
+      const turnHdr = document.createElement('div');
+      turnHdr.className = 'turn-hdr' + (rootEntry._idx === selectedIdx ? ' active' : '');
+      turnHdr.innerHTML =
+        (hasChildren
+          ? `<span class="turn-arrow ${!isTurnCollapsed ? 'open' : ''}">▶</span>`
+          : `<span style="width:12px;flex-shrink:0"></span>`) +
+        `<div class="turn-hdr-content">` +
+          `<div class="turn-hdr-row1">` +
+            `<span class="turn-lineno">${esc(turnLineNo)}</span>` +
+            `<span class="type-badge type-user">user</span>` +
+            `<span class="turn-count">${hasChildren ? turn.children.length + ' entries' : ''}</span>` +
+          `</div>` +
+          `<div class="turn-summary">${esc(turnLabel)}</div>` +
+        `</div>`;
+
+      grpBody.appendChild(turnHdr);
+
+      // ── Turn body (children, indented) ───────────────────────────────────
+      let turnBody = null;
+      if (hasChildren) {
+        turnBody = document.createElement('div');
+        turnBody.className = 'turn-body' + (isTurnCollapsed ? ' hidden' : '');
+        turnBody.dataset.tkey = turnKey;
+        for (const e of turn.children) {
+          if (!entryMatchesFilter(e)) continue;
+          turnBody.appendChild(makeEntryEl(e, 'turn-child'));
+        }
+        grpBody.appendChild(turnBody);
+      }
+
+      // Bind click after turnBody exists so closure captures it directly
+      turnHdr.onclick = (e) => {
+        // Update selected highlight without full re-render
+        document.querySelectorAll('.entry-item.active, .turn-hdr.active').forEach(el => el.classList.remove('active'));
+        turnHdr.classList.add('active');
+        selectedIdx = rootEntry._idx;
+        renderDetail(allEntries[rootEntry._idx]);
+
+        if (hasChildren && turnBody) {
+          const clickedArrow = e.target.closest('.turn-arrow');
+          if (clickedArrow) {
+            // Arrow click: toggle collapse
+            turnCollapsed[turnKey] = !turnCollapsed[turnKey];
+          } else {
+            // Header click: only expand if currently collapsed
+            turnCollapsed[turnKey] = false;
+          }
+          const arr = turnHdr.querySelector('.turn-arrow');
+          if (turnCollapsed[turnKey]) { turnBody.classList.add('hidden'); arr.classList.remove('open'); }
+          else { turnBody.classList.remove('hidden'); arr.classList.add('open'); }
+        }
+      };
+    });
+
+    list.appendChild(grpBody);
+  }
+}
+
+// ── Detail ───────────────────────────────────────────────────────────────
+function selectEntry(idx) {
+  selectedIdx = idx;
+  document.querySelectorAll('.entry-item').forEach(el =>
+    el.classList.toggle('active', Number(el.dataset.idx) === idx));
+  renderDetail(allEntries[idx]);
+  // Auto-expand the group containing this entry
+  const e = allEntries[idx];
+  if (e) {
+    let needRender = false;
+    if (groupCollapsed[e._gid]) { groupCollapsed[e._gid] = false; needRender = true; }
+    // Find turn key for this entry and auto-expand if collapsed
+    if (e._turnKey && turnCollapsed[e._turnKey]) { turnCollapsed[e._turnKey] = false; needRender = true; }
+    if (needRender) renderList();
+  }
+}
+
+function mkSection(title, renderFn, collapsed=false) {
+  const sec = document.createElement('div');
+  sec.className = 'section';
+  const hdr = document.createElement('div');
+  hdr.className = 'sec-hdr';
+  hdr.innerHTML = `<span class="sec-title">${title}</span><span class="sec-toggle">${collapsed?'展开':'收起'}</span>`;
+  const body = document.createElement('div');
+  body.className = 'sec-body' + (collapsed?' hidden':'');
+  renderFn(body);
+  hdr.onclick = () => {
+    const h = body.classList.toggle('hidden');
+    hdr.querySelector('.sec-toggle').textContent = h ? '展开' : '收起';
+  };
+  sec.appendChild(hdr); sec.appendChild(body);
+  return sec;
+}
+
+function renderDetail(e) {
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = '';
+
+  // Meta header
+  const typeCls = ['user','assistant','system','attachment'].includes(e.type) ? `type-${e.type}` : 'type-other';
+  const meta = document.createElement('div');
+  meta.className = 'detail-meta';
+  meta.innerHTML =
+    `<span class="detail-type"><span class="type-badge ${typeCls}">${esc(e.type||'?')}</span></span>` +
+    (e.timestamp ? `<span class="detail-ts">${esc(fmtTs(e.timestamp))}</span>` : '') +
+    (e.uuid ? `<span class="detail-uuid">${esc(e.uuid)}</span>` : '') +
+    (e._source!=='main' ? `<span class="badge">${esc(e._source)}${e._agentDesc ? ': '+esc(trunc(e._agentDesc,30)) : ''}</span>` : '');
+  panel.appendChild(meta);
+
+  // ── user entry ──────────────────────────────────────────────────────────
+  if (e.type === 'user') {
+    // 日志元数据 — top, default expanded
+    panel.appendChild(mkSection('日志元数据', body => {
+      body.innerHTML = `<div class="info-grid">
+        <div class="ig-k">uuid</div><div class="ig-v">${esc(e.uuid||'')}</div>
+        <div class="ig-k">parentUuid</div><div class="ig-v">${esc(e.parentUuid||'')}</div>
+        <div class="ig-k">promptId</div><div class="ig-v">${esc(e.promptId||'')}</div>
+        <div class="ig-k">sessionId</div><div class="ig-v">${esc(e.sessionId||'')}</div>
+        <div class="ig-k">permissionMode</div><div class="ig-v">${esc(e.permissionMode||'')}</div>
+        <div class="ig-k">cwd</div><div class="ig-v">${esc(e.cwd||'')}</div>
+        <div class="ig-k">version</div><div class="ig-v">${esc(e.version||'')}</div>
+      </div>`;
+    }, false));  // default expanded
+
+    const c = e.message?.content;
+    if (typeof c === 'string') {
+      { const s = mkSection('消息内容', body => {
+        body.classList.add('content-bg');
+        const d = document.createElement('div');
+        d.className = 'md-view'; d.innerHTML = renderMarkdown(c);
+        body.appendChild(d);
+      }, false); panel.appendChild(s); }
+    } else if (Array.isArray(c)) {
+      const texts = c.filter(b => b.type==='text' && !b.text?.startsWith('<system-reminder') && !b.text?.startsWith('<local-command'));
+      const sysTexts = c.filter(b => b.type==='text' && (b.text?.startsWith('<system-reminder') || b.text?.startsWith('<local-command')));
+      const toolResults = c.filter(b => b.type==='tool_result');
+      const images = c.filter(b => b.type==='image');
+
+      if (texts.length) {
+        const s = mkSection(`用户文本 (${texts.length})`, body => {
+          body.classList.add('content-bg');
+          for (const b of texts) {
+            const d = document.createElement('div');
+            d.className = 'md-view'; d.innerHTML = renderMarkdown(b.text);
+            body.appendChild(d);
+          }
+        }, false);  // default expanded
+        panel.appendChild(s);
+      }
+      if (images.length) {
+        const s = mkSection(`图片 (${images.length})`, body => {
+          body.classList.add('content-bg');
+          for (const b of images) {
+            const src = b.source?.type === 'base64'
+              ? `data:${b.source.media_type};base64,${b.source.data}`
+              : b.source?.url || '';
+            if (!src) return;
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.cssText = 'max-width:100%;max-height:400px;border-radius:4px;margin:4px 0;display:block';
+            body.appendChild(img);
+          }
+        }, false);  // default expanded
+        panel.appendChild(s);
+      }
+      if (toolResults.length) {
+        const s = mkSection(`Tool Results (${toolResults.length})`, body => {
+          body.classList.add('content-bg');
+          for (const b of toolResults) {
+            const row = document.createElement('div');
+            row.className = 'tool-row';
+            row.style.flexDirection = 'column';
+            const errMark = b.is_error ? ' <span style="color:#f85149">error</span>' : '';
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'font-size:11px;color:#79c0ff;font-weight:600;margin-bottom:4px';
+            hdr.innerHTML = `${esc(b.tool_use_id||'')}${errMark}`;
+            row.appendChild(hdr);
+
+            const rawContent = typeof b.content === 'string' ? b.content : JSON.stringify(b.content, null, 2);
+            let parsed;
+            try { parsed = JSON.parse(rawContent); } catch { parsed = undefined; }
+
+            const contentEl = document.createElement('div');
+            if (parsed !== undefined) {
+              contentEl.className = 'raw-json';
+              contentEl.style.cssText = 'max-height:300px;overflow-y:auto;margin:0';
+              contentEl.innerHTML = syntaxHighlightJson(parsed);
+            } else {
+              contentEl.className = 'md-view';
+              contentEl.innerHTML = renderMarkdown(rawContent);
+            }
+            row.appendChild(contentEl);
+            body.appendChild(row);
+          }
+        }, false);  // default expanded
+        panel.appendChild(s);
+      }
+      if (sysTexts.length) {
+        panel.appendChild(mkSection(`System Reminders (${sysTexts.length})`, body => {
+          for (const b of sysTexts) {
+            const d = document.createElement('div');
+            d.className = 'content-text'; d.style.fontSize='11px'; d.style.color='#6e7681';
+            d.textContent = trunc(b.text, 500);
+            body.appendChild(d);
+          }
+        }, true));
+      }
+    }
+  }
+
+  // ── assistant entry ──────────────────────────────────────────────────────
+  else if (e.type === 'assistant') {
+    const msg = e.message || {};
+
+    // 日志元数据 — top, default expanded
+    const _rawDate = e.timestamp ? e.timestamp.slice(0, 10) : '';
+    const _rawSession = e.sessionId || '';
+    const _rawHref = msg.id
+      ? `req-resp.html?q=${encodeURIComponent(msg.id)}${_rawSession ? '&session='+encodeURIComponent(_rawSession) : ''}${_rawDate ? '&date='+encodeURIComponent(_rawDate) : ''}`
+      : '';
+    const metaTitle = '日志元数据' + (_rawHref ? ` <a href="${_rawHref}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;color:#58a6ff;text-decoration:none;padding:1px 6px;border:1px solid #30363d;border-radius:3px;white-space:nowrap;font-weight:normal;margin-left:6px">原始数据 ↗</a>` : '');
+    panel.appendChild(mkSection(metaTitle, body => {
+      body.innerHTML = `<div class="info-grid">
+        <div class="ig-k">uuid</div><div class="ig-v">${esc(e.uuid||'')}</div>
+        <div class="ig-k">parentUuid</div><div class="ig-v">${esc(e.parentUuid||'')}</div>
+        <div class="ig-k">message.id</div><div class="ig-v">${esc(msg.id||'')}</div>
+        <div class="ig-k">model</div><div class="ig-v">${esc(msg.model||'')}</div>
+        <div class="ig-k">stop_reason</div><div class="ig-v">${esc(msg.stop_reason||'')}</div>
+        <div class="ig-k">isSidechain</div><div class="ig-v">${e.isSidechain}</div>
+      </div>`;
+      if (msg.usage) {
+        const u = msg.usage;
+        const chips = document.createElement('div');
+        chips.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px';
+        for (const [k,v] of Object.entries(u)) {
+          chips.innerHTML += `<span style="background:#21262d;border-radius:4px;padding:2px 8px;font-size:11px;color:#8b949e">${esc(k)} <b style="color:#e1e4e8">${v?.toLocaleString?.()??v}</b></span>`;
+        }
+        body.appendChild(chips);
+      }
+    }, false));  // default expanded
+
+    const c = e.message?.content || [];
+    const texts = c.filter(b=>b.type==='text');
+    const toolUses = c.filter(b=>b.type==='tool_use');
+
+    if (texts.length) {
+      const s = mkSection(`文本回复 (${texts.length})`, body => {
+        body.classList.add('content-bg');
+        for (const b of texts) {
+          const d = document.createElement('div');
+          d.className = 'md-view'; d.innerHTML = renderMarkdown(b.text);
+          body.appendChild(d);
+        }
+      }, false);  // default expanded
+      panel.appendChild(s);
+    }
+    if (toolUses.length) {
+      panel.appendChild(mkSection(`Tool Calls (${toolUses.length})`, body => {
+        for (const b of toolUses) {
+          const row = document.createElement('div');
+          row.className = 'tool-row';
+          row.innerHTML = `<span class="tool-name">${esc(b.name)}</span>`;
+          const inp = document.createElement('span');
+          inp.className = 'tool-input';
+          inp.textContent = JSON.stringify(b.input, null, 2);
+          row.appendChild(inp);
+          body.appendChild(row);
+        }
+      }, toolUses.length > 3));
+    }
+  }
+
+  // ── system entry ─────────────────────────────────────────────────────────
+  else if (e.type === 'system') {
+    panel.appendChild(mkSection('System 信息', body => {
+      body.innerHTML = `<div class="info-grid">
+        <div class="ig-k">subtype</div><div class="ig-v">${esc(e.subtype||'')}</div>
+        <div class="ig-k">level</div><div class="ig-v">${esc(e.level||'')}</div>
+        <div class="ig-k">stopReason</div><div class="ig-v">${esc(e.stopReason||'')}</div>
+        <div class="ig-k">hookCount</div><div class="ig-v">${esc(e.hookCount??'')}</div>
+      </div>`;
+    }));
+  }
+
+  // ── attachment ────────────────────────────────────────────────────────────
+  else if (e.type === 'attachment') {
+    panel.appendChild(mkSection('Attachment', body => {
+      const att = e.attachment || {};
+      body.innerHTML = `<div class="info-grid">
+        <div class="ig-k">type</div><div class="ig-v">${esc(att.type||'')}</div>
+        <div class="ig-k">hookName</div><div class="ig-v">${esc(att.hookName||'')}</div>
+        <div class="ig-k">hookEvent</div><div class="ig-v">${esc(att.hookEvent||'')}</div>
+      </div>`;
+      if (att.stdout) {
+        const pre = document.createElement('div');
+        pre.className = 'raw-json'; pre.style.marginTop = '8px';
+        let stdoutDisplay = trunc(att.stdout, 2000);
+        try {
+          pre.innerHTML = syntaxHighlightJson(JSON.parse(att.stdout));
+        } catch {
+          pre.textContent = stdoutDisplay;
+        }
+        body.appendChild(pre);
+      }
+    }));
+  }
+
+  // ── Raw JSON (always, default expanded, syntax highlighted) ──────────────
+  const rawCopy = Object.assign({}, e);
+  delete rawCopy._source; delete rawCopy._agentDesc;
+  delete rawCopy._gid; delete rawCopy._idx; delete rawCopy._lineNo; delete rawCopy._fileLine;
+  panel.appendChild(mkSection('原始 JSON', body => {
+    const pre = document.createElement('div');
+    pre.className = 'raw-json';
+    pre.innerHTML = syntaxHighlightJson(rawCopy);
+    body.appendChild(pre);
+  }, false));  // default expanded
+}
+
+// ── Export ───────────────────────────────────────────────────────────────
+let exportCurrentSessionId = '';
+
+function fmtExportFilename(sessionIds) {
+  const ids = Array.isArray(sessionIds) ? sessionIds : (sessionIds ? [sessionIds] : []);
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  if (ids.length > 1) return `export-${ts}-${ids.length}-sessions.tar.gz`;
+  const shortId = ids.length === 1 ? `-${ids[0].slice(0, 8)}` : '';
+  return `export-${ts}${shortId}.tar.gz`;
+}
+
+function selectedExportSessionIds() {
+  return Array.from(document.querySelectorAll('#exportSessionList input[type=checkbox]:checked'))
+    .map(input => input.value);
+}
+
+function setExportSessionControlsDisabled(disabled) {
+  document.querySelectorAll('#exportSessionList input, #exportSelectCurrentBtn, #exportSelectAllBtn, #exportClearBtn')
+    .forEach(el => { el.disabled = disabled; });
+}
+
+function updateExportSessionSelection() {
+  const sessionIds = selectedExportSessionIds();
+  document.getElementById('exportFilename').value = fmtExportFilename(sessionIds);
+  document.getElementById('exportSessionCount').textContent = `已选择 ${sessionIds.length} 个 session`;
+  document.getElementById('exportConfirmBtn').disabled = sessionIds.length === 0;
+}
+
+function selectCurrentExportSession() {
+  document.querySelectorAll('#exportSessionList input[type=checkbox]').forEach(input => {
+    input.checked = input.value === exportCurrentSessionId;
+  });
+  updateExportSessionSelection();
+}
+
+function selectAllExportSessions() {
+  document.querySelectorAll('#exportSessionList input[type=checkbox]').forEach(input => {
+    input.checked = true;
+  });
+  updateExportSessionSelection();
+}
+
+function clearExportSessions() {
+  document.querySelectorAll('#exportSessionList input[type=checkbox]').forEach(input => {
+    input.checked = false;
+  });
+  updateExportSessionSelection();
+}
+
+function appendExportSessionRow(container, projectDir, session, selected) {
+  const label = document.createElement('label');
+  label.className = 'export-session-row';
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.value = session.id;
+  input.checked = selected;
+  input.onchange = updateExportSessionSelection;
+
+  const text = document.createElement('div');
+  const main = document.createElement('div');
+  main.className = 'export-session-main';
+  main.textContent = `${session.id.slice(0, 8)}...`;
+  const meta = document.createElement('div');
+  meta.className = 'export-session-meta';
+  meta.textContent = `${projectDir} ${((session.lastTimestamp || '').slice(0, 16).replace('T', ' ') || '-')}`;
+  text.appendChild(main);
+  text.appendChild(meta);
+
+  label.appendChild(input);
+  label.appendChild(text);
+  container.appendChild(label);
+}
+
+async function openExportModal() {
+  const currentSessionId = document.getElementById('sessionSel').value;
+  exportCurrentSessionId = currentSessionId;
+
+  const list = document.getElementById('exportSessionList');
+  list.innerHTML = '';
+  try {
+    const projects = await fetch(`${apiBase()}/api/projects`).then(r => r.json());
+    for (const proj of projects) {
+      const header = document.createElement('div');
+      header.className = 'export-session-project';
+      header.textContent = proj.projectDir;
+      list.appendChild(header);
+      for (const s of proj.sessions) {
+        appendExportSessionRow(list, proj.projectDir, s, s.id === currentSessionId);
+      }
+    }
+  } catch {
+    // 回退：只显示当前 session
+    if (currentSessionId) {
+      appendExportSessionRow(list, '-', {id: currentSessionId, lastTimestamp: ''}, true);
+    }
+  }
+
+  setExportSessionControlsDisabled(false);
+  document.getElementById('exportFilename').disabled = false;
+  document.getElementById('exportStatus').textContent = '';
+  document.getElementById('exportImportCmd').style.display = 'none';
+  document.getElementById('chkSubagentLogs').disabled = false;
+  document.getElementById('chkSubagentLogs').checked = true;
+  document.getElementById('chkReqResp').disabled = false;
+  document.getElementById('chkReqResp').checked = true;
+  const btn = document.getElementById('exportConfirmBtn');
+  btn.disabled = false;
+  btn.textContent = '导出并下载';
+  btn.onclick = doExport;
+  updateExportSessionSelection();
+  document.getElementById('exportOverlay').classList.add('open');
+}
+
+function closeExportModal() {
+  document.getElementById('exportOverlay').classList.remove('open');
+}
+
+function onExportOverlayClick(e) {
+  if (e.target === document.getElementById('exportOverlay')) closeExportModal();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeExportModal();
+});
+
+async function doExport() {
+  const sessionIds = selectedExportSessionIds();
+  if (!sessionIds.length) return;
+  const filename = (document.getElementById('exportFilename').value.trim() || fmtExportFilename(sessionIds))
+    .replace(/[/\\:*?"<>|]/g, '_');
+  const confirmBtn = document.getElementById('exportConfirmBtn');
+  const statusEl = document.getElementById('exportStatus');
+
+  const included = ['claudeLogs'];
+  if (document.getElementById('chkSubagentLogs').checked) included.push('subagentLogs');
+  if (document.getElementById('chkReqResp').checked) included.push('reqResp');
+
+  statusEl.textContent = '';
+  statusEl.style.color = '#8b949e';
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = '生成中…';
+  confirmBtn.onclick = null;
+
+  try {
+    const includeParam = encodeURIComponent(included.join(','));
+    const url = `${apiBase()}/api/export?sessions=${encodeURIComponent(sessionIds.join(','))}&filename=${encodeURIComponent(filename)}&include=${includeParam}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+
+    // 触发浏览器下载
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+
+    // 成功：锁定表单，展示结果
+    setExportSessionControlsDisabled(true);
+    document.getElementById('exportFilename').disabled = true;
+    document.getElementById('chkSubagentLogs').disabled = true;
+    document.getElementById('chkReqResp').disabled = true;
+
+    statusEl.style.color = '#56d364';
+    statusEl.textContent = `✓ 诊断包导出成功，文件已下载至浏览器默认下载文件夹`;
+
+    document.getElementById('exportImportCmdText').textContent = `deep-ai-analysis import ~/Downloads/${filename} --open`;
+    document.getElementById('exportImportCmd').style.display = '';
+    document.getElementById('exportCopyBtn').textContent = '复制导入命令';
+
+    confirmBtn.textContent = '完成';
+    confirmBtn.disabled = false;
+    confirmBtn.onclick = closeExportModal;
+
+  } catch (e) {
+    statusEl.style.color = '#f85149';
+    statusEl.textContent = `导出失败：${e.message}`;
+    confirmBtn.textContent = '导出并下载';
+    confirmBtn.disabled = false;
+    confirmBtn.onclick = doExport;
+  }
+}
+
+function copyImportCmd() {
+  const text = document.getElementById('exportImportCmdText').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('exportCopyBtn');
+    btn.textContent = '已复制';
+    setTimeout(() => { btn.textContent = '复制导入命令'; }, 1500);
+  });
+}
+
+// ── Init ────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

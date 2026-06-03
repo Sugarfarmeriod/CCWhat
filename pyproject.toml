@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deep-ai-analysis"
+version = "0.1.4"
+description = "CLI toolkit for intercepting and analyzing AI service HTTP traffic"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+]
+
+[project.scripts]
+deep-ai-analysis = "deep_ai_analysis.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["deep_ai_analysis*", "viewer*"]
+
+[tool.setuptools.package-data]
+deep_ai_analysis = ["assets/*.md"]
+viewer = ["*.html"]

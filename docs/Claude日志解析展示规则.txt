@@ -1,0 +1,110 @@
+  ---
+  1. 数据加载
+
+  - 接口：/api/projects 获取项目列表 → 选择会话后调用 /api/session/<sessionId>
+  - 返回结构：{main: [...entries], subagents: [{agentId, meta, entries:
+  [...]}]}
+  - 后端会注入 _fileLine（JSONL 物理行号）用于排序和展示
+
+  ---
+  2. 条目（Entry）字段
+
+  字段: type
+  类型: string
+  说明: user/assistant/system/attachment/permission-mode/file-history-snapshot
+  /queue-operation
+  ────────────────────────────────────────
+  字段: uuid / parentUuid
+  类型: string
+  说明: 条目唯一标识 / 父条目
+  ────────────────────────────────────────
+  字段: timestamp
+  类型: string
+  说明: ISO 时间戳
+  ────────────────────────────────────────
+  字段: message.content
+  类型: string | array
+  说明: user/assistant 消息体
+  ────────────────────────────────────────
+  字段: message.id
+  类型: string
+  说明: assistant 专有，用于跳转原始请求
+  ────────────────────────────────────────
+  字段: toolUseResult
+  类型: object
+  说明: user 专有，subagent 调用结果，含 agentId、commandName
+  ────────────────────────────────────────
+  字段: _fileLine
+  类型: number
+  说明: 后端注入，JSONL 物理行号
+
+  ---
+  3. 左侧分组规则
+
+  顶层分组：
+  - 🤖 Main Session — 默认展开
+  - 🔧 subagents（每个 agentId 一组）— 默认折叠
+
+  Turn 构建（buildTurns）：
+
+  "真实用户消息" = type === 'user' 且 message.content 是非空字符串
+
+  - 每条真实用户消息作为一个 Turn 根节点
+  - 根节点之后、下一个根节点之前的所有条目为该 Turn 的子节点
+  - 第一条真实用户消息之前的条目为 Preamble（平铺展示，无根节点）
+
+  折叠默认状态：
+  - Main Session 的 Turn：默认折叠
+  - Subagent 分组：默认折叠
+  - 点击 Turn header 文本区域 → 仅展开（不收起）
+  - 点击箭头 ▶ → 切换展开/收起
+
+  ---
+  4. 左侧条目展示规则
+
+  每条条目显示：行号 #N、时间戳、类型 badge，以及：
+
+  ┌──────────────────────────────────────┬────────────────────────────────┐
+  │                 条件                 │            展示内容            │
+  ├──────────────────────────────────────┼────────────────────────────────┤
+  │ type=assistant 且有 message.id       │ 蓝色"原始数据 ↗"链接，跳转     │
+  │                                      │ req-resp.html                  │
+  ├──────────────────────────────────────┼────────────────────────────────┤
+  │ type=user 且                         │ 绿色 ⚡ skill: <name> 标签      │
+  │ toolUseResult.commandName 非空       │                                │
+  ├──────────────────────────────────────┼────────────────────────────────┤
+  │ type=user 且 toolUseResult.agentId   │ 紫色 🤖 agent: <agentId> 标签  │
+  │ 非空                                 │                                │
+  └──────────────────────────────────────┴────────────────────────────────┘
+
+  摘要文字（summarize）：
+  - user 文字消息：截断 80 字符
+  - user 数组消息：优先取文本块，否则显示 [type1, type2]
+  - assistant：第一段文字（40字符）+ [tool1, tool2]
+  - system：subtype；attachment：attachment.type
+
+  类型过滤（默认选中）： user ✓、assistant ✓、other ✓；其余默认关闭
+
+  ---
+  5. 右侧详情展示规则
+
+  user 类型：
+  1. 日志元数据（顶部，默认展开）：uuid、parentUuid、promptId、sessionId、perm
+  issionMode、cwd、version
+  2. 消息内容 / 用户文本（默认展开，浅色背景）：Markdown 渲染
+  3. Tool Results（默认展开，浅色背景）：content 先尝试 JSON 高亮，失败则
+  Markdown 渲染，最高 300px
+  4. System Reminders（默认折叠）：<system-reminder> 或 <local-command>
+  开头的文本块
+  5. 原始 JSON（默认展开）：语法高亮
+
+  assistant 类型：
+  1. 日志元数据（顶部，默认展开）：uuid、parentUuid、message.id（带"原始数据
+  ↗"）、model、stop_reason、isSidechain + token usage chips
+  2. 文本回复（默认展开，浅色背景）：Markdown 渲染
+  3. Tool Calls（超过 3 个时折叠）：tool name + input JSON
+  4. 原始 JSON（默认展开）
+
+  system 类型： System 信息（subtype/level/stopReason/hookCount）+ 原始 JSON
+
+  attachment 类型： Attachment（type/hookName/hookEvent/stdout）+ 原始 JSON

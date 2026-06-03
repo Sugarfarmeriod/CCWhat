@@ -1,0 +1,77 @@
+{
+    "timestamp": "2026-05-08T05:06:43.598393+00:00",
+    "domain": "mcli.sankuai.com",
+    "method": "POST",
+    "url": "https://mcli.sankuai.com/v1/messages?beta=true",
+    "claude_session_id": "e75940a3-3a79-41bd-be4d-6d0fb1a5a307",
+    "request_json": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "当前工作目录是哪个"
+                    }
+                ]
+            }
+        ],
+        "system": [
+            {
+                "type": "text",
+                "text": "x-anthropic-billing-header: cc_version=2.1.105.f7c; cc_entrypoint=cli; cch=2ffdf;"
+            },
+            {
+                "type": "text",
+                "text": "You are Claude Code, Anthropic's official CLI for Claude."
+            },
+            {
+                "type": "text",
+                "text": "Generate a concise, sentence-case title (3-7 words) that captures the main topic or goal of this coding session. The title should be clear enough that the user recognizes the session in a list. Use sentence case: capitalize only the first word and proper nouns.\n\nReturn JSON with a single \"title\" field.\n\nGood examples:\n{\"title\": \"Fix login button on mobile\"}\n{\"title\": \"Add OAuth authentication\"}\n{\"title\": \"Debug failing CI tests\"}\n{\"title\": \"Refactor API client error handling\"}\n\nBad (too vague): {\"title\": \"Code changes\"}\nBad (too long): {\"title\": \"Investigate and fix the issue where the login button does not respond on mobile devices\"}\nBad (wrong case): {\"title\": \"Fix Login Button On Mobile\"}"
+            }
+        ],
+        "tools": [],
+        "metadata": {
+            "user_id": "{\"device_id\":\"f76102b531ef2aea452ec3d7fa8631339468719b81db33a9b579b0e5a7ae262f\",\"account_uuid\":\"\",\"session_id\":\"e75940a3-3a79-41bd-be4d-6d0fb1a5a307\"}"
+        },
+        "max_tokens": 8000,
+        "temperature": 1,
+        "output_config": {
+            "format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "title"
+                    ],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "stream": true
+    },
+    "response_json": {
+        "message": {
+            "id": "msg_bdrk_017fbHnEJqX4hpbnz5d4J2Fy",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-haiku-4-5-20251001",
+            "stop_reason": "end_turn",
+            "content": {
+                "text": "我可以帮你查看当前目录。请告诉我你需要做什么具体的工作！"
+            },
+            "usage": {
+                "input_tokens": 206,
+                "output_tokens": 79,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+            }
+        }
+    }
+}

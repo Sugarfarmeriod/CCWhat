@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Session Viewer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e1e4e8;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .topbar h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; white-space: nowrap; }
+  .adv-wrap { position: relative; }
+  .adv-btn {
+    background: #21262d; color: #8b949e;
+    border: 1px solid #30363d; border-radius: 5px;
+    padding: 4px 8px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .adv-btn:hover { color: #e1e4e8; background: #30363d; }
+  .adv-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px 12px; z-index: 100; min-width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  }
+  .adv-panel.open { display: block; }
+  .adv-panel label { font-size: 11px; color: #8b949e; display: block; margin-bottom: 4px; }
+  .adv-panel .field { width: 100%; }
+  .topbar select {
+    background: #0d1117; color: #e1e4e8; border: 1px solid #30363d;
+    border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer;
+  }
+  .topbar select:focus { outline: none; border-color: #58a6ff; }
+  .btn {
+    background: #238636; color: #fff; border: none; border-radius: 6px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: #2ea043; }
+  .btn:disabled { background: #21262d; color: #8b949e; cursor: default; }
+  .api-url {
+    font-size: 12px; color: #8b949e;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 4px 8px; width: 220px;
+  }
+
+  /* ── Stats bar ── */
+  .statsbar {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 6px 16px; display: flex; gap: 20px; flex-wrap: wrap;
+    flex-shrink: 0; min-height: 32px;
+  }
+  .stat { font-size: 12px; color: #8b949e; }
+  .stat span { color: #e1e4e8; font-weight: 600; }
+
+  /* ── Tab bar ── */
+  .tabbar {
+    background: #161b22; border-bottom: 1px solid #30363d;
+    padding: 0 16px; display: flex; gap: 0; flex-shrink: 0;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+    border-bottom: 2px solid transparent; color: #8b949e;
+    white-space: nowrap; user-select: none;
+  }
+  .tab:hover { color: #e1e4e8; }
+  .tab.active { color: #f0f6fc; border-bottom-color: #f78166; }
+  .tab-badge {
+    display: inline-block; background: #30363d; color: #8b949e;
+    border-radius: 10px; padding: 1px 6px; font-size: 11px; margin-left: 5px;
+  }
+
+  /* ── Conversation area ── */
+  .panels { flex: 1; overflow: hidden; position: relative; }
+  .panel {
+    position: absolute; inset: 0; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .panel.hidden { display: none; }
+
+  /* ── Empty / loading state ── */
+  .placeholder {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: #484f58;
+  }
+  .placeholder svg { opacity: .3; }
+
+  /* ── Message bubbles ── */
+  .turn { display: flex; flex-direction: column; max-width: 100%; }
+  .turn.user { align-items: flex-end; }
+  .turn.assistant { align-items: flex-start; }
+
+  .bubble {
+    border-radius: 12px; padding: 10px 14px; max-width: 80%;
+    font-size: 13px; line-height: 1.6; word-break: break-word;
+  }
+  .turn.user .bubble {
+    background: #1f4e79; color: #cae8ff; border-bottom-right-radius: 4px;
+  }
+  .turn.assistant .bubble {
+    background: #161b22; border: 1px solid #30363d; color: #e1e4e8;
+    border-bottom-left-radius: 4px; max-width: 90%;
+  }
+
+  .turn-meta { font-size: 11px; color: #484f58; margin: 3px 4px; }
+
+  /* ── Tool call cards ── */
+  .tool-card {
+    border: 1px solid #30363d; border-radius: 8px; margin-top: 8px;
+    overflow: hidden; font-size: 12px;
+  }
+  .tool-card.error { border-color: #f85149; }
+  .tool-header {
+    background: #0d1117; padding: 6px 10px; display: flex;
+    align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  }
+  .tool-name {
+    font-weight: 600; color: #79c0ff; font-size: 12px;
+  }
+  .tool-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 8px;
+    background: #21262d; color: #8b949e;
+  }
+  .tool-card.error .tool-badge { background: #3d1010; color: #f85149; }
+  .tool-section { padding: 8px 10px; border-top: 1px solid #21262d; }
+  .tool-section-label {
+    font-size: 10px; color: #484f58; text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 4px;
+  }
+  .tool-content {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 11px; color: #adbac7; white-space: pre-wrap; word-break: break-all;
+    max-height: 300px; overflow-y: auto;
+  }
+  .tool-content.collapsed { max-height: 60px; overflow: hidden; }
+  .expand-btn {
+    background: none; border: none; color: #58a6ff; font-size: 11px;
+    cursor: pointer; padding: 2px 0; margin-top: 4px; display: block;
+  }
+  .expand-btn:hover { text-decoration: underline; }
+
+  /* ── Text blocks ── */
+  .text-block { white-space: pre-wrap; }
+  .text-block pre {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+    padding: 10px; margin: 6px 0; overflow-x: auto;
+    font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 11px;
+  }
+  .text-block code {
+    background: #21262d; padding: 1px 4px; border-radius: 3px;
+    font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 11px;
+  }
+
+  /* ── HTTP lookup button ── */
+  .turn.user .bubble, .turn.assistant .bubble { position: relative; }
+  .http-btn {
+    position: absolute; top: 6px; right: 8px;
+    background: rgba(31,78,121,0.6); color: #7dd3fc;
+    border: 1px solid #3b82f6; border-radius: 4px;
+    font-size: 10px; padding: 2px 6px; cursor: pointer;
+    white-space: nowrap; opacity: 0.7; transition: opacity .15s;
+  }
+  .http-btn:hover { opacity: 1; background: #1d4ed8; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    width: min(800px, 95vw); max-height: 80vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal-header {
+    padding: 12px 16px; border-bottom: 1px solid #30363d;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .modal-title { font-size: 14px; font-weight: 600; color: #f0f6fc; }
+  .modal-close {
+    background: none; border: none; color: #8b949e; font-size: 18px;
+    cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .modal-close:hover { color: #e1e4e8; }
+  .modal-body { overflow-y: auto; padding: 12px 16px; flex: 1; }
+  .http-record {
+    border: 1px solid #30363d; border-radius: 8px; margin-bottom: 12px;
+    overflow: hidden; font-size: 12px;
+  }
+  .http-record-header {
+    background: #0d1117; padding: 8px 12px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .http-record-ts { color: #8b949e; font-size: 11px; }
+  .http-record-model { color: #79c0ff; font-weight: 600; }
+  .http-record-section { padding: 8px 12px; border-top: 1px solid #21262d; }
+  .http-record-label {
+    font-size: 10px; color: #484f58; text-transform: uppercase;
+    letter-spacing: .5px; margin-bottom: 4px;
+  }
+  .http-record-content {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 11px; color: #adbac7; white-space: pre-wrap; word-break: break-all;
+  }
+  .usage-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .usage-chip {
+    background: #21262d; border-radius: 4px; padding: 2px 8px;
+    font-size: 11px; color: #8b949e;
+  }
+  .usage-chip span { color: #e1e4e8; }
+  .no-records { color: #484f58; font-size: 13px; padding: 20px 0; text-align: center; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid #30363d;
+    border-top-color: #58a6ff; border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-msg { color: #f85149; font-size: 13px; }
+
+  /* ── Export modal ── */
+  .export-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.65); z-index: 9999;
+    align-items: center; justify-content: center;
+  }
+  .export-overlay.open { display: flex; }
+  .export-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    width: min(480px, 95vw); overflow: hidden;
+  }
+  .export-card-hdr {
+    background: #0d1117; padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #30363d;
+  }
+  .export-card-title { font-size: 13px; font-weight: 600; color: #f0f6fc; }
+  .export-card-close {
+    background: none; border: none; color: #8b949e;
+    font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .export-card-close:hover { color: #e1e4e8; }
+  .export-card-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .export-field-label { font-size: 11px; color: #8b949e; margin-bottom: 4px; }
+  .export-field-value {
+    font-size: 12px; color: #adbac7; font-family: monospace;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 4px;
+    padding: 5px 8px; word-break: break-all;
+  }
+  .export-checklist { display: flex; flex-direction: column; gap: 4px; }
+  .export-checklist-item { font-size: 12px; color: #56d364; }
+  .export-card-footer {
+    padding: 10px 14px; border-top: 1px solid #30363d;
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .export-btn-cancel {
+    background: #21262d; color: #e1e4e8; border: 1px solid #30363d;
+    border-radius: 5px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .export-btn-cancel:hover { background: #30363d; }
+  .export-btn-confirm {
+    background: #1f6feb; color: #fff; border: none;
+    border-radius: 5px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .export-btn-confirm:hover { background: #388bfd; }
+  .export-btn-confirm:disabled { background: #21262d; color: #484f58; cursor: default; }
+  .export-status { font-size: 11px; color: #8b949e; margin-top: 2px; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <h1>Claude Session Viewer</h1>
+  <div class="adv-wrap" id="advWrap">
+    <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
+    <div class="adv-panel" id="advPanel">
+      <label>API URL</label>
+      <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址">
+    </div>
+  </div>
+  <select id="projectSel" title="Project">
+    <option value="">— select project —</option>
+  </select>
+  <select id="sessionSel" title="Session">
+    <option value="">— select session —</option>
+  </select>
+  <button class="btn" id="loadBtn" onclick="loadSession()">Load</button>
+  <button class="btn" style="background:#21262d;color:#8b949e" onclick="fetchProjects()">Refresh</button>
+  <button class="btn" id="exportBtn" onclick="openExportModal()" disabled
+          style="background:#1f6feb" title="导出当前 session 的日志和请求响应">导出</button>
+</div>
+
+<!-- Export modal -->
+<div class="export-overlay" id="exportOverlay" onclick="onExportOverlayClick(event)">
+  <div class="export-card">
+    <div class="export-card-hdr">
+      <span class="export-card-title">导出对话记录</span>
+      <button class="export-card-close" onclick="closeExportModal()">✕</button>
+    </div>
+    <div class="export-card-body">
+      <div>
+        <div class="export-field-label">Session</div>
+        <div class="export-field-value" id="exportSessionId">—</div>
+      </div>
+      <div>
+        <div class="export-field-label">文件名</div>
+        <input class="field" id="exportFilename" type="text" style="width:100%;font-size:12px"
+               placeholder="export-YYYYMMDD-HHmmss.tar.gz">
+      </div>
+      <div>
+        <div class="export-field-label">包含内容</div>
+        <div class="export-checklist">
+          <div class="export-checklist-item">✓ Claude Code 主日志</div>
+          <div class="export-checklist-item">✓ Subagent 日志（如有）</div>
+          <div class="export-checklist-item">✓ 原始请求响应（如有）</div>
+        </div>
+      </div>
+      <div class="export-status" id="exportStatus"></div>
+    </div>
+    <div class="export-card-footer">
+      <button class="export-btn-cancel" onclick="closeExportModal()">取消</button>
+      <button class="export-btn-confirm" id="exportConfirmBtn" onclick="doExport()">选择位置并导出</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stats bar -->
+<div class="statsbar" id="statsbar">
+  <span class="stat" style="color:#484f58">Load a session to begin</span>
+</div>
+
+<!-- Tab bar -->
+<div class="tabbar" id="tabbar"></div>
+
+<!-- HTTP lookup modal -->
+<div class="modal-overlay hidden" id="httpModalOverlay" onclick="closeHttpModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title" id="httpModalTitle">HTTP Requests</div>
+      <button class="modal-close" onclick="closeHttpModal()">×</button>
+    </div>
+    <div class="modal-body" id="httpModalBody"></div>
+  </div>
+</div>
+
+<!-- Panels -->
+<div class="panels" id="panels">
+  <div class="panel" id="welcomePanel">
+    <div class="placeholder">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <div>Select a project and session, then click Load</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allProjects = [];
+let currentData = null;  // {sessionId, main, subagents}
+let activeTab = 'main';
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function toggleAdv() {
+  document.getElementById('advPanel').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('advWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('advPanel').classList.remove('open');
+  }
+});
+
+function apiBase() {
+  return (document.getElementById('apiUrl').value || window.location.origin).replace(/\/$/, '');
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  try { return new Date(ts).toLocaleTimeString(); } catch { return ''; }
+}
+
+function truncate(s, max) {
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+// Minimal markdown: code fences → <pre>, inline `code` → <code>
+function renderMarkdown(text) {
+  if (!text) return '';
+  // Escape HTML first
+  let s = escHtml(text);
+  // Code fences
+  s = s.replace(/```[\w]*\n([\s\S]*?)```/g, (_, code) => `<pre>${code}</pre>`);
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+  return s;
+}
+
+// ── Project / Session selectors ────────────────────────────────────────────
+async function fetchProjects() {
+  const btn = document.getElementById('loadBtn');
+  try {
+    const resp = await fetch(`${apiBase()}/api/projects`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    allProjects = await resp.json();
+    const sel = document.getElementById('projectSel');
+    sel.innerHTML = '<option value="">— select project —</option>';
+    for (const p of allProjects) {
+      const opt = document.createElement('option');
+      opt.value = p.projectDir;
+      opt.textContent = p.projectDir;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    setStats(`<span class="error-msg">Cannot reach API: ${escHtml(e.message)}. Is the server running?</span>`);
+  }
+}
+
+document.getElementById('projectSel').addEventListener('change', function() {
+  const proj = allProjects.find(p => p.projectDir === this.value);
+  const sel = document.getElementById('sessionSel');
+  sel.innerHTML = '<option value="">— select session —</option>';
+  if (proj) {
+    for (const sid of proj.sessions) {
+      const opt = document.createElement('option');
+      opt.value = sid;
+      opt.textContent = sid;
+      sel.appendChild(opt);
+    }
+  }
+});
+
+// ── Load session ───────────────────────────────────────────────────────────
+async function loadSession() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId) { alert('Please select a session first.'); return; }
+
+  setStats('<div class="spinner"></div>');
+  document.getElementById('tabbar').innerHTML = '';
+  document.getElementById('panels').innerHTML = '';
+
+  try {
+    const resp = await fetch(`${apiBase()}/api/session/${sessionId}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    currentData = await resp.json();
+    renderAll(currentData);
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.disabled = false;
+  } catch (e) {
+    setStats(`<span class="error-msg">Error: ${escHtml(e.message)}</span>`);
+  }
+}
+
+// ── Render everything ──────────────────────────────────────────────────────
+function renderAll(data) {
+  const tabbar = document.getElementById('tabbar');
+  const panels = document.getElementById('panels');
+  tabbar.innerHTML = '';
+  panels.innerHTML = '';
+
+  // Main session tab
+  const mainTurns = buildTurns(data.main, false, data.sessionId);
+  addTab(tabbar, panels, 'main', 'Main Session', mainTurns.length, true);
+  addPanel(panels, 'main', mainTurns);
+  showStats(data.main);
+
+  // Subagent tabs
+  for (const sa of data.subagents || []) {
+    const label = sa.meta?.description
+      ? truncate(sa.meta.description, 22)
+      : sa.agentId.slice(0, 8);
+    const saId = `sa-${sa.agentId}`;
+    const saTurns = buildTurns(sa.entries, true, data.sessionId);
+    addTab(tabbar, panels, saId, label, saTurns.length, false, sa.meta?.agentType);
+    addPanel(panels, saId, saTurns);
+  }
+
+  // Show main stats
+  showStats(data.main);
+  switchTab('main');
+}
+
+// ── Tab management ─────────────────────────────────────────────────────────
+function addTab(tabbar, panels, id, label, count, active, agentType) {
+  const tab = document.createElement('div');
+  tab.className = 'tab' + (active ? ' active' : '');
+  tab.dataset.tab = id;
+  tab.innerHTML = escHtml(label) +
+    (agentType ? ` <span class="tab-badge">${escHtml(agentType)}</span>` : '') +
+    ` <span class="tab-badge">${count}</span>`;
+  tab.onclick = () => switchTab(id);
+  tabbar.appendChild(tab);
+}
+
+function addPanel(panels, id, turns) {
+  const panel = document.createElement('div');
+  panel.className = 'panel hidden';
+  panel.id = `panel-${id}`;
+  if (turns.length === 0) {
+    panel.innerHTML = '<div class="placeholder"><div>No messages</div></div>';
+  } else {
+    for (const turn of turns) {
+      panel.appendChild(renderTurn(turn));
+    }
+  }
+  panels.appendChild(panel);
+}
+
+function switchTab(id) {
+  activeTab = id;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.id !== `panel-${id}`));
+
+  // Update stats
+  if (!currentData) return;
+  if (id === 'main') {
+    showStats(currentData.main);
+  } else {
+    const agentId = id.replace(/^sa-/, '');
+    const sa = currentData.subagents?.find(s => s.agentId === agentId);
+    if (sa) showStats(sa.entries, sa.meta);
+  }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function showStats(entries, meta) {
+  const stats = calcStats(entries);
+  const metaStr = meta?.description
+    ? `<span class="stat">${escHtml(meta.description)}</span> · ` : '';
+  const agentStr = meta?.agentType
+    ? `<span class="stat">type: <span>${escHtml(meta.agentType)}</span></span>` : '';
+  setStats(
+    metaStr +
+    `<span class="stat">user: <span>${stats.userMsgs}</span></span>` +
+    `<span class="stat">assistant: <span>${stats.assistantMsgs}</span></span>` +
+    `<span class="stat">tools: <span>${stats.toolCalls}</span></span>` +
+    `<span class="stat">input_tokens: <span>${stats.inputTokens.toLocaleString()}</span></span>` +
+    `<span class="stat">output_tokens: <span>${stats.outputTokens.toLocaleString()}</span></span>` +
+    `<span class="stat">cache_read: <span>${stats.cacheRead.toLocaleString()}</span></span>` +
+    agentStr
+  );
+}
+
+function setStats(html) {
+  document.getElementById('statsbar').innerHTML = html;
+}
+
+function calcStats(entries) {
+  let userMsgs = 0, assistantMsgs = 0, toolCalls = 0;
+  let inputTokens = 0, outputTokens = 0, cacheRead = 0;
+  for (const e of entries) {
+    if (e.type === 'user') {
+      const c = e.message?.content;
+      if (typeof c === 'string' || (Array.isArray(c) && c.some(b => b.type !== 'tool_result'))) {
+        userMsgs++;
+      }
+    } else if (e.type === 'assistant') {
+      assistantMsgs++;
+      const content = e.message?.content || [];
+      for (const b of content) {
+        if (b.type === 'tool_use') toolCalls++;
+      }
+      const u = e.message?.usage || {};
+      inputTokens += u.input_tokens || 0;
+      outputTokens += u.output_tokens || 0;
+      cacheRead += u.cache_read_input_tokens || 0;
+    }
+  }
+  return { userMsgs, assistantMsgs, toolCalls, inputTokens, outputTokens, cacheRead };
+}
+
+// ── Build turns ────────────────────────────────────────────────────────────
+function buildTurns(entries, isSubagent, sessionId) {
+  // Filter
+  const filtered = entries.filter(e => {
+    if (!isSubagent && e.isSidechain) return false;
+    return e.type === 'user' || e.type === 'assistant';
+  });
+
+  // Sort by timestamp
+  filtered.sort((a, b) => {
+    const ta = a.timestamp || a.message?.timestamp || '';
+    const tb = b.timestamp || b.message?.timestamp || '';
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+
+  // Build tool_result index: tool_use_id -> tool_result block
+  const toolResults = {};
+  for (const e of filtered) {
+    if (e.type === 'user') {
+      const content = e.message?.content;
+      if (Array.isArray(content)) {
+        for (const b of content) {
+          if (b.type === 'tool_result') {
+            toolResults[b.tool_use_id] = b;
+          }
+        }
+      }
+    }
+  }
+
+  // Build a map: user entry uuid -> next assistant message.id
+  // (the first assistant entry that follows each user prompt turn)
+  const userToMsgId = {};
+  let lastUserUuid = null;
+  for (const e of filtered) {
+    if (e.type === 'user') {
+      const content = e.message?.content;
+      if (!(Array.isArray(content) && content.every(b => b.type === 'tool_result'))) {
+        lastUserUuid = e.uuid;
+      }
+    } else if (e.type === 'assistant' && lastUserUuid) {
+      const msgId = e.message?.id;
+      if (msgId && !userToMsgId[lastUserUuid]) {
+        userToMsgId[lastUserUuid] = msgId;
+      }
+    }
+  }
+
+  const turns = [];
+  for (const e of filtered) {
+    if (e.type === 'user') {
+      const content = e.message?.content;
+      // Skip pure tool_result-only user entries (they're embedded in assistant turns)
+      if (Array.isArray(content) && content.every(b => b.type === 'tool_result')) continue;
+      turns.push({
+        role: 'user',
+        text: typeof content === 'string' ? content : null,
+        timestamp: e.timestamp,
+        uuid: e.uuid || null,
+        sessionId: sessionId || null,
+        assistantMsgId: userToMsgId[e.uuid] || null,
+      });
+    } else if (e.type === 'assistant') {
+      const content = e.message?.content || [];
+      const textBlocks = content.filter(b => b.type === 'text').map(b => b.text);
+      const toolUses = content.filter(b => b.type === 'tool_use').map(b => ({
+        ...b,
+        result: toolResults[b.id] || null,
+      }));
+      turns.push({
+        role: 'assistant',
+        textBlocks,
+        toolUses,
+        timestamp: e.timestamp,
+        model: e.message?.model,
+        msgId: e.message?.id || null,
+        sessionId: sessionId || null,
+      });
+    }
+  }
+  return turns;
+}
+
+// ── Render turn ────────────────────────────────────────────────────────────
+function renderTurn(turn) {
+  const div = document.createElement('div');
+  div.className = `turn ${turn.role}`;
+
+  if (turn.role === 'user') {
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = `<div class="text-block">${escHtml(turn.text || '')}</div>`;
+
+    // Add HTTP lookup button for main session user messages with assistantMsgId
+    if (turn.assistantMsgId && turn.sessionId) {
+      const btn = document.createElement('button');
+      btn.className = 'http-btn';
+      btn.textContent = '查看请求';
+      btn.title = '查看该消息触发的底层 HTTP 请求';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        fetchHttpRecords(turn.sessionId, turn.assistantMsgId, turn.text || '(no text)');
+      };
+      bubble.appendChild(btn);
+    }
+
+    div.appendChild(bubble);
+    if (turn.timestamp) {
+      const meta = document.createElement('div');
+      meta.className = 'turn-meta';
+      meta.textContent = fmtTime(turn.timestamp);
+      div.appendChild(meta);
+    }
+  } else {
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.style.position = 'relative';
+
+    // HTTP lookup button for assistant turns with msgId
+    if (turn.msgId && turn.sessionId) {
+      const btn = document.createElement('button');
+      btn.className = 'http-btn';
+      btn.textContent = '查看请求';
+      btn.title = '查看该助手消息对应的底层 HTTP 请求';
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        fetchHttpRecords(turn.sessionId, turn.msgId, turn.textBlocks[0] || '(assistant)');
+      };
+      bubble.appendChild(btn);
+    }
+
+    // Text blocks
+    for (const text of turn.textBlocks) {
+      const tb = document.createElement('div');
+      tb.className = 'text-block';
+      tb.innerHTML = renderMarkdown(text);
+      bubble.appendChild(tb);
+    }
+
+    // Tool cards
+    for (const tool of turn.toolUses) {
+      bubble.appendChild(renderToolCard(tool));
+    }
+
+    div.appendChild(bubble);
+
+    if (turn.timestamp || turn.model) {
+      const meta = document.createElement('div');
+      meta.className = 'turn-meta';
+      meta.textContent = [fmtTime(turn.timestamp), turn.model].filter(Boolean).join(' · ');
+      div.appendChild(meta);
+    }
+  }
+
+  return div;
+}
+
+// ── Render tool card ───────────────────────────────────────────────────────
+function renderToolCard(tool) {
+  const isError = tool.result?.is_error === true;
+  const card = document.createElement('div');
+  card.className = 'tool-card' + (isError ? ' error' : '');
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'tool-header';
+  const badge = isError ? '<span class="tool-badge">error</span>' : '<span class="tool-badge">tool</span>';
+  header.innerHTML = `<span class="tool-name">${escHtml(tool.name)}</span>${badge}`;
+  header.onclick = () => inputSection.classList.toggle('hidden');
+  card.appendChild(header);
+
+  // Input section
+  const inputSection = document.createElement('div');
+  inputSection.className = 'tool-section';
+  const inputStr = JSON.stringify(tool.input, null, 2);
+  const inputTruncated = inputStr.length > 200;
+
+  const inputLabel = document.createElement('div');
+  inputLabel.className = 'tool-section-label';
+  inputLabel.textContent = 'Input';
+  inputSection.appendChild(inputLabel);
+
+  const inputContent = document.createElement('div');
+  inputContent.className = 'tool-content' + (inputTruncated ? ' collapsed' : '');
+  inputContent.textContent = inputStr;
+  inputSection.appendChild(inputContent);
+
+  if (inputTruncated) {
+    const expandBtn = document.createElement('button');
+    expandBtn.className = 'expand-btn';
+    expandBtn.textContent = 'Show full input';
+    expandBtn.onclick = () => {
+      inputContent.classList.toggle('collapsed');
+      expandBtn.textContent = inputContent.classList.contains('collapsed') ? 'Show full input' : 'Collapse';
+    };
+    inputSection.appendChild(expandBtn);
+  }
+  card.appendChild(inputSection);
+
+  // Result section
+  if (tool.result) {
+    const resultSection = document.createElement('div');
+    resultSection.className = 'tool-section';
+
+    const resultLabel = document.createElement('div');
+    resultLabel.className = 'tool-section-label';
+    resultLabel.textContent = isError ? 'Error' : 'Result';
+    resultSection.appendChild(resultLabel);
+
+    const resultStr = typeof tool.result.content === 'string'
+      ? tool.result.content
+      : JSON.stringify(tool.result.content, null, 2);
+    const resultTruncated = resultStr.length > 300;
+
+    const resultContent = document.createElement('div');
+    resultContent.className = 'tool-content' + (resultTruncated ? ' collapsed' : '');
+    resultContent.style.color = isError ? '#f85149' : '';
+    resultContent.textContent = resultStr;
+    resultSection.appendChild(resultContent);
+
+    if (resultTruncated) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full result';
+      expandBtn.onclick = () => {
+        resultContent.classList.toggle('collapsed');
+        expandBtn.textContent = resultContent.classList.contains('collapsed') ? 'Show full result' : 'Collapse';
+      };
+      resultSection.appendChild(expandBtn);
+    }
+    card.appendChild(resultSection);
+  }
+
+  return card;
+}
+
+// ── HTTP lookup ────────────────────────────────────────────────────────────
+async function fetchHttpRecords(sessionId, messageId, msgText) {
+  const overlay = document.getElementById('httpModalOverlay');
+  const body = document.getElementById('httpModalBody');
+  const title = document.getElementById('httpModalTitle');
+
+  title.textContent = `HTTP 请求 — ${truncate(msgText, 40)}`;
+  body.innerHTML = '<div class="placeholder"><div class="spinner"></div></div>';
+  overlay.classList.remove('hidden');
+
+  try {
+    const resp = await fetch(`${apiBase()}/api/message-http/${sessionId}/${messageId}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    showHttpModal(data.records || []);
+  } catch (e) {
+    body.innerHTML = `<div class="error-msg" style="padding:20px">${escHtml(e.message)}</div>`;
+  }
+}
+
+function _makeCollapsibleSection(label, content, collapsed) {
+  const sec = document.createElement('div');
+  sec.className = 'http-record-section';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'http-record-label';
+  labelEl.style.cursor = 'pointer';
+  labelEl.style.userSelect = 'none';
+  labelEl.innerHTML = `${label} <span style="color:#58a6ff;font-size:10px">[${collapsed ? '展开' : '收起'}]</span>`;
+  sec.appendChild(labelEl);
+
+  const contentEl = document.createElement('div');
+  contentEl.className = 'http-record-content';
+  if (collapsed) contentEl.style.display = 'none';
+  contentEl.textContent = content;
+  sec.appendChild(contentEl);
+
+  labelEl.onclick = () => {
+    const hidden = contentEl.style.display === 'none';
+    contentEl.style.display = hidden ? '' : 'none';
+    labelEl.querySelector('span').textContent = hidden ? '[收起]' : '[展开]';
+  };
+  return sec;
+}
+
+function showHttpModal(records) {
+  const body = document.getElementById('httpModalBody');
+  if (records.length === 0) {
+    body.innerHTML = '<div class="no-records">未找到对应的 HTTP 请求记录</div>';
+    return;
+  }
+
+  body.innerHTML = '';
+  for (const rec of records) {
+    const card = document.createElement('div');
+    card.className = 'http-record';
+
+    // Header: timestamp + model + message id
+    const model = rec.request_json?.model || '—';
+    const msgId = rec.response_json?.message?.id || '';
+    const header = document.createElement('div');
+    header.className = 'http-record-header';
+    header.innerHTML =
+      `<span class="http-record-ts">${escHtml(rec.timestamp || '')}</span>` +
+      `<span class="http-record-model">${escHtml(model)}</span>` +
+      (msgId ? `<span style="color:#8b949e;font-size:11px">${escHtml(msgId)}</span>` : '');
+    card.appendChild(header);
+
+    // Usage (always visible)
+    const usage = rec.response_json?.message?.usage;
+    if (usage) {
+      const sec = document.createElement('div');
+      sec.className = 'http-record-section';
+      sec.innerHTML = `<div class="http-record-label">Token 用量</div>` +
+        `<div class="usage-chips">` +
+        `<div class="usage-chip">input <span>${(usage.input_tokens || 0).toLocaleString()}</span></div>` +
+        `<div class="usage-chip">output <span>${(usage.output_tokens || 0).toLocaleString()}</span></div>` +
+        `<div class="usage-chip">cache_read <span>${(usage.cache_read_input_tokens || 0).toLocaleString()}</span></div>` +
+        `<div class="usage-chip">cache_create <span>${(usage.cache_creation_input_tokens || 0).toLocaleString()}</span></div>` +
+        `</div>`;
+      card.appendChild(sec);
+    }
+
+    // Response content (visible, collapsible)
+    const contentText = rec.response_json?.message?.content?.text;
+    if (contentText) {
+      card.appendChild(_makeCollapsibleSection('助手回复', contentText, false));
+    }
+
+    // Raw request_json (collapsed by default — can be large)
+    const reqCopy = Object.assign({}, rec.request_json);
+    // Show messages count summary instead of full array inline
+    const msgCount = reqCopy.messages?.length || 0;
+    reqCopy.messages = `[${msgCount} messages — expand raw to see all]`;
+    const reqSummary = JSON.stringify(reqCopy, null, 2);
+    card.appendChild(_makeCollapsibleSection(`请求 (request_json, ${msgCount} messages)`, reqSummary, true));
+
+    // Full request_json with messages (very large, collapsed)
+    card.appendChild(_makeCollapsibleSection(
+      '完整请求 (含所有 messages)',
+      JSON.stringify(rec.request_json, null, 2),
+      true
+    ));
+
+    // Raw response_json (collapsed)
+    card.appendChild(_makeCollapsibleSection(
+      '原始响应 (response_json)',
+      JSON.stringify(rec.response_json, null, 2),
+      true
+    ));
+
+    body.appendChild(card);
+  }
+}
+
+function closeHttpModal(event) {
+  if (event && event.target !== document.getElementById('httpModalOverlay')) return;
+  document.getElementById('httpModalOverlay').classList.add('hidden');
+}
+
+// Close modals on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeHttpModal(); closeExportModal(); }
+});
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function fmtExportFilename() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `export-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.tar.gz`;
+}
+
+function openExportModal() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId) return;
+  document.getElementById('exportSessionId').textContent = sessionId;
+  document.getElementById('exportFilename').value = fmtExportFilename();
+  document.getElementById('exportStatus').textContent = '';
+  const btn = document.getElementById('exportConfirmBtn');
+  btn.disabled = false;
+  btn.textContent = '选择位置并导出';
+  btn.onclick = doExport;
+  document.getElementById('exportOverlay').classList.add('open');
+}
+
+function closeExportModal() {
+  const el = document.getElementById('exportOverlay');
+  if (el) el.classList.remove('open');
+}
+
+function onExportOverlayClick(e) {
+  if (e.target === document.getElementById('exportOverlay')) closeExportModal();
+}
+
+async function doExport() {
+  const sessionId = document.getElementById('exportSessionId').textContent.trim();
+  const filename = (document.getElementById('exportFilename').value.trim() || fmtExportFilename())
+    .replace(/[/\\:*?"<>|]/g, '_');
+  const confirmBtn = document.getElementById('exportConfirmBtn');
+  const statusEl = document.getElementById('exportStatus');
+
+  statusEl.textContent = '';
+  statusEl.style.color = '#8b949e';
+
+  try {
+    // 1. 在用户手势上下文内立即唤起"选择文件夹"对话框
+    let dirHandle = null;
+    if (window.showDirectoryPicker) {
+      dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    }
+
+    // 2. 文件夹选好后再生成数据
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '生成中…';
+    confirmBtn.onclick = null;
+
+    const url = `${apiBase()}/api/export?sessions=${encodeURIComponent(sessionId)}&filename=${encodeURIComponent(filename)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+
+    // 3. 写入文件
+    if (dirHandle) {
+      const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+
+    // 4. 成功：显示结果，按钮变为「完成」，不自动关闭
+    statusEl.style.color = '#56d364';
+    statusEl.textContent = `✓ 已导出：${filename}`;
+    confirmBtn.textContent = '完成';
+    confirmBtn.disabled = false;
+    confirmBtn.onclick = closeExportModal;
+
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      statusEl.textContent = '';
+    } else {
+      statusEl.style.color = '#f85149';
+      statusEl.textContent = `导出失败：${e.message}`;
+    }
+    confirmBtn.textContent = '选择位置并导出';
+    confirmBtn.disabled = false;
+    confirmBtn.onclick = doExport;
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+fetchProjects();
+</script>
+</body>
+</html>

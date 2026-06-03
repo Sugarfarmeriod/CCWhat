@@ -1,0 +1,14 @@
+node_modules/
+logs/
+certs/
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.vscode/settings.json
+.agents/
+drawio/
+.deep-ai-analysis/raw-req-resp/
