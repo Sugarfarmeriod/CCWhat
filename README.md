@@ -61,12 +61,9 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 ## 🦥 极度懒人包
 
-直接把这个链接丢给你的 Claude Code / Codex CLI / 任何 OpenClaw 套壳工具，说一句：
+直接复制下面的话给 Claude Code / Codex CLI / 任何 OpenClaw 套壳工具：
 
-> "帮我装好 ccwhat"
-
-它自己就会装好，全程不用你动手。
-（这也算帮 AI 戴上一个"诚实手环"）
+> "按照readme的指示，帮我装好 ccwhat，链接是https://github.com/PacemakerG/CCWhat"
 
 ---
 
