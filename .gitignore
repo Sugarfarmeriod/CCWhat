@@ -43,3 +43,7 @@ sample_data/
 
 # local diagnostic logs and generated exports
 *.tar.gz
+
+# local-only working directories, not part of the public release
+docs/
+元析bug定位/
