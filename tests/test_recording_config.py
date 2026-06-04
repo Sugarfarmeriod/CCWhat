@@ -49,6 +49,11 @@ class RecordingConfigTests(unittest.TestCase):
         self.assertIn("/v1/messages", cfg.effective_paths())
         self.assertIn("/v1/messages/count_tokens", cfg.effective_paths())
 
+    def test_codex_preset_expands_to_openai_responses(self) -> None:
+        cfg = RecordingConfig(preset="codex")
+        self.assertIn("api.openai.com", cfg.effective_domains())
+        self.assertIn("/v1/responses", cfg.effective_paths())
+
     def test_explicit_domains_merged_with_preset(self) -> None:
         cfg = RecordingConfig(preset="claude", domains=["gateway.example.com"])
         domains = cfg.effective_domains()
@@ -60,8 +65,10 @@ class RecordingConfigTests(unittest.TestCase):
         self.assertFalse(cfg.is_valid_for_recording())
 
     def test_config_with_preset_is_valid(self) -> None:
-        cfg = RecordingConfig(preset="claude")
-        self.assertTrue(cfg.is_valid_for_recording())
+        for preset in ["claude", "codex"]:
+            with self.subTest(preset=preset):
+                cfg = RecordingConfig(preset=preset)
+                self.assertTrue(cfg.is_valid_for_recording())
 
     def test_config_with_explicit_domain_is_valid(self) -> None:
         cfg = RecordingConfig(domains=["gateway.example.com"])

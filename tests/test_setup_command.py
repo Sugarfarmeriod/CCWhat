@@ -30,6 +30,19 @@ class SetupNonInteractiveTests(unittest.TestCase):
             self.assertTrue(cfg.onboarding_complete)
             self.assertIn("api.anthropic.com", cfg.effective_domains())
 
+    def test_setup_preset_codex_yes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            result = self.runner.invoke(setup, ["--preset", "codex", "--yes", "--config", str(config_path)])
+            self.assertEqual(result.exit_code, 0, result.output)
+            cfg = load_config(config_path)
+            self.assertIsNotNone(cfg)
+            assert cfg is not None
+            self.assertEqual(cfg.preset, "codex")
+            self.assertTrue(cfg.onboarding_complete)
+            self.assertIn("api.openai.com", cfg.effective_domains())
+            self.assertIn("/v1/responses", cfg.effective_paths())
+
     def test_setup_domain_and_path_yes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "config.toml"
@@ -90,6 +103,22 @@ class SetupInteractiveTests(unittest.TestCase):
             self.assertIsNotNone(cfg)
             assert cfg is not None
             self.assertEqual(cfg.preset, "claude")
+
+    def test_interactive_official_codex_saves_preset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            result = self.runner.invoke(
+                setup,
+                ["--config", str(config_path)],
+                input="2\ny\n",
+                catch_exceptions=False,
+            )
+            self.assertEqual(result.exit_code, 0, result.output)
+            cfg = load_config(config_path)
+            self.assertIsNotNone(cfg)
+            assert cfg is not None
+            self.assertEqual(cfg.preset, "codex")
+            self.assertIn("api.openai.com", cfg.effective_domains())
 
     def test_interactive_keep_existing_no_change(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

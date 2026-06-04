@@ -42,6 +42,10 @@ PRESETS: dict[str, dict[str, Any]] = {
         "domains": ["api.anthropic.com"],
         "paths": ["/v1/messages", "/v1/messages/count_tokens"],
     },
+    "codex": {
+        "domains": ["api.openai.com"],
+        "paths": ["/v1/responses"],
+    },
 }
 
 # ---------------------------------------------------------------------------

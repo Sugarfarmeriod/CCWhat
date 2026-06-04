@@ -13,6 +13,11 @@ class DiscoveryScoringTests(unittest.TestCase):
         self.assertGreater(score, 5)
         self.assertIn("Anthropic", reason)
 
+    def test_openai_responses_path_scores_high(self) -> None:
+        score, reason = _score_candidate("api.openai.com", "POST", "/v1/responses", 200, "application/json", False)
+        self.assertGreater(score, 5)
+        self.assertIn("OpenAI", reason)
+
     def test_sse_response_scores_high(self) -> None:
         score, reason = _score_candidate("gateway.example.com", "POST", "/v1/chat", 200, "text/event-stream", True)
         self.assertGreater(score, 5)

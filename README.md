@@ -45,6 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 ```bash
 ccwhat -- claude
+ccwhat -- codex
 # 或者你自己的命令
 ccwhat -- xx
 ```
@@ -96,6 +97,7 @@ ccwhat web
 ccwhat setup                   # 修改录制配置
 ccwhat web                     # 再次打开"显微镜"
 ccwhat discover -- claude      # 探路模式：只记录动作，不偷看数据
+ccwhat discover -- codex       # Codex 也可以探路
 ccwhat run --no-web -- claude  # 低调运行，不自动弹网页
 ccwhat export --list           # 看看都录了哪些"刑侦卷宗"
 ccwhat export <session>        # 导出某个 session

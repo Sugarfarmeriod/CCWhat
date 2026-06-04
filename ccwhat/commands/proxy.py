@@ -63,7 +63,7 @@ def _print_ca_guidance(port: int) -> None:
 )
 @click.option("--domain", multiple=True, help="Record this domain (overrides saved config for this run).")
 @click.option("--path", "path_filter", multiple=True, help="Only record paths matching this prefix.")
-@click.option("--preset", default=None, help="Use a named preset (e.g. claude).")
+@click.option("--preset", default=None, help="Use a named preset (e.g. claude, codex).")
 @click.option(
     "--config",
     "config_path",
@@ -88,7 +88,7 @@ def proxy(
             click.echo(
                 "No recording domains configured.\n"
                 "Run `ccwhat setup` to configure which model API endpoints to record.\n"
-                "Or pass --domain / --preset directly: ccwhat proxy --preset claude",
+                "Or pass --domain / --preset directly: ccwhat proxy --preset codex",
                 err=True,
             )
             from ccwhat.commands.setup import _run_setup_wizard
@@ -99,6 +99,7 @@ def proxy(
             click.echo(
                 "Error: no recording domains configured. Set up recording with:\n"
                 "  ccwhat setup --preset claude --yes\n"
+                "  ccwhat setup --preset codex --yes\n"
                 "  ccwhat setup --domain <host> --path /v1/messages --yes\n"
                 "  ccwhat discover\n"
                 "Or pass --domain / --preset to this command.",

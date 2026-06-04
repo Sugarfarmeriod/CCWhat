@@ -39,6 +39,14 @@ def _score_candidate(host: str, method: str, path: str, status: int, content_typ
         score += 5
         reasons.append("Anthropic Messages-like path")
 
+    # OpenAI Responses shape used by Codex CLI
+    if path == "/v1/responses":
+        score += 10
+        reasons.append("OpenAI Responses API path")
+    elif "/v1/responses" in path:
+        score += 5
+        reasons.append("OpenAI Responses-like path")
+
     # Streaming model response
     if is_sse or "text/event-stream" in content_type:
         score += 8
