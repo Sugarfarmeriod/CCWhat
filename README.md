@@ -86,7 +86,7 @@ ccwhat web
 - 需要 Python 3.10+ 和 mitmproxy，安装脚本会自己查
 - HTTPS 录制需要信任 mitmproxy 的 CA 证书（好比给 Agent 戴个监听耳机，你得先同意）
 - Authorization、Cookie、API key 等敏感信息会被自动打码，不会让你社死
-- Discovery 模式只记录动作类型，不保存具体内容，适合"先看看它老不老实"
+- 安装好后，如果你是Claude官方订阅请选择【1】，如果是中转模型或其他模型提供商请选择【2】并复制粘贴你的提供商的baseurl，模式【3】Discovery 暂不支持
 
 ---
 
