@@ -19,8 +19,7 @@
 
 ## ❓ codelenagent 是什么
 
-codelenagent（读作"see see what"）  
-它只做一件事：
+codelenagent只做一件事：
 
 > **把你 AI 干活时的所有"小动作"录下来，放到网页里让你实时围观。**
 
