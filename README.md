@@ -1,4 +1,4 @@
-# 🔬 ccwhat（see see what）
+# 🔬 codelenagent（see see what）
 
 中文 | [English](README.en.md)
 
@@ -17,9 +17,9 @@
 
 ---
 
-## ❓ ccwhat 是什么
+## ❓ codelenagent 是什么
 
-ccwhat（读作"see see what"）  
+codelenagent（读作"see see what"）  
 它只做一件事：
 
 > **把你 AI 干活时的所有"小动作"录下来，放到网页里让你实时围观。**
@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 直接复制下面的话给 Claude Code / Codex CLI / 任何 OpenClaw 套壳工具：
 
-> "按照readme的指示，帮我装好 ccwhat，链接是https://github.com/PacemakerG/CCWhat"
+> "按照readme的指示，帮我装好 codelenagent，链接是https://github.com/PacemakerG/CCWhat"
 
 ---
 

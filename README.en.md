@@ -1,4 +1,4 @@
-# 🔬 ccwhat（see see what）
+# 🔬 codelenagent（see see what）
 
 [中文](README.md) | English
 
@@ -14,13 +14,13 @@
 - You dig through terminal logs, can't find any proof, and just feel gaslit
 
 **Stop letting AI play you.**  
-ccwhat is built for exactly this — **a scalpel + a microscope** that puts every move your agent makes right in front of your eyes.
+codelenagent is built for exactly this — **a scalpel + a microscope** that puts every move your agent makes right in front of your eyes.
 
 ---
 
-## ❓ What is ccwhat
+## ❓ What is codelenagent
 
-ccwhat (pronounced "see see what")  
+codelenagent (pronounced "see see what")  
 It does one thing:
 
 > **Records everything your AI does while working, then plays it back in a browser so you can watch in real time.**
@@ -65,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 Paste the install command into your Claude Code / Codex CLI / any AI shell, and say:
 
-> "Install ccwhat for me"
+> "Install codelenagent for me"
 
 It'll handle everything. You don't have to lift a finger.  
 (Think of it as putting an honesty bracelet on your AI.)
