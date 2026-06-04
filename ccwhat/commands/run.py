@@ -255,6 +255,7 @@ def run(
             click.echo(
                 "Error: no recording domains configured. Set up recording with:\n"
                 "  ccwhat setup --preset claude --yes\n"
+                "  ccwhat setup --preset codex --yes\n"
                 "  ccwhat discover\n"
                 "Or pass --no-setup to launch without payload recording.",
                 err=True,

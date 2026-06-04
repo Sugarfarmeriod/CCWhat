@@ -46,6 +46,7 @@ Run (the space matters — it's the soul of the command):
 
 ```bash
 ccwhat -- claude
+ccwhat -- codex
 # or whatever CLI you use
 ccwhat -- xx
 ```
@@ -101,6 +102,7 @@ Or go directly to `http://127.0.0.1:7789/claude-log.html`
 ccwhat setup                   # change recording config
 ccwhat web                     # reopen the viewer
 ccwhat discover -- claude      # scout mode: log actions, skip payloads
+ccwhat discover -- codex       # scout Codex traffic too
 ccwhat run --no-web -- claude  # run quietly, no auto browser
 ccwhat export --list           # list recorded sessions
 ccwhat export <session>        # export a session

@@ -25,6 +25,7 @@ _GATEWAY_ENV_VARS = [
     "ANTHROPIC_BEDROCK_BASE_URL",
     "ANTHROPIC_VERTEX_BASE_URL",
     "ANTHROPIC_AWS_BASE_URL",
+    "OPENAI_BASE_URL",
 ]
 
 
@@ -70,12 +71,13 @@ def _run_setup_wizard(config_path: Path | None = None) -> RecordingConfig | None
             return existing
 
     click.echo("\n=== ccwhat setup ===\n")
-    click.echo("Choose your Claude API setup:")
+    click.echo("Choose your AI coding setup:")
     click.echo("  1) Official Claude API  (api.anthropic.com)")
-    click.echo("  2) Gateway / base URL   (custom or corporate proxy)")
-    click.echo("  3) Not sure             (run discovery to detect endpoints)")
+    click.echo("  2) Official OpenAI Codex (api.openai.com)")
+    click.echo("  3) Gateway / base URL   (custom or corporate proxy)")
+    click.echo("  4) Not sure             (run discovery to detect endpoints)")
 
-    choice = click.prompt("Select [1/2/3]", default="1")
+    choice = click.prompt("Select [1/2/3/4]", default="1")
 
     if choice == "1":
         cfg = RecordingConfig(preset="claude", onboarding_complete=True)
@@ -84,6 +86,12 @@ def _run_setup_wizard(config_path: Path | None = None) -> RecordingConfig | None
         click.echo("  Paths  : /v1/messages, /v1/messages/count_tokens")
 
     elif choice == "2":
+        cfg = RecordingConfig(preset="codex", onboarding_complete=True)
+        click.echo("\nWill record:")
+        click.echo("  Domain : api.openai.com")
+        click.echo("  Paths  : /v1/responses")
+
+    elif choice == "3":
         gateway_hosts = _detect_gateway_hosts()
         if gateway_hosts:
             click.echo(f"\nDetected gateway candidate(s): {', '.join(gateway_hosts)}")
@@ -110,12 +118,12 @@ def _run_setup_wizard(config_path: Path | None = None) -> RecordingConfig | None
         click.echo(f"  Domain : {host}")
         click.echo(f"  Paths  : {', '.join(paths)}")
 
-    elif choice == "3":
+    elif choice == "4":
         click.echo(
             "\nStarting metadata-only discovery.\n"
             "Launch or use your AI coding CLI in another terminal and ccwhat will\n"
             "observe traffic to suggest which endpoints to record.\n"
-            "Run: ccwhat discover -- claude   (or any AI CLI command)"
+            "Run: ccwhat discover -- codex   (or any AI CLI command)"
         )
         return None
 
@@ -131,12 +139,17 @@ def _run_setup_wizard(config_path: Path | None = None) -> RecordingConfig | None
 
     save_config(cfg, config_path)
     click.echo(f"\nConfiguration saved to {config_path or DEFAULT_CONFIG_PATH}")
-    click.echo("You can now run: ccwhat -- claude")
+    if cfg.preset == "codex":
+        click.echo("You can now run: ccwhat -- codex")
+    elif cfg.preset == "claude":
+        click.echo("You can now run: ccwhat -- claude")
+    else:
+        click.echo("You can now run: ccwhat -- <your-ai-cli>")
     return cfg
 
 
 @click.command("setup")
-@click.option("--preset", default=None, help="Named preset (e.g. claude) for non-interactive setup.")
+@click.option("--preset", default=None, help="Named preset (e.g. claude, codex) for non-interactive setup.")
 @click.option("--domain", default=None, help="Record this domain (non-interactive).")
 @click.option("--path", "path_filter", default=None, help="Path filter (non-interactive).")
 @click.option("--yes", is_flag=True, help="Accept without prompting (non-interactive mode).")
@@ -162,6 +175,7 @@ def setup(
                 "Error: --yes requires --preset or --domain.\n"
                 "Examples:\n"
                 "  ccwhat setup --preset claude --yes\n"
+                "  ccwhat setup --preset codex --yes\n"
                 "  ccwhat setup --domain gateway.example.com --path /v1/messages --yes",
                 err=True,
             )
