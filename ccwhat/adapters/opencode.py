@@ -167,16 +167,21 @@ class OpenCodeAdapter(AgentAdapter):
                     "worktree": row.get("worktree") or d,
                     "sessions": [],
                 }
-            seen[d]["sessions"].append({
+            ti = row.get("tokens_input")
+            to = row.get("tokens_output")
+            sess_data: dict[str, Any] = {
                 "id": row["id"],
                 "title": row.get("title") or "",
                 "agent": row.get("agent") or "opencode",
                 "model": row.get("model"),
                 "firstTimestamp": str(row.get("time_created") or ""),
                 "lastTimestamp": str(row.get("time_updated") or ""),
-                "tokensInput": row.get("tokens_input") or 0,
-                "tokensOutput": row.get("tokens_output") or 0,
-            })
+            }
+            if ti is not None:
+                sess_data["tokensInput"] = ti
+            if to is not None:
+                sess_data["tokensOutput"] = to
+            seen[d]["sessions"].append(sess_data)
         return list(seen.values())
 
     def list_sessions(self) -> list[dict[str, Any]]:
@@ -188,7 +193,9 @@ class OpenCodeAdapter(AgentAdapter):
         )
         sessions: list[dict[str, Any]] = []
         for row in rows:
-            sessions.append({
+            ti = row.get("tokens_input")
+            to = row.get("tokens_output")
+            sess: dict[str, Any] = {
                 "id": row["id"],
                 "projectDir": row.get("project_dir") or "",
                 "title": row.get("title") or "",
@@ -196,9 +203,12 @@ class OpenCodeAdapter(AgentAdapter):
                 "model": row.get("model"),
                 "firstTimestamp": str(row.get("time_created") or ""),
                 "lastTimestamp": str(row.get("time_updated") or ""),
-                "tokensInput": row.get("tokens_input") or 0,
-                "tokensOutput": row.get("tokens_output") or 0,
-            })
+            }
+            if ti is not None:
+                sess["tokensInput"] = ti
+            if to is not None:
+                sess["tokensOutput"] = to
+            sessions.append(sess)
         return sessions
 
     def raw_to_normalized_events(
@@ -606,7 +616,7 @@ class OpenCodeAdapter(AgentAdapter):
             ("cacheWriteTokens", "tokens_cache_write"),
         ):
             val = session_row.get(col)
-            if val:
+            if val is not None:
                 usage[key] = val
         inp = usage.get("inputTokens")
         outp = usage.get("outputTokens")

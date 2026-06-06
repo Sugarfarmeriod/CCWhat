@@ -946,10 +946,10 @@ class TestOpenCodeAdapter(unittest.TestCase):
             "CREATE TABLE session ("
             "id TEXT PRIMARY KEY, project_id TEXT, directory TEXT, title TEXT, "
             "agent TEXT, model TEXT, time_created INTEGER, time_updated INTEGER, "
-            "tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0, "
-            "tokens_reasoning INTEGER DEFAULT 0, "
-            "tokens_cache_read INTEGER DEFAULT 0, tokens_cache_write INTEGER DEFAULT 0, "
-            "cost REAL DEFAULT 0"
+            "tokens_input INTEGER, tokens_output INTEGER, "
+            "tokens_reasoning INTEGER, "
+            "tokens_cache_read INTEGER, tokens_cache_write INTEGER, "
+            "cost REAL"
             ")"
         )
         conn.execute(
@@ -984,8 +984,8 @@ class TestOpenCodeAdapter(unittest.TestCase):
         self, db: Path, sid: str, project_id: str = "p1", directory: str = "/tmp/test",
         title: str = "Test Session", agent: str = "opencode",
         model: str = '{"id":"gpt-4","providerID":"openai"}',
-        tokens_input: int = 1000, tokens_output: int = 500,
-        tokens_reasoning: int = 0, tokens_cache_read: int = 0,
+        tokens_input: int | None = 1000, tokens_output: int | None = 500,
+        tokens_reasoning: int | None = 0, tokens_cache_read: int | None = 0,
     ) -> None:
         conn = sqlite3.connect(str(db))
         conn.execute(
@@ -1055,6 +1055,18 @@ class TestOpenCodeAdapter(unittest.TestCase):
             self.assertEqual(len(sessions), 1)
             self.assertEqual(sessions[0]["id"], "ses_test123")
             self.assertEqual(sessions[0]["tokensInput"], 500)
+
+    def test_list_sessions_no_usage_fake(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            self._insert_session(db, "ses_nousage_ls", directory="/tmp/nousage",
+                                 tokens_input=None, tokens_output=None)
+            adapter = OpenCodeAdapter(db)
+            sessions = adapter.list_sessions()
+            found = [s for s in sessions if s["id"] == "ses_nousage_ls"]
+            self.assertEqual(len(found), 1)
+            self.assertNotIn("tokensInput", found[0])
+            self.assertNotIn("tokensOutput", found[0])
 
     def test_load_session_not_found(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1231,13 +1243,35 @@ class TestOpenCodeAdapter(unittest.TestCase):
                     self.assertIn("firstTimestamp", s)
                     self.assertIn("lastTimestamp", s)
                     self.assertIn("tokensInput", s)
+                    self.assertEqual(1000, s["tokensInput"])
                     self.assertIn("tokensOutput", s)
+                    self.assertEqual(500, s["tokensOutput"])
+
+    def test_list_projects_no_usage_fake_session(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_nousage_p"
+            self._insert_session(db, sid, directory="/tmp/nousage",
+                                 title="No Usage Session",
+                                 tokens_input=None, tokens_output=None)
+            self._insert_message(db, "msg_nup1", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_nup1", "msg_nup1", sid, "text", "hi")
+            adapter = OpenCodeAdapter(db)
+            projects = adapter.list_projects()
+            found = False
+            for proj in projects:
+                for s in proj.get("sessions", []):
+                    if s["id"] == sid:
+                        found = True
+                        self.assertNotIn("tokensInput", s)
+                        self.assertNotIn("tokensOutput", s)
+            self.assertTrue(found)
 
     def test_no_usage_does_not_fake_zero_session(self) -> None:
         with TemporaryDirectory() as tmp:
             db = self._create_db(tmp)
             sid = "ses_no_usage"
-            self._insert_session(db, sid, directory="/tmp/nousage", tokens_input=0, tokens_output=0)
+            self._insert_session(db, sid, directory="/tmp/nousage", tokens_input=None, tokens_output=None)
             self._insert_message(db, "msg_nu1", sid, "user", 1000000, {"role": "user"})
             self._insert_part(db, "prt_nu1", "msg_nu1", sid, "text", "hello")
             adapter = OpenCodeAdapter(db)
