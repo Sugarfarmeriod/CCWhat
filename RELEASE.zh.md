@@ -27,7 +27,11 @@ git commit -m "chore: 从 git 跟踪中移除旧版 deep_ai_analysis 包"
 - `pyproject.toml` 中的 `version = "x.y.z"`
 - `ccwhat/__init__.py` 中的 `__version__ = "x.y.z"`
 
-### 第 2 步：运行发布安全扫描
+### 第 2 步：更新 CHANGELOG
+
+在 `CHANGELOG.md` 中补充本版本面向用户的重要变化。
+
+### 第 3 步：运行发布安全扫描
 
 检测是否有内部域名、私有路径、真实 Token、旧包名等泄漏：
 
@@ -37,7 +41,7 @@ python scripts/check-release-safety.py
 
 扫描范围：所有已跟踪文件 + 未跟踪但不被 `.gitignore` 排除的文件（即所有会进入本次 commit 的内容）。
 
-### 第 3 步：运行测试
+### 第 4 步：运行测试
 
 ```bash
 # 使用 pytest（需要先安装 dev 依赖）：
@@ -47,7 +51,7 @@ python -m pytest tests/ -v
 python -m unittest discover -v tests/
 ```
 
-### 第 4 步：构建
+### 第 5 步：构建
 
 ```bash
 python -m build
@@ -55,7 +59,7 @@ python -m build
 
 产物：`dist/ccwhat-<version>-py3-none-any.whl` 和 `dist/ccwhat-<version>.tar.gz`
 
-### 第 5 步：检查 wheel 内容
+### 第 6 步：检查 wheel 内容
 
 确认构建出的 wheel 里没有旧版包或样本数据：
 
@@ -76,22 +80,19 @@ print(f"OK — wheel 内容干净（{wheels[0]}）")
 PY
 ```
 
-### 第 6 步：上传到 PyPI
+### 第 7 步：上传到 PyPI
 
 ```bash
 twine upload dist/ccwhat-<version>*
 ```
 
-### 第 7 步：创建 GitHub Release
+### 第 8 步：创建 GitHub Release
 
 - 标签：`v<version>`（例如 `v0.2.0`）
 - 附件：`dist/` 下的 `.whl` 和 `.tar.gz`
-- Release Notes 中说明：
-  - ccwhat 从 deep-ai-analysis 重命名
-  - 旧版导出包向后兼容（`deep-ai-analysis-export/` 仍可导入）
-  - 旧版 `~/.deep-ai-analysis/` 配置可迁移读取
+- Release Notes：复制 `CHANGELOG.md` 中对应版本的条目
 
-### 第 8 步：验证安装
+### 第 9 步：验证安装
 
 ```bash
 pip install ccwhat==<version>

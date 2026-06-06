@@ -20,12 +20,14 @@ pip install -e ".[dev]"
 
 1. **Bump version** in `pyproject.toml` and `ccwhat/__init__.py`
 
-2. **Run pre-release safety scan** (fails on tokens, internal domains, legacy tracked files)
+2. **Update `CHANGELOG.md`** with the user-facing highlights for this version
+
+3. **Run pre-release safety scan** (fails on tokens, internal domains, legacy tracked files)
    ```bash
    python scripts/check-release-safety.py
    ```
 
-3. **Run tests**
+4. **Run tests**
    ```bash
    # With pytest (requires dev dependencies):
    python -m pytest tests/ -v
@@ -33,13 +35,13 @@ pip install -e ".[dev]"
    python -m unittest discover -v tests/
    ```
 
-4. **Build**
+5. **Build**
    ```bash
    python -m build
    ```
    Produces `dist/ccwhat-<version>-py3-none-any.whl` and `dist/ccwhat-<version>.tar.gz`
 
-5. **Inspect built wheel** (confirm no legacy packages)
+6. **Inspect built wheel** (confirm no legacy packages)
    ```bash
    python - <<'PY'
    import zipfile, glob, sys
@@ -57,17 +59,17 @@ pip install -e ".[dev]"
    PY
    ```
 
-6. **Upload to PyPI**
+7. **Upload to PyPI**
    ```bash
    twine upload dist/ccwhat-<version>*
    ```
 
-7. **Create GitHub Release**
+8. **Create GitHub Release**
    - Tag: `v<version>`
    - Attach the `.whl` and `.tar.gz` from `dist/`
    - Copy relevant CHANGELOG entries into the release notes
 
-8. **Verify install**
+9. **Verify install**
    ```bash
    pip install ccwhat==<version>
    ccwhat --version
