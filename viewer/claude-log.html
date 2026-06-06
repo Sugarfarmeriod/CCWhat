@@ -812,6 +812,16 @@ function onProjectChange(restoreSession) {
 }
 
 // ── Convert normalized events to Claude-style entries ────────────────────
+function formatEventContent(content) {
+  if (content === undefined || content === null) return '';
+  if (typeof content === 'string') return content;
+  try {
+    return JSON.stringify(content, null, 2);
+  } catch {
+    return String(content);
+  }
+}
+
 function eventsToEntries(events) {
   const entries = [];
   for (const ev of events || []) {
@@ -877,7 +887,7 @@ function eventsToEntries(events) {
         sessionId: ev.sessionId,
         _fileLine: 0,
         subtype: label,
-        message: { content: [{ type: 'text', text: JSON.stringify(ev.content, null, 2) || '' }] },
+        message: { content: [{ type: 'text', text: formatEventContent(ev.content) }] },
       });
     }
   }
