@@ -1,4 +1,4 @@
-"""Viewer HTTP server — serves Claude Code session log data via REST API."""
+"""Viewer HTTP server — serves agent session log data via REST API."""
 
 from __future__ import annotations
 
@@ -12,8 +12,33 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
+from ccwhat.adapters.claude import ClaudeAdapter
+from ccwhat.adapters.registry import create_adapter
+
+
 # ---------------------------------------------------------------------------
-# Data loading helpers
+# Data loading helpers (kept as thin wrappers for backwards compatibility)
+# ---------------------------------------------------------------------------
+
+def get_projects(projects_dir: Path) -> list[dict[str, Any]]:
+    """Return list of {projectDir, sessions} for all projects.
+    Thin wrapper around ClaudeAdapter for backwards compatibility.
+    """
+    adapter = ClaudeAdapter(projects_dir)
+    return adapter.list_projects()
+
+
+def get_session(session_id: str, projects_dir: Path) -> dict[str, Any] | None:
+    """Find session by ID across all project dirs.
+    Thin wrapper around ClaudeAdapter for backwards compatibility.
+    """
+    adapter = ClaudeAdapter(projects_dir)
+    return adapter.load_session(session_id)
+
+
+# ---------------------------------------------------------------------------
+# HTTP record helpers (unchanged)
 # ---------------------------------------------------------------------------
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -32,124 +57,18 @@ def _read_jsonl(path: Path) -> list[dict]:
     return entries
 
 
-def _load_subagents(session_dir: Path) -> list[dict[str, Any]]:
-    subagents_dir = session_dir / "subagents"
-    if not subagents_dir.is_dir():
-        return []
-    subagents = []
-    for jsonl_path in sorted(subagents_dir.glob("agent-*.jsonl")):
-        agent_id = jsonl_path.stem[len("agent-"):]
-        meta_path = subagents_dir / f"agent-{agent_id}.meta.json"
-        meta: dict = {}
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                pass
-        entries = _read_jsonl(jsonl_path)
-        subagents.append({
-            "agentId": agent_id,
-            "meta": meta,
-            "entries": entries,
-        })
-    return subagents
-
-
-def _session_timestamps(jsonl_path: Path) -> tuple[str | None, str | None]:
-    """Return (first_timestamp, last_timestamp) from a session JSONL file."""
-    first_ts: str | None = None
-    last_ts: str | None = None
-    try:
-        with jsonl_path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    ts = entry.get("timestamp")
-                    if ts:
-                        if first_ts is None:
-                            first_ts = ts
-                        last_ts = ts
-                except json.JSONDecodeError:
-                    pass
-    except OSError:
-        pass
-    return first_ts, last_ts
-
-
-def get_projects(projects_dir: Path) -> list[dict[str, Any]]:
-    """Return list of {projectDir, sessions} for all projects."""
-    result = []
-    if not projects_dir.is_dir():
-        return result
-    for project_path in sorted(projects_dir.iterdir()):
-        if not project_path.is_dir():
-            continue
-        session_infos = []
-        for p in project_path.glob("*.jsonl"):
-            if not re.fullmatch(r"[0-9a-f-]{36}", p.stem):
-                continue
-            first_ts, last_ts = _session_timestamps(p)
-            session_infos.append({
-                "id": p.stem,
-                "firstTimestamp": first_ts,
-                "lastTimestamp": last_ts,
-            })
-        session_infos.sort(key=lambda s: s["lastTimestamp"] or "", reverse=True)
-        if session_infos:
-            result.append({
-                "projectDir": project_path.name,
-                "sessions": session_infos,
-            })
-    return result
-
-
-def get_session(session_id: str, projects_dir: Path) -> dict[str, Any] | None:
-    """Find session by ID across all project dirs. Returns None if not found."""
-    if not projects_dir.is_dir():
-        return None
-    for project_path in projects_dir.iterdir():
-        if not project_path.is_dir():
-            continue
-        jsonl_path = project_path / f"{session_id}.jsonl"
-        if jsonl_path.exists():
-            main_entries = _read_jsonl(jsonl_path)
-            session_dir = project_path / session_id
-            subagents = _load_subagents(session_dir)
-            return {
-                "sessionId": session_id,
-                "projectDir": project_path.name,
-                "main": main_entries,
-                "subagents": subagents,
-            }
-    return None
-
-
 def get_message_http(
     session_id: str,
     message_id: str,
     projects_dir: Path,
     logs_dir: Path,
 ) -> list[dict[str, Any]] | None:
-    """Find HTTP records matching an assistant message ID (msg_bdrk_xxx).
-
-    message_id is the assistant entry's message.id field.
-    Matches by response_json.message.id in parsed JSONL files.
-
-    Returns a list of matching parsed records, or None if session not found.
-    Returns [] if no matching records found.
-    """
-    # Verify the session exists
+    """Find HTTP records matching an assistant message ID (msg_bdrk_xxx)."""
     session_data = get_session(session_id, projects_dir)
     if session_data is None:
         return None
-
-    # Scan all *_parsed.jsonl files in logs_dir, match by response_json.message.id
     if not logs_dir.is_dir():
         return []
-
     matches = []
     for parsed_path in sorted(logs_dir.glob("*_parsed.jsonl")):
         for record in _read_jsonl(parsed_path):
@@ -158,7 +77,6 @@ def get_message_http(
             rec_msg_id = record.get("response_json", {}).get("message", {}).get("id")
             if rec_msg_id == message_id:
                 matches.append(record)
-
     matches.sort(key=lambda r: r.get("timestamp", ""))
     return matches
 
@@ -168,27 +86,17 @@ def get_message_source(
     message_id: str,
     projects_dir: Path,
 ) -> dict[str, Any] | None:
-    """Find the source (main or subagent) of an assistant message by message.id.
-
-    Returns:
-        {"source": "main"} or {"source": "subagent", "agentId": "..."}
-        None if session not found, {} if message not found in session.
-    """
+    """Find the source (main or subagent) of an assistant message by message.id."""
     session_data = get_session(session_id, projects_dir)
     if session_data is None:
         return None
-
-    # Search main entries
     for entry in session_data.get("main", []):
         if entry.get("type") == "assistant" and entry.get("message", {}).get("id") == message_id:
             return {"source": "main"}
-
-    # Search subagents
     for sa in session_data.get("subagents", []):
         for entry in sa.get("entries", []):
             if entry.get("type") == "assistant" and entry.get("message", {}).get("id") == message_id:
                 return {"source": "subagent", "agentId": sa.get("agentId", "")}
-
     return {}
 
 
@@ -196,35 +104,23 @@ def get_logs(
     logs_dir: Path,
     session_filter: str | None = None,
 ) -> dict[str, Any]:
-    """Return all parsed log records from *_parsed.jsonl files.
-
-    Records are sorted by timestamp descending.
-    Returns {"records": [...], "sessions": [...unique session ids]}.
-    """
+    """Return all parsed log records from *_parsed.jsonl files."""
     if not logs_dir.is_dir():
         return {"records": [], "sessions": []}
-
     all_records: list[dict] = []
     for parsed_path in sorted(logs_dir.glob("*_parsed.jsonl")):
         all_records.extend(_read_jsonl(parsed_path))
-
     sessions = sorted({r.get("claude_session_id", "") for r in all_records if r.get("claude_session_id")})
-
     if session_filter:
         all_records = [r for r in all_records if r.get("claude_session_id") == session_filter]
-
     all_records.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
     return {"records": all_records, "sessions": sessions}
 
 
 def get_req_resp_sessions(logs_dir: Path) -> dict[str, Any]:
-    """Return all session IDs and their available date files under logs_dir.
-
-    Returns {"sessions": [{"id": "<sessionId>", "dates": ["YYYY-MM-DD", ...]}, ...]}.
-    """
+    """Return all session IDs and their available date files under logs_dir."""
     if not logs_dir.is_dir():
         return {"sessions": []}
-
     sessions = []
     for session_dir in sorted(logs_dir.iterdir()):
         if not session_dir.is_dir():
@@ -255,11 +151,7 @@ def _extract_sse_message_id(sse_events: list[str]) -> str | None:
 
 
 def get_req_resp_records(logs_dir: Path, session_id: str, date: str) -> list[dict]:
-    """Return raw records from logs_dir/<session_id>/<date>.jsonl.
-
-    SSE records have _message_id injected from the message_start event.
-    Non-SSE records have _message_id set to None.
-    """
+    """Return raw records from logs_dir/<session_id>/<date>.jsonl."""
     jsonl_path = logs_dir / session_id / f"{date}.jsonl"
     if not jsonl_path.exists():
         return []
@@ -277,10 +169,7 @@ def get_req_resp_records(logs_dir: Path, session_id: str, date: str) -> list[dic
 # ---------------------------------------------------------------------------
 
 def get_recording_status(logs_dir: Path, config_path: Path | None = None) -> dict[str, Any]:
-    """Return recording config and health status for the viewer status panel.
-
-    Never includes API keys, auth values, cookies, or sensitive header values.
-    """
+    """Return recording config and health status for the viewer status panel."""
     try:
         from ccwhat.config import DEFAULT_CONFIG_PATH, load_config
         cfg_path = config_path or DEFAULT_CONFIG_PATH
@@ -288,13 +177,11 @@ def get_recording_status(logs_dir: Path, config_path: Path | None = None) -> dic
     except Exception:
         cfg = None
         cfg_path = None
-
     latest_ts: str | None = None
     if logs_dir.is_dir():
         jsonl_files = sorted(logs_dir.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
         for jf in jsonl_files[:1]:
             latest_ts = jf.stat().st_mtime.__str__()
-
     if cfg is None:
         return {
             "configValid": False,
@@ -307,7 +194,6 @@ def get_recording_status(logs_dir: Path, config_path: Path | None = None) -> dic
             "maxBodyBytes": None,
             "preset": None,
         }
-
     return {
         "configValid": cfg.is_valid_for_recording(),
         "configPath": str(cfg_path),
@@ -330,8 +216,10 @@ def _make_handler(
     logs_dir: Path,
     config_path: Path | None = None,
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
+    adapter: AgentAdapter | None = None,
 ):
     viewer_dir = Path(__file__).parent
+    _adapter = adapter
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:
@@ -379,6 +267,21 @@ def _make_handler(
             self.end_headers()
             self.wfile.write(data)
 
+        def _get_sessions_data(self) -> list[dict[str, Any]]:
+            if _adapter is not None:
+                return _adapter.list_projects()
+            return get_projects(projects_dir)
+
+        def _get_session_data(self, session_id: str) -> dict[str, Any] | None:
+            if _adapter is not None:
+                return _adapter.load_session(session_id)
+            return get_session(session_id, projects_dir)
+
+        def _adapter_agent(self) -> str:
+            if _adapter is not None:
+                return _adapter.name
+            return "claude"
+
         def do_OPTIONS(self) -> None:
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -389,39 +292,32 @@ def _make_handler(
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
-
             if path != "/api/analyze":
                 self._send_json({"ok": False, "error": "not found"}, 404)
                 return
-
             payload = self._read_json_body()
             if payload is None:
                 self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
                 return
-
             session_id = str(payload.get("sessionId", "")).strip()
             if not re.fullmatch(r"[0-9a-f-]{36}", session_id):
                 self._send_json({"ok": False, "error": "invalid session id"}, 400)
                 return
-
-            session = get_session(session_id, projects_dir)
+            session = self._get_session_data(session_id)
             if session is None:
                 self._send_json({"ok": False, "error": "session not found"}, 404)
                 return
-
             from ccwhat.analyzer import (
                 AnalysisError,
                 build_analysis_prompt,
                 run_mc_analysis,
             )
-
             prompt, truncated = build_analysis_prompt(session)
             try:
                 report, elapsed_ms = run_mc_analysis(prompt, cmd=analyzer_cmd)
             except AnalysisError as exc:
                 self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
                 return
-
             self._send_json({
                 "ok": True,
                 "report": report,
@@ -433,7 +329,6 @@ def _make_handler(
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
             query = parsed.query
-
             _static: dict[str, str] = {
                 "": "index.html",
                 "/index.html": "index.html",
@@ -443,32 +338,39 @@ def _make_handler(
             if path in _static:
                 self._send_file(viewer_dir / _static[path])
                 return
-
             if path == "/api/recording/status":
                 self._send_json(get_recording_status(logs_dir, config_path))
-
             elif path == "/api/projects":
-                self._send_json(get_projects(projects_dir))
-
+                try:
+                    projects = self._get_sessions_data()
+                    for proj in projects:
+                        proj["agent"] = self._adapter_agent()
+                    self._send_json(projects)
+                except AdapterNotImplementedError as exc:
+                    self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
             elif path.startswith("/api/session/"):
                 session_id = path[len("/api/session/"):]
                 if not re.fullmatch(r"[0-9a-f-]{36}", session_id):
                     self._send_json({"error": "invalid session id"}, 400)
                     return
-                data = get_session(session_id, projects_dir)
-                if data is None:
-                    self._send_json({"error": "session not found"}, 404)
-                else:
-                    self._send_json(data)
-
+                try:
+                    data = self._get_session_data(session_id)
+                    if data is None:
+                        self._send_json({"error": "session not found"}, 404)
+                    else:
+                        data["agent"] = self._adapter_agent()
+                        if "events" not in data:
+                            from ccwhat.adapters.claude import _normalize_event
+                            data["events"] = [_normalize_event(e, session_id) for e in data.get("main", [])]
+                        self._send_json(data)
+                except AdapterNotImplementedError as exc:
+                    self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
             elif path == "/api/logs":
                 from urllib.parse import parse_qs
                 params = parse_qs(query)
                 session_filter = params.get("session", [None])[0]
                 self._send_json(get_logs(logs_dir, session_filter))
-
             elif path.startswith("/api/message-http/"):
-                # /api/message-http/<sessionId>/<messageId>
                 rest = path[len("/api/message-http/"):]
                 parts = rest.split("/", 1)
                 if len(parts) != 2:
@@ -483,9 +385,7 @@ def _make_handler(
                     self._send_json({"error": "message not found"}, 404)
                 else:
                     self._send_json({"records": records})
-
             elif path.startswith("/api/message-source/"):
-                # /api/message-source/<sessionId>/<messageId>
                 rest = path[len("/api/message-source/"):]
                 parts = rest.split("/", 1)
                 if len(parts) != 2:
@@ -500,10 +400,8 @@ def _make_handler(
                     self._send_json({"error": "session not found"}, 404)
                 else:
                     self._send_json(result)
-
             elif path == "/api/req-resp/sessions":
                 self._send_json(get_req_resp_sessions(logs_dir))
-
             elif path == "/api/req-resp/records":
                 from urllib.parse import parse_qs
                 params = parse_qs(query)
@@ -514,7 +412,6 @@ def _make_handler(
                     return
                 records = get_req_resp_records(logs_dir, session_id, date)
                 self._send_json({"records": records})
-
             elif path == "/api/export":
                 from urllib.parse import parse_qs
                 from ccwhat.exporter import build_tar_gz_bytes, default_filename
@@ -551,10 +448,8 @@ def _make_handler(
                     self._send_json({"error": str(exc)}, 404)
                     return
                 self._send_binary(data, "application/gzip", filename)
-
             else:
                 self._send_json({"error": "not found"}, 404)
-
     return Handler
 
 
@@ -572,8 +467,9 @@ def create_server(
     logs_dir: Path,
     config_path: Path | None = None,
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
+    adapter: AgentAdapter | None = None,
 ) -> HTTPServer:
-    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd)
+    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd, adapter=adapter)
     return HTTPServer(("127.0.0.1", port), handler)
 
 
@@ -581,13 +477,21 @@ def open_viewer(port: int) -> None:
     webbrowser.open(viewer_url(port))
 
 
-def run_server(port: int, projects_dir: Path, logs_dir: Path, config_path: Path | None = None) -> None:
-    server = create_server(port, projects_dir, logs_dir, config_path)
+def run_server(
+    port: int,
+    projects_dir: Path,
+    logs_dir: Path,
+    config_path: Path | None = None,
+    adapter: AgentAdapter | None = None,
+) -> None:
+    server = create_server(port, projects_dir, logs_dir, config_path, adapter=adapter)
     url = viewer_url(port)
+    agent_name = adapter.name if adapter is not None else "claude"
     print(f"Viewer API listening on http://127.0.0.1:{port}")
-    print(f"Projects dir : {projects_dir.resolve()}")
-    print(f"Logs dir     : {logs_dir.resolve()}")
-    print(f"Open viewer  : {url}")
+    print(f"Agent         : {agent_name}")
+    print(f"Projects dir  : {projects_dir.resolve()}")
+    print(f"Logs dir      : {logs_dir.resolve()}")
+    print(f"Open viewer   : {url}")
     print("Press Ctrl+C to stop.\n")
     open_viewer(port)
     try:
@@ -602,17 +506,9 @@ def run_server(port: int, projects_dir: Path, logs_dir: Path, config_path: Path 
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Claude Code session viewer API server")
+    parser = argparse.ArgumentParser(description="Agent session viewer API server")
     parser.add_argument("--port", type=int, default=7789)
-    parser.add_argument(
-        "--projects-dir",
-        type=Path,
-        default=Path.home() / ".claude" / "projects",
-    )
-    parser.add_argument(
-        "--logs-dir",
-        type=Path,
-        default=Path("./logs"),
-    )
+    parser.add_argument("--projects-dir", type=Path, default=Path.home() / ".claude" / "projects")
+    parser.add_argument("--logs-dir", type=Path, default=Path("./logs"))
     args = parser.parse_args()
     run_server(args.port, args.projects_dir, args.logs_dir)
