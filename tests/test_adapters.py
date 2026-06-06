@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
 from ccwhat.adapters.claude import ClaudeAdapter
+from ccwhat.adapters.codex import CodexAdapter
+from ccwhat.adapters.opencode import OpenCodeAdapter
 from ccwhat.adapters.registry import (
     create_adapter,
     infer_agent_from_target,
@@ -143,11 +146,11 @@ class TestIsImplemented(unittest.TestCase):
     def test_claude_implemented(self) -> None:
         self.assertTrue(is_implemented("claude"))
 
-    def test_codex_not_implemented(self) -> None:
-        self.assertFalse(is_implemented("codex"))
+    def test_codex_implemented(self) -> None:
+        self.assertTrue(is_implemented("codex"))
 
-    def test_opencode_not_implemented(self) -> None:
-        self.assertFalse(is_implemented("opencode"))
+    def test_opencode_implemented(self) -> None:
+        self.assertTrue(is_implemented("opencode"))
 
     def test_unknown_not_implemented(self) -> None:
         self.assertFalse(is_implemented("unknown"))
@@ -163,13 +166,23 @@ class TestCreateAdapter(unittest.TestCase):
         adapter = create_adapter("claude-code")
         self.assertIsInstance(adapter, ClaudeAdapter)
 
-    def test_create_codex_raises(self) -> None:
-        with self.assertRaises(AdapterNotImplementedError):
-            create_adapter("codex")
+    def test_create_codex_adapter(self) -> None:
+        adapter = create_adapter("codex")
+        self.assertIsInstance(adapter, CodexAdapter)
+        self.assertEqual(adapter.name, "codex")
 
-    def test_create_opencode_raises(self) -> None:
-        with self.assertRaises(AdapterNotImplementedError):
-            create_adapter("opencode")
+    def test_create_opencode_adapter(self) -> None:
+        adapter = create_adapter("opencode")
+        self.assertIsInstance(adapter, OpenCodeAdapter)
+        self.assertEqual(adapter.name, "opencode")
+
+    def test_create_open_code_alias(self) -> None:
+        adapter = create_adapter("open-code")
+        self.assertIsInstance(adapter, OpenCodeAdapter)
+
+    def test_create_open_code_underscore_alias(self) -> None:
+        adapter = create_adapter("open_code")
+        self.assertIsInstance(adapter, OpenCodeAdapter)
 
     def test_create_unknown_raises(self) -> None:
         with self.assertRaises(AdapterNotImplementedError):
@@ -571,23 +584,27 @@ class TestWebCommandAgentParam(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
             self.assertIn("Viewer", result.output)
 
-    def test_web_with_agent_codex_shows_error(self) -> None:
+    def test_web_with_agent_codex_creates_codex_adapter(self) -> None:
+        from unittest import mock
         from click.testing import CliRunner
         from ccwhat.commands.web_server import web_server
-        runner = CliRunner()
-        result = runner.invoke(web_server, ["--agent", "codex", "--port", "19998"])
-        self.assertEqual(result.exit_code, 1)
-        self.assertIsNotNone(result.exception)
-        self.assertIn("codex", str(result.exception))
+        with mock.patch("ccwhat.commands.web_server._port_in_use", return_value=True), \
+             mock.patch("webbrowser.open"):
+            runner = CliRunner()
+            result = runner.invoke(web_server, ["--agent", "codex", "--port", "19998"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Viewer", result.output)
 
-    def test_web_with_agent_opencode_shows_error(self) -> None:
+    def test_web_with_agent_opencode_creates_opencode_adapter(self) -> None:
+        from unittest import mock
         from click.testing import CliRunner
         from ccwhat.commands.web_server import web_server
-        runner = CliRunner()
-        result = runner.invoke(web_server, ["--agent", "opencode", "--port", "19997"])
-        self.assertEqual(result.exit_code, 1)
-        self.assertIsNotNone(result.exception)
-        self.assertIn("opencode", str(result.exception))
+        with mock.patch("ccwhat.commands.web_server._port_in_use", return_value=True), \
+             mock.patch("webbrowser.open"):
+            runner = CliRunner()
+            result = runner.invoke(web_server, ["--agent", "opencode", "--port", "19997"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Viewer", result.output)
 
     def test_web_with_explicit_projects_dir(self) -> None:
         from unittest import mock
@@ -621,7 +638,7 @@ class TestRunAgentInferenceAndFallback(unittest.TestCase):
             result = runner.invoke(cli, ["--no-setup", "--no-web", "--port", "19995", "--", "claude"])
             self.assertEqual(result.exit_code, 0)
 
-    def test_top_level_passthrough_codex_shows_warning_not_crash(self) -> None:
+    def test_top_level_passthrough_codex_works_no_warning(self) -> None:
         from unittest import mock
         from click.testing import CliRunner
         from ccwhat.cli import cli
@@ -634,10 +651,9 @@ class TestRunAgentInferenceAndFallback(unittest.TestCase):
             runner = CliRunner()
             result = runner.invoke(cli, ["--no-setup", "--no-web", "--port", "19994", "--", "codex"])
             self.assertEqual(result.exit_code, 0)
-            self.assertIn("Warning", result.output)
-            self.assertIn("codex", result.output)
+            self.assertNotIn("Warning", result.output)
 
-    def test_top_level_passthrough_opencode_shows_warning_not_crash(self) -> None:
+    def test_top_level_passthrough_opencode_works_no_warning(self) -> None:
         from unittest import mock
         from click.testing import CliRunner
         from ccwhat.cli import cli
@@ -650,8 +666,7 @@ class TestRunAgentInferenceAndFallback(unittest.TestCase):
             runner = CliRunner()
             result = runner.invoke(cli, ["--no-setup", "--no-web", "--port", "19993", "--", "opencode"])
             self.assertEqual(result.exit_code, 0)
-            self.assertIn("Warning", result.output)
-            self.assertIn("opencode", result.output)
+            self.assertNotIn("Warning", result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -676,3 +691,524 @@ class TestAgentAdapterInterface(unittest.TestCase):
         self.assertTrue(hasattr(adapter, "list_projects"))
         self.assertTrue(hasattr(adapter, "list_sessions"))
         self.assertTrue(hasattr(adapter, "load_session"))
+
+
+# ---------------------------------------------------------------------------
+# CodexAdapter tests
+# ---------------------------------------------------------------------------
+
+class TestCodexAdapter(unittest.TestCase):
+    CODEX_USER = {
+        "type": "response_item",
+        "timestamp": "2025-06-01T10:00:00Z",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Hello codex"}],
+        },
+    }
+
+    CODEX_ASSISTANT = {
+        "type": "response_item",
+        "timestamp": "2025-06-01T10:00:02Z",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Hello! How can I help?"}],
+        },
+    }
+
+    CODEX_FUNC_CALL = {
+        "type": "response_item",
+        "timestamp": "2025-06-01T10:00:03Z",
+        "payload": {
+            "type": "function_call",
+            "name": "bash",
+            "call_id": "call_123",
+            "arguments": json.dumps({"command": "echo hi"}),
+        },
+    }
+
+    CODEX_FUNC_OUTPUT = {
+        "type": "response_item",
+        "timestamp": "2025-06-01T10:00:04Z",
+        "payload": {
+            "type": "function_call_output",
+            "call_id": "call_123",
+            "output": "hi\n",
+        },
+    }
+
+    CODEX_REASONING = {
+        "type": "response_item",
+        "timestamp": "2025-06-01T10:00:01Z",
+        "payload": {
+            "type": "reasoning",
+            "summary": ["thinking about the problem"],
+        },
+    }
+
+    CODEX_EVENT_USER_MSG = {
+        "type": "event_msg",
+        "timestamp": "2025-06-01T10:00:00Z",
+        "payload": {"type": "user_message", "message": "Hello from event"},
+    }
+
+    CODEX_EVENT_AGENT_MSG = {
+        "type": "event_msg",
+        "timestamp": "2025-06-01T10:00:02Z",
+        "payload": {"type": "agent_message", "message": "Hi from agent", "phase": "reply"},
+    }
+
+    CODEX_TOKEN_COUNT = {
+        "type": "event_msg",
+        "timestamp": "2025-06-01T10:00:05Z",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "total_token_usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cached_input_tokens": 30,
+                }
+            },
+        },
+    }
+
+    CODEX_TURN_CONTEXT = {
+        "type": "turn_context",
+        "timestamp": "2025-06-01T10:00:00Z",
+        "payload": {"cwd": "/home/user/project", "model": "claude-sonnet-4-20250514"},
+    }
+
+    CODEX_SESSION_META = {
+        "type": "session_meta",
+        "timestamp": "2025-06-01T09:59:00Z",
+        "payload": {"id": "session-uuid", "cwd": "/home/user/project"},
+    }
+
+    def test_list_projects_empty_dir(self) -> None:
+        with TemporaryDirectory() as tmp:
+            adapter = CodexAdapter(Path(tmp))
+            self.assertEqual(adapter.list_projects(), [])
+
+    def test_list_projects_with_session(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "01"
+            session_dir.mkdir(parents=True)
+            fname = "rollout-2025-06-01T10-00-00-019e9837-9271-7192-bfbf-f5b74ebe585c.jsonl"
+            (session_dir / fname).write_text(json.dumps(self.CODEX_USER) + "\n")
+            adapter = CodexAdapter(pd)
+            projects = adapter.list_projects()
+            self.assertEqual(len(projects), 1)
+            self.assertIn("sessions", projects[0])
+
+    def test_list_sessions(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "01"
+            session_dir.mkdir(parents=True)
+            fname = "rollout-2025-06-01T10-00-00-019e9837-9271-7192-bfbf-f5b74ebe585c.jsonl"
+            (session_dir / fname).write_text(json.dumps(self.CODEX_USER) + "\n")
+            adapter = CodexAdapter(pd)
+            sessions = adapter.list_sessions()
+            self.assertEqual(len(sessions), 1)
+            self.assertEqual(sessions[0]["id"], "019e9837-9271-7192-bfbf-f5b74ebe585c")
+
+    def test_load_session_found(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "01"
+            session_dir.mkdir(parents=True)
+            sid = "019e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-01T10-00-00-{sid}.jsonl"
+            (session_dir / fname).write_text(
+                json.dumps(self.CODEX_USER) + "\n" +
+                json.dumps(self.CODEX_ASSISTANT) + "\n"
+            )
+            adapter = CodexAdapter(pd)
+            session = adapter.load_session(sid)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["sessionId"], sid)
+            self.assertEqual(session["agent"], "codex")
+            self.assertIn("events", session)
+            self.assertIn("turns", session)
+            self.assertIn("usage", session)
+            self.assertEqual(session["main"], [])
+            self.assertEqual(session["subagents"], [])
+
+    def test_load_session_not_found(self) -> None:
+        with TemporaryDirectory() as tmp:
+            adapter = CodexAdapter(Path(tmp))
+            self.assertIsNone(adapter.load_session("nonexistent"))
+
+    def test_raw_user_message(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_USER, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "message")
+        self.assertEqual(ev["role"], "user")
+        self.assertIn("Hello codex", ev["content"])
+
+    def test_raw_assistant_message(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_ASSISTANT, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "message")
+        self.assertEqual(ev["role"], "assistant")
+        self.assertIn("Hello! How can I help?", ev["content"])
+
+    def test_raw_function_call(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_FUNC_CALL, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "tool_call")
+        self.assertEqual(ev["toolName"], "bash")
+        self.assertEqual(ev["toolCallId"], "call_123")
+        self.assertIsInstance(ev["content"], dict)
+
+    def test_raw_function_call_output(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_FUNC_OUTPUT, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "tool_result")
+        self.assertEqual(ev["role"], "tool")
+        self.assertEqual(ev["toolCallId"], "call_123")
+
+    def test_raw_reasoning(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_REASONING, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "reasoning")
+        self.assertEqual(ev["role"], "assistant")
+
+    def test_event_user_message(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_EVENT_USER_MSG, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "message")
+        self.assertEqual(ev["role"], "user")
+        self.assertIn("Hello from event", ev["content"])
+
+    def test_event_agent_message(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_EVENT_AGENT_MSG, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "message")
+        self.assertEqual(ev["role"], "assistant")
+        self.assertIn("Hi from agent", ev["content"])
+
+    def test_token_count_event(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_TOKEN_COUNT, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "metadata")
+        self.assertEqual(ev["usage"]["inputTokens"], 100)
+        self.assertEqual(ev["usage"]["outputTokens"], 50)
+        self.assertEqual(ev["usage"]["cachedInputTokens"], 30)
+
+    def test_turn_context_event(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_TURN_CONTEXT, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "metadata")
+
+    def test_session_meta_event(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_SESSION_META, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "metadata")
+
+    def test_events_have_required_fields(self) -> None:
+        events = CodexAdapter().raw_to_normalized_events(self.CODEX_USER, "sid")
+        ev = events[0]
+        for key in ("id", "agent", "sessionId", "turnId", "timestamp", "role", "kind",
+                     "content", "summary", "toolName", "toolCallId", "parentId", "usage", "raw"):
+            self.assertIn(key, ev)
+
+    def test_adapter_implements_interface(self) -> None:
+        adapter = CodexAdapter()
+        for attr in ("name", "default_projects_dir", "list_projects", "list_sessions", "load_session"):
+            self.assertTrue(hasattr(adapter, attr))
+        self.assertEqual(adapter.name, "codex")
+
+
+# ---------------------------------------------------------------------------
+# OpenCodeAdapter tests
+# ---------------------------------------------------------------------------
+
+class TestOpenCodeAdapter(unittest.TestCase):
+    def _create_db(self, tmp: str) -> Path:
+        db_path = Path(tmp) / "opencode.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "CREATE TABLE session ("
+            "id TEXT PRIMARY KEY, project_id TEXT, directory TEXT, title TEXT, "
+            "agent TEXT, model TEXT, time_created INTEGER, time_updated INTEGER, "
+            "tokens_input INTEGER DEFAULT 0, tokens_output INTEGER DEFAULT 0, "
+            "tokens_reasoning INTEGER DEFAULT 0, "
+            "tokens_cache_read INTEGER DEFAULT 0, tokens_cache_write INTEGER DEFAULT 0, "
+            "cost REAL DEFAULT 0"
+            ")"
+        )
+        conn.execute(
+            "CREATE TABLE message ("
+            "id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, "
+            "time_updated INTEGER, data TEXT"
+            ")"
+        )
+        conn.execute(
+            "CREATE TABLE part ("
+            "id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, "
+            "time_created INTEGER, time_updated INTEGER, data TEXT"
+            ")"
+        )
+        conn.execute(
+            "CREATE TABLE project ("
+            "id TEXT PRIMARY KEY, worktree TEXT, name TEXT, time_created INTEGER, "
+            "time_updated INTEGER, sandboxes TEXT"
+            ")"
+        )
+        conn.execute(
+            "CREATE TABLE session_message ("
+            "id TEXT PRIMARY KEY, session_id TEXT, type TEXT, time_created INTEGER, "
+            "time_updated INTEGER, data TEXT, seq INTEGER"
+            ")"
+        )
+        conn.commit()
+        conn.close()
+        return db_path
+
+    def _insert_session(
+        self, db: Path, sid: str, project_id: str = "p1", directory: str = "/tmp/test",
+        title: str = "Test Session", agent: str = "opencode",
+        model: str = '{"id":"gpt-4","providerID":"openai"}',
+        tokens_input: int = 1000, tokens_output: int = 500,
+        tokens_reasoning: int = 0, tokens_cache_read: int = 0,
+    ) -> None:
+        conn = sqlite3.connect(str(db))
+        conn.execute(
+            "INSERT INTO session (id, project_id, directory, title, agent, model, "
+            "time_created, time_updated, tokens_input, tokens_output, "
+            "tokens_reasoning, tokens_cache_read) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1000000, 1000100, ?, ?, ?, ?)",
+            (sid, project_id, directory, title, agent, model,
+             tokens_input, tokens_output, tokens_reasoning, tokens_cache_read),
+        )
+        conn.commit()
+        conn.close()
+
+    def _insert_message(
+        self, db: Path, mid: str, sid: str, role: str,
+        time_created: int, data: dict | None = None,
+    ) -> None:
+        conn = sqlite3.connect(str(db))
+        if data is None:
+            data = {"role": role}
+        conn.execute(
+            "INSERT INTO message (id, session_id, time_created, time_updated, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (mid, sid, time_created, time_created, json.dumps(data)),
+        )
+        conn.commit()
+        conn.close()
+
+    def _insert_part(
+        self, db: Path, pid: str, mid: str, sid: str, ptype: str,
+        text: str = "", time_created: int = 1000050, extra: dict | None = None,
+    ) -> None:
+        conn = sqlite3.connect(str(db))
+        data: dict = {"type": ptype}
+        if text:
+            data["text"] = text
+        if extra:
+            data.update(extra)
+        conn.execute(
+            "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (pid, mid, sid, time_created, time_created, json.dumps(data)),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_list_projects_empty_db(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            adapter = OpenCodeAdapter(db)
+            self.assertEqual(adapter.list_projects(), [])
+
+    def test_list_projects_with_session(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            self._insert_session(db, "ses_test123", directory="/tmp/test")
+            adapter = OpenCodeAdapter(db)
+            projects = adapter.list_projects()
+            self.assertGreater(len(projects), 0)
+
+    def test_list_sessions(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            self._insert_session(db, "ses_test123", directory="/tmp/test", tokens_input=500, tokens_output=100)
+            adapter = OpenCodeAdapter(db)
+            sessions = adapter.list_sessions()
+            self.assertEqual(len(sessions), 1)
+            self.assertEqual(sessions[0]["id"], "ses_test123")
+            self.assertEqual(sessions[0]["tokensInput"], 500)
+
+    def test_load_session_not_found(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            adapter = OpenCodeAdapter(db)
+            self.assertIsNone(adapter.load_session("nonexistent"))
+
+    def test_load_session_with_user_and_assistant(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_test123"
+            self._insert_session(db, sid, directory="/tmp/test", agent="build")
+
+            mid_user = "msg_user_1"
+            mid_assistant = "msg_asst_1"
+            user_data = {"role": "user"}
+            asst_data = {"role": "assistant", "tokens": {"total": 600, "input": 500, "output": 100}}
+            self._insert_message(db, mid_user, sid, "user", 1000000, user_data)
+            self._insert_message(db, mid_assistant, sid, "assistant", 1000050, asst_data)
+
+            self._insert_part(db, "prt_u1", mid_user, sid, "text", "Hello from user")
+            self._insert_part(db, "prt_a1", mid_assistant, sid, "text", "Hello from assistant")
+
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["sessionId"], sid)
+            self.assertEqual(session["agent"], "build")
+            self.assertIn("events", session)
+            self.assertIn("turns", session)
+            self.assertIn("usage", session)
+            self.assertGreater(len(session["events"]), 0)
+            self.assertEqual(session["main"], [])
+            self.assertEqual(session["subagents"], [])
+
+    def test_load_session_with_tool_parts(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_tool_test"
+            mid = "msg_asst_tool"
+            self._insert_session(db, sid)
+            asst_data = {"role": "assistant"}
+            self._insert_message(db, mid, sid, "assistant", 1000050, asst_data)
+
+            self._insert_part(db, "prt_t1", mid, sid, "tool", time_created=1000051, extra={
+                "tool": "bash",
+                "callID": "call_bash_1",
+                "state": {
+                    "status": "completed",
+                    "input": {"command": "echo hello"},
+                    "output": "hello\n",
+                },
+            })
+            self._insert_part(db, "prt_r1", mid, sid, "reasoning", time_created=1000052,
+                              text="thinking step")
+
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            self.assertIsNotNone(session)
+            kinds = [e["kind"] for e in session["events"]]
+            self.assertIn("tool_call", kinds)
+            self.assertIn("reasoning", kinds)
+
+    def test_raw_to_normalized_events_user_text(self) -> None:
+        entry = {
+            "time_created": 1000000,
+            "message_id": "msg_1",
+            "message_data": {"role": "user"},
+            "parts": [{"data": {"type": "text", "text": "Hello"}}],
+        }
+        events = OpenCodeAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["role"], "user")
+        self.assertEqual(events[0]["kind"], "message")
+        self.assertEqual(events[0]["content"], "Hello")
+
+    def test_raw_to_normalized_events_assistant_text(self) -> None:
+        entry = {
+            "time_created": 1000050,
+            "message_id": "msg_2",
+            "message_data": {"role": "assistant"},
+            "parts": [{"data": {"type": "text", "text": "Hi there"}}],
+        }
+        events = OpenCodeAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["role"], "assistant")
+        self.assertEqual(events[0]["kind"], "message")
+        self.assertEqual(events[0]["content"], "Hi there")
+
+    def test_raw_to_normalized_events_tool(self) -> None:
+        entry = {
+            "time_created": 1000050,
+            "message_id": "msg_3",
+            "message_data": {"role": "assistant"},
+            "parts": [{
+                "data": {
+                    "type": "tool",
+                    "tool": "bash",
+                    "callID": "call_1",
+                    "state": {
+                        "status": "completed",
+                        "input": {"command": "ls"},
+                        "output": "file.txt\n",
+                    },
+                },
+            }],
+        }
+        events = OpenCodeAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["kind"], "tool_call")
+        self.assertEqual(events[0]["toolName"], "bash")
+        self.assertEqual(events[1]["kind"], "tool_result")
+        self.assertEqual(events[1]["role"], "tool")
+
+    def test_raw_to_normalized_events_reasoning(self) -> None:
+        entry = {
+            "time_created": 1000040,
+            "message_id": "msg_4",
+            "message_data": {"role": "assistant"},
+            "parts": [{"data": {"type": "reasoning", "text": "thinking..."}}],
+        }
+        events = OpenCodeAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["kind"], "reasoning")
+
+    def test_raw_to_normalized_events_step(self) -> None:
+        entry = {
+            "time_created": 1000045,
+            "message_id": "msg_5",
+            "message_data": {"role": "assistant"},
+            "parts": [{"data": {"type": "step-start"}}],
+        }
+        events = OpenCodeAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["kind"], "step")
+
+    def test_session_usage_from_db(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_usage1"
+            self._insert_session(db, sid, tokens_input=1500, tokens_output=300,
+                                 tokens_reasoning=50, tokens_cache_read=200)
+            self._insert_message(db, "msg_1", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_1", "msg_1", sid, "text", "hello")
+
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            self.assertEqual(session["usage"]["inputTokens"], 1500)
+            self.assertEqual(session["usage"]["outputTokens"], 300)
+            self.assertEqual(session["usage"]["reasoningTokens"], 50)
+            self.assertEqual(session["usage"]["cacheReadTokens"], 200)
+
+    def test_adapter_implements_interface(self) -> None:
+        adapter = OpenCodeAdapter()
+        for attr in ("name", "default_projects_dir", "list_projects", "list_sessions", "load_session"):
+            self.assertTrue(hasattr(adapter, attr))
+        self.assertEqual(adapter.name, "opencode")

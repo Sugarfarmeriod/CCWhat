@@ -811,6 +811,59 @@ function onProjectChange(restoreSession) {
   }
 }
 
+// ── Convert normalized events to Claude-style entries ────────────────────
+function eventsToEntries(events) {
+  const entries = [];
+  for (const ev of events || []) {
+    const role = ev.role;
+    const kind = ev.kind;
+    if (!role || kind === 'metadata' || kind === 'step' || kind === 'unknown') continue;
+    if (kind === 'reasoning') continue;
+    if (role === 'user' && kind === 'message') {
+      entries.push({
+        type: 'user',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        message: { content: [{ type: 'text', text: ev.content || '' }] },
+      });
+    } else if (role === 'assistant' && kind === 'message') {
+      const msg = { content: [{ type: 'text', text: ev.content || '' }] };
+      if (ev.usage && (ev.usage.inputTokens || ev.usage.outputTokens)) {
+        msg.usage = { input_tokens: ev.usage.inputTokens, output_tokens: ev.usage.outputTokens };
+      }
+      entries.push({
+        type: 'assistant',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        message: msg,
+      });
+    } else if (role === 'assistant' && kind === 'tool_call') {
+      entries.push({
+        type: 'assistant',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        message: { content: [{ type: 'tool_use', name: ev.toolName, input: ev.content || {} }] },
+      });
+    } else if (role === 'tool' && kind === 'tool_result') {
+      entries.push({
+        type: 'user',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        message: { content: [{ type: 'tool_result', tool_use_id: ev.toolCallId, content: ev.content || '' }] },
+      });
+    }
+  }
+  return entries;
+}
+
 // ── Load session entries ─────────────────────────────────────────────────
 async function loadSession() {
   const sessionId = document.getElementById('sessionSel').value;
@@ -825,14 +878,20 @@ async function loadSession() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
-    // Build groups: main + each subagent
+    // Build groups: main + each subagent (or events for non-Claude)
     groups = [];
     allEntries = [];
 
-    // Main session group
-    const mainEntries = (data.main || [])
+    let mainEntries = (data.main || [])
       .slice().sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
-    const mainGroup = { id: 'main', label: '🤖 Main Session', desc: data.sessionId?.slice(0,8) || '', entries: [] };
+
+    // If no main entries but events exist, convert events to entries
+    if (mainEntries.length === 0 && data.events && data.events.length > 0) {
+      mainEntries = eventsToEntries(data.events);
+    }
+
+    const agentLabel = data.agent && data.agent !== 'claude' ? data.agent : 'Main Session';
+    const mainGroup = { id: 'main', label: `🤖 ${agentLabel}`, desc: data.sessionId?.slice(0,8) || '', entries: [] };
     for (const e of mainEntries) {
       const idx = allEntries.length;
       const tagged = { ...e, _source: 'main', _gid: 'main', _idx: idx };
@@ -841,12 +900,12 @@ async function loadSession() {
     }
     groups.push(mainGroup);
 
-    // Subagent groups
+    // Subagent groups (only for Claude)
     for (const sa of data.subagents || []) {
       const gid = `sa-${sa.agentId}`;
       const saEntries = (sa.entries || [])
         .slice().sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
-      groupCollapsed[gid] = true;  // subagents collapsed by default
+      groupCollapsed[gid] = true;
       const saGroup = {
         id: gid,
         label: sa.meta?.description ? `🔧 ${trunc(sa.meta.description, 28)}` : `🔧 agent-${sa.agentId.slice(0,8)}`,

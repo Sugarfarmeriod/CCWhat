@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Adapter 接口
-系统必须提供多 Coding Agent 日志 adapter 接口，用于统一描述 agent 名称、默认项目目录、项目列表、session 列表、session 读取、原始事件转换和 normalized event/turn 输出入口。
+系统 MUST 提供多 Coding Agent 日志 adapter 接口，用于统一描述 agent 名称、默认项目目录、项目列表、session 列表、session 读取、原始事件转换和 normalized event/turn 输出入口。
 
 #### Scenario: Adapter 暴露统一能力
 - **WHEN** 后端需要读取某个 agent 的历史会话
@@ -16,7 +16,7 @@
 - **THEN** 系统必须在 session 数据中提供 `events` 字段，用于承载通用 Agent Log 展示模型
 
 ### Requirement: Claude Code Adapter
-系统必须实现 Claude Code adapter，并保持现有 Claude Code 会话展示能力不回退。
+系统 MUST 实现 Claude Code adapter，并保持现有 Claude Code 会话展示能力不回退。
 
 #### Scenario: 列出 Claude 项目和会话
 - **WHEN** Claude Code projects 目录中存在项目子目录和 UUID 命名的 `.jsonl` session 文件
@@ -39,7 +39,7 @@
 - **THEN** Claude adapter 必须跳过该行并继续读取其他合法行，不得导致整个 session 读取失败
 
 ### Requirement: Normalized Event 和 Turn 模型
-系统必须为 Agent Log 页面定义轻量 normalized event/turn 模型，用于后续统一展示 Claude、Codex 和 OpenCode 的本地会话日志。
+系统 MUST 为 Agent Log 页面定义轻量 normalized event/turn 模型，用于后续统一展示 Claude、Codex 和 OpenCode 的本地会话日志。
 
 #### Scenario: Event 表示原子记录
 - **WHEN** adapter 清洗用户消息、assistant 消息、工具调用、工具结果、reasoning、metadata 或 error
@@ -54,7 +54,7 @@
 - **THEN** 系统不得把 Codex 或 OpenCode 原始记录伪装成 Claude 的 `message.content` 结构，必须通过 `events` 和 `turns` 表达通用展示数据
 
 ### Requirement: Usage 字段
-系统必须使用 CCWhat 通用 usage 字段表达 token 和 cache 计数，并标注字段来源和粒度。
+系统 MUST 使用 CCWhat 通用 usage 字段表达 token 和 cache 计数，并标注字段来源和粒度。
 
 #### Scenario: 本地日志 usage 映射
 - **WHEN** 本地 agent 日志或数据库提供 token/cache 计数
@@ -81,7 +81,7 @@
 - **THEN** 系统不得默认展示 `cacheHitRate`，应只展示 cache token 计数
 
 ### Requirement: Agent Registry
-系统必须提供 agent registry，用于规范化 agent 名称并选择对应 adapter。
+系统 MUST 提供 agent registry，用于规范化 agent 名称并选择对应 adapter。
 
 #### Scenario: 选择 Claude adapter
 - **WHEN** 用户指定 `claude` 或 `claude-code`
@@ -100,7 +100,7 @@
 - **THEN** registry 必须返回清晰错误，说明该 agent 不受支持
 
 ### Requirement: Web 命令 Agent 参数
-系统必须让 `ccwhat web` 支持按 agent 选择 viewer 日志 adapter，并保留显式项目目录覆盖能力。
+系统 MUST 让 `ccwhat web` 支持按 agent 选择 viewer 日志 adapter，并保留显式项目目录覆盖能力。
 
 #### Scenario: 使用 Claude agent 默认目录
 - **WHEN** 用户运行 `ccwhat web --agent claude` 且未传入 `--projects-dir`
@@ -115,7 +115,7 @@
 - **THEN** 系统必须给出清晰错误提示，说明该 agent 的日志 adapter 尚未实现
 
 ### Requirement: Run 模式 Agent 推断
-系统必须在 `ccwhat -- <target>` 启动模式下根据目标命令推断 agent 类型，并把该类型传给 viewer 后端。
+系统 MUST 在 `ccwhat -- <target>` 启动模式下根据目标命令推断 agent 类型，并把该类型传给 viewer 后端。
 
 #### Scenario: 推断 Claude
 - **WHEN** 用户运行 `ccwhat -- claude` 或 `ccwhat -- claude-code`
@@ -134,7 +134,7 @@
 - **THEN** 系统必须避免因 viewer adapter 未实现而使目标命令崩溃，并必须输出清晰 warning 或 fallback 提示
 
 ### Requirement: Viewer API 兼容性
-系统必须通过 adapter 改造 viewer API，同时保持现有前端所需字段兼容。
+系统 MUST 通过 adapter 改造 viewer API，同时保持现有前端所需字段兼容。
 
 #### Scenario: Projects API 返回 agent
 - **WHEN** 前端请求 `/api/projects`
@@ -149,7 +149,7 @@
 - **THEN** API 必须返回明确错误，前端必须能展示该错误
 
 ### Requirement: 前端最小改动
-系统必须在 viewer 页面展示当前 agent 类型和 adapter 错误状态，同时保持现有 session 展示、搜索、导出和分析入口尽量不变。
+系统 MUST 在 viewer 页面展示当前 agent 类型和 adapter 错误状态，同时保持现有 session 展示、搜索、导出和分析入口尽量不变。
 
 #### Scenario: 展示当前 agent
 - **WHEN** viewer 成功加载项目或 session 数据
@@ -164,7 +164,7 @@
 - **THEN** 系统必须保持 Agent Log 页面和 Req/Resp 页面独立，不得把两个页面融合成一个页面
 
 ### Requirement: 回归测试
-系统必须补充测试覆盖多 agent adapter 架构，并保证既有导出导入能力不被破坏。
+系统 MUST 补充测试覆盖多 agent adapter 架构，并保证既有导出导入能力不被破坏。
 
 #### Scenario: Adapter 测试覆盖 Claude
 - **WHEN** 测试使用临时 Claude projects 目录和 session 文件
