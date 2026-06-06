@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import socket
 import subprocess
@@ -191,6 +192,27 @@ def _stop_managed_web(server: HTTPServer | None) -> None:
     server.server_close()
 
 
+_KNOWN_BINARY_PATHS: dict[str, str] = {
+    "codex": "/Applications/Codex.app/Contents/Resources/codex",
+    "opencode": "/Applications/OpenCode.app/Contents/MacOS/opencode",
+}
+
+
+def _resolve_target_binary(target_args: tuple[str, ...]) -> tuple[str, ...]:
+    """Resolve the first argument to an absolute path if it's a known agent binary.
+
+    Falls back to PATH lookup; returns target_args unchanged if nothing is found.
+    """
+    if not target_args:
+        return target_args
+    name = target_args[0].lower()
+    if shutil.which(name) is not None:
+        return target_args  # already in PATH
+    if name in _KNOWN_BINARY_PATHS and os.path.isfile(_KNOWN_BINARY_PATHS[name]):
+        return (os.path.abspath(_KNOWN_BINARY_PATHS[name]),) + target_args[1:]
+    return target_args
+
+
 @click.command(
     "run",
     hidden=True,
@@ -320,7 +342,10 @@ def run(
     exit_code = 1
 
     try:
-        target_proc = subprocess.Popen(list(target_args), env=child_env)
+        resolved = _resolve_target_binary(target_args)
+        if resolved != target_args:
+            click.echo(f"Resolved {target_args[0]} → {resolved[0]}")
+        target_proc = subprocess.Popen(list(resolved), env=child_env)
         exit_code = target_proc.wait()
     except FileNotFoundError:
         click.echo(f"Error: command not found: {target_args[0]}", err=True)
