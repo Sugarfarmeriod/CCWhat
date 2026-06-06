@@ -32,9 +32,6 @@ deep-ai-analysis-imports/
 # notebook scratch files
 *.ipynb
 
-# openspec — local design/spec tooling, not part of the public release
-openspec/
-
 # legacy package (superseded by ccwhat/; remove from tracking with:
 #   git rm -r --cached deep_ai_analysis/ deep_ai_analysis.egg-info/ dist/ sample_data/
 deep_ai_analysis/
