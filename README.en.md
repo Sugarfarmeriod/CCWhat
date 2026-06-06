@@ -2,6 +2,8 @@
 
 [中文](README.md) | English
 
+Current version: `v0.2.0` · [Changelog](CHANGELOG.md)
+
 **Your AI being sneaky again? See see what it's actually doing.**
 
 ---
