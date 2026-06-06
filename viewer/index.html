@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Code Session Viewer</title>
+<title>Session Viewer</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -298,7 +298,7 @@
 
 <!-- Top bar -->
 <div class="topbar">
-  <h1>Claude Session Viewer</h1>
+  <h1>Session Viewer <span id="agentBadge" style="font-size:12px;color:#8b949e;font-weight:normal;margin-left:6px">claude</span></h1>
   <div class="adv-wrap" id="advWrap">
     <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
     <div class="adv-panel" id="advPanel">
@@ -439,6 +439,12 @@ async function fetchProjects() {
     const resp = await fetch(`${apiBase()}/api/projects`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     allProjects = await resp.json();
+    const agentBadge = document.getElementById('agentBadge');
+    if (allProjects.length > 0 && allProjects[0].agent) {
+      agentBadge.textContent = allProjects[0].agent;
+    } else {
+      agentBadge.textContent = 'claude';
+    }
     const sel = document.getElementById('projectSel');
     sel.innerHTML = '<option value="">— select project —</option>';
     for (const p of allProjects) {
@@ -449,6 +455,7 @@ async function fetchProjects() {
     }
   } catch (e) {
     setStats(`<span class="error-msg">Cannot reach API: ${escHtml(e.message)}. Is the server running?</span>`);
+    document.getElementById('agentBadge').textContent = '?';
   }
 }
 

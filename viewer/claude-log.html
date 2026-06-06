@@ -363,7 +363,7 @@
 <body>
 
 <div class="topbar">
-  <h1>Claude Log</h1>
+  <h1>Session Log <span class="agent-badge" id="agentBadge">claude</span></h1>
   <div class="adv-wrap" id="advWrap">
     <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
     <div class="adv-panel" id="advPanel">
@@ -744,6 +744,14 @@ async function init() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     allProjects = await resp.json();
 
+    // Show agent from first project
+    const agentBadge = document.getElementById('agentBadge');
+    if (allProjects.length > 0 && allProjects[0].agent) {
+      agentBadge.textContent = allProjects[0].agent;
+    } else {
+      agentBadge.textContent = 'claude';
+    }
+
     const sel = document.getElementById('projectSel');
     const curProject = sel.value;
     const curSession = document.getElementById('sessionSel').value;
@@ -765,6 +773,7 @@ async function init() {
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">连接失败: ${esc(e.message)}</div>`;
+    document.getElementById('agentBadge').textContent = '?';
   }
 }
 

@@ -13,6 +13,7 @@ from http.server import HTTPServer
 
 import click
 
+from ccwhat.adapters.registry import create_adapter, infer_agent_from_target, is_implemented
 from ccwhat.config import (
     DEFAULT_RAW_LOG_DIR,
     generate_local_session_id,
@@ -157,6 +158,7 @@ def _start_managed_web(
     req_resp_dir: Path,
     config_path: Path | None,
     analyzer_cmd: tuple[str, ...],
+    agent_name: str = "claude",
 ) -> HTTPServer | None:
     from viewer.server import create_server, open_viewer, viewer_url
 
@@ -166,9 +168,10 @@ def _start_managed_web(
         open_viewer(port)
         return None
 
-    projects_dir = Path.home() / ".claude" / "projects"
+    adapter = create_adapter(agent_name)
+    projects_dir = adapter.default_projects_dir()
     try:
-        server = create_server(port, projects_dir, req_resp_dir, config_path, analyzer_cmd)
+        server = create_server(port, projects_dir, req_resp_dir, config_path, analyzer_cmd, adapter=adapter)
     except OSError:
         click.echo(f"Viewer may already be running: {url}")
         open_viewer(port)
@@ -282,6 +285,16 @@ def run(
     proxy_proc: subprocess.Popen | None = None
     web_server: HTTPServer | None = None
 
+    agent_name = infer_agent_from_target(target_args)
+    if not is_implemented(agent_name):
+        click.echo(
+            f"Warning: No log adapter available for '{target_args[0]}' (agent: {agent_name}). "
+            f"The viewer will show Claude Code logs as a fallback.\n"
+            f"Only Claude Code is supported for log viewing in this version.",
+            err=True,
+        )
+        agent_name = "claude"
+
     if _proxy_is_running(port):
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")
     else:
@@ -301,7 +314,7 @@ def run(
             sys.exit(1)
 
     if web:
-        web_server = _start_managed_web(web_port, output, config_path, target_args)
+        web_server = _start_managed_web(web_port, output, config_path, target_args, agent_name=agent_name)
 
     # Build child environment
     ca_cert = Path.home() / ".mitmproxy" / "mitmproxy-ca-cert.pem"
