@@ -86,6 +86,17 @@ def _extract_session_id(filename: str) -> str | None:
     return None
 
 
+def _safe_parse_json(val: Any) -> Any:
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            return val
+    return val
+
+
 def _cwd_from_entries(entries: list[dict]) -> str | None:
     for entry in entries:
         if entry.get("type") == "turn_context":
@@ -102,15 +113,6 @@ def _cwd_from_entries(entries: list[dict]) -> str | None:
                         m = re.search(r"<cwd>([^<]+)</cwd>", text)
                         if m:
                             return m.group(1).strip()
-    return None
-
-
-def _session_title_from_meta(entries: list[dict]) -> str | None:
-    for entry in entries:
-        if entry.get("type") == "event_msg":
-            p = entry.get("payload", {})
-            if p.get("type") == "task_started":
-                return None
     return None
 
 
@@ -182,7 +184,33 @@ class CodexAdapter(AgentAdapter):
         self._sqlite_cache = result
         return result
 
-    def _scan_rollout_files(self) -> list[tuple[Path, str, str]]:
+    def _cwd_from_file(self, path: Path) -> str | None:
+        entries = _read_jsonl(path)
+        return _cwd_from_entries(entries)
+
+    def _lookup_sqlite_cwd(self, sid: str) -> str | None:
+        meta = self._load_sqlite_metadata().get(sid, {})
+        return meta.get("cwd")
+
+    def _session_project_dir(self, path: Path, sid: str) -> str:
+        cwd = self._cwd_from_file(path)
+        if cwd:
+            return cwd
+        sqlite_cwd = self._lookup_sqlite_cwd(sid)
+        if sqlite_cwd:
+            return sqlite_cwd
+        pd = self.projects_dir
+        if pd.is_dir():
+            try:
+                rel = path.relative_to(pd)
+                return str(rel.parent)
+            except ValueError:
+                pass
+        return str(path.parent)
+
+    def _scan_rollout_files(
+        self,
+    ) -> list[tuple[Path, str, str]]:
         results: list[tuple[Path, str, str]] = []
         pd = self.projects_dir
         if not pd.is_dir():
@@ -203,8 +231,7 @@ class CodexAdapter(AgentAdapter):
                         sid = _extract_session_id(f.name)
                         if sid is None:
                             continue
-                        rel = f.relative_to(pd)
-                        project_dir = str(rel.parent)
+                        project_dir = self._session_project_dir(f, sid)
                         results.append((f, sid, project_dir))
         return results
 
@@ -303,6 +330,7 @@ class CodexAdapter(AgentAdapter):
                 name = payload.get("name", "")
                 args = payload.get("arguments", "")
                 call_id = payload.get("call_id", "")
+                parsed_args = _safe_parse_json(args)
                 events.append({
                     "id": _make_event_id(),
                     "agent": "codex",
@@ -311,7 +339,7 @@ class CodexAdapter(AgentAdapter):
                     "timestamp": ts,
                     "role": "assistant",
                     "kind": "tool_call",
-                    "content": json.loads(args) if isinstance(args, str) else args,
+                    "content": parsed_args,
                     "summary": f"Tool: {name}",
                     "toolName": name,
                     "toolCallId": call_id,
@@ -495,20 +523,28 @@ class CodexAdapter(AgentAdapter):
             user_summary = ""
             assistant_summary = ""
             turn_usage: dict[str, Any] = {
-                "inputTokens": 0, "outputTokens": 0, "totalTokens": 0,
                 "scope": "turn", "source": "derived", "raw": None,
             }
+            inp_sum: int | None = None
+            outp_sum: int | None = None
             for ev in current_turn:
                 u = ev.get("usage", {})
-                inp = u.get("inputTokens") or 0
-                outp = u.get("outputTokens") or 0
-                turn_usage["inputTokens"] += inp
-                turn_usage["outputTokens"] += outp
+                inp = u.get("inputTokens")
+                outp = u.get("outputTokens")
+                if inp is not None:
+                    inp_sum = (inp_sum or 0) + inp
+                if outp is not None:
+                    outp_sum = (outp_sum or 0) + outp
                 if ev["kind"] == "message" and ev["role"] == "user":
                     user_summary = ev.get("summary", "") or ""
                 elif ev["kind"] == "message" and ev["role"] == "assistant":
                     assistant_summary = ev.get("summary", "") or ""
-            turn_usage["totalTokens"] = turn_usage["inputTokens"] + turn_usage["outputTokens"]
+            if inp_sum is not None:
+                turn_usage["inputTokens"] = inp_sum
+            if outp_sum is not None:
+                turn_usage["outputTokens"] = outp_sum
+            if inp_sum is not None and outp_sum is not None:
+                turn_usage["totalTokens"] = inp_sum + outp_sum
             ended_at = current_turn[-1].get("timestamp") if current_turn else None
             turns.append({
                 "id": turn_id,
@@ -548,20 +584,30 @@ class CodexAdapter(AgentAdapter):
                 turns = self._build_turns(events)
                 sqlite_meta = self._load_sqlite_metadata().get(session_id, {})
                 usage: dict[str, Any] = {
-                    "inputTokens": 0, "outputTokens": 0, "totalTokens": 0,
-                    "scope": "session", "source": "derived", "raw": None,
+                    "scope": "session",
+                    "source": "derived",
+                    "raw": None,
                 }
                 if sqlite_meta.get("tokens_used"):
                     usage["totalTokens"] = sqlite_meta["tokens_used"]
                     usage["source"] = "agent_log"
                 else:
+                    inp_sum: int | None = None
+                    outp_sum: int | None = None
                     for ev in events:
                         u = ev.get("usage", {})
-                        inp = u.get("inputTokens") or 0
-                        outp = u.get("outputTokens") or 0
-                        usage["inputTokens"] += inp
-                        usage["outputTokens"] += outp
-                    usage["totalTokens"] = usage["inputTokens"] + usage["outputTokens"]
+                        inp = u.get("inputTokens")
+                        outp = u.get("outputTokens")
+                        if inp is not None:
+                            inp_sum = (inp_sum or 0) + inp
+                        if outp is not None:
+                            outp_sum = (outp_sum or 0) + outp
+                    if inp_sum is not None:
+                        usage["inputTokens"] = inp_sum
+                    if outp_sum is not None:
+                        usage["outputTokens"] = outp_sum
+                    if inp_sum is not None and outp_sum is not None:
+                        usage["totalTokens"] = inp_sum + outp_sum
                 result: dict[str, Any] = {
                     "sessionId": session_id,
                     "projectDir": project_dir,

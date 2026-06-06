@@ -1212,3 +1212,160 @@ class TestOpenCodeAdapter(unittest.TestCase):
         for attr in ("name", "default_projects_dir", "list_projects", "list_sessions", "load_session"):
             self.assertTrue(hasattr(adapter, attr))
         self.assertEqual(adapter.name, "opencode")
+
+    def test_list_projects_returns_sessions(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_proj1"
+            self._insert_session(db, sid, directory="/tmp/testproj", title="Test Project Session")
+            self._insert_message(db, "msg_p1", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_p1", "msg_p1", sid, "text", "hello")
+            adapter = OpenCodeAdapter(db)
+            projects = adapter.list_projects()
+            self.assertGreater(len(projects), 0)
+            for proj in projects:
+                for s in proj.get("sessions", []):
+                    self.assertIn("id", s)
+                    self.assertIn("title", s)
+                    self.assertIn("agent", s)
+                    self.assertIn("firstTimestamp", s)
+                    self.assertIn("lastTimestamp", s)
+                    self.assertIn("tokensInput", s)
+                    self.assertIn("tokensOutput", s)
+
+    def test_no_usage_does_not_fake_zero_session(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_no_usage"
+            self._insert_session(db, sid, directory="/tmp/nousage", tokens_input=0, tokens_output=0)
+            self._insert_message(db, "msg_nu1", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_nu1", "msg_nu1", sid, "text", "hello")
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            usage = session["usage"]
+            self.assertNotIn("inputTokens", usage)
+            self.assertNotIn("outputTokens", usage)
+            self.assertNotIn("totalTokens", usage)
+
+    def test_no_cache_hit_rate_opencode(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_nocache_op"
+            self._insert_session(db, sid, tokens_input=500, tokens_output=100)
+            self._insert_message(db, "msg_nc1", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_nc1", "msg_nc1", sid, "text", "hello")
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            self.assertNotIn("cacheHitRate", session["usage"])
+
+    def test_function_call_bad_json_doesnt_crash(self) -> None:
+        bad_json = {
+            "type": "response_item",
+            "timestamp": "2025-06-01T10:00:03Z",
+            "payload": {
+                "type": "function_call",
+                "name": "bash",
+                "call_id": "call_bad",
+                "arguments": "{bad json}",
+            },
+        }
+        events = CodexAdapter().raw_to_normalized_events(bad_json, "sid")
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["kind"], "tool_call")
+        self.assertEqual(ev["toolName"], "bash")
+        self.assertIsInstance(ev["content"], str)
+
+    def test_project_dir_from_cwd(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "01"
+            session_dir.mkdir(parents=True)
+            sid = "019e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-01T10-00-00-{sid}.jsonl"
+            with (session_dir / fname).open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "type": "turn_context",
+                    "timestamp": "2025-06-01T10:00:00Z",
+                    "payload": {"cwd": "/home/user/myproject", "model": "claude-sonnet"},
+                }) + "\n")
+                f.write(json.dumps({
+                    "type": "response_item",
+                    "timestamp": "2025-06-01T10:00:01Z",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hello"}],
+                    },
+                }) + "\n")
+            adapter = CodexAdapter(pd)
+            session = adapter.load_session(sid)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["projectDir"], "/home/user/myproject")
+
+    def test_project_dir_from_cwd_xml_tag(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "02"
+            session_dir.mkdir(parents=True)
+            sid = "119e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-02T10-00-00-{sid}.jsonl"
+            with (session_dir / fname).open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "type": "response_item",
+                    "timestamp": "2025-06-01T10:00:01Z",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "<cwd>/tmp/otherproject</cwd> do something"}],
+                    },
+                }) + "\n")
+            adapter = CodexAdapter(pd)
+            session = adapter.load_session(sid)
+            self.assertIsNotNone(session)
+            self.assertEqual(session["projectDir"], "/tmp/otherproject")
+
+    def test_no_usage_does_not_fake_zero_session_codex(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "03"
+            session_dir.mkdir(parents=True)
+            sid = "229e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-03T10-00-00-{sid}.jsonl"
+            with (session_dir / fname).open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "type": "response_item",
+                    "timestamp": "2025-06-01T10:00:01Z",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    },
+                }) + "\n")
+            adapter = CodexAdapter(pd)
+            session = adapter.load_session(sid)
+            usage = session["usage"]
+            self.assertNotIn("inputTokens", usage)
+            self.assertNotIn("outputTokens", usage)
+            self.assertNotIn("totalTokens", usage)
+
+    def test_no_cache_hit_rate_codex(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "03"
+            session_dir.mkdir(parents=True)
+            sid = "339e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-03T10-00-00-{sid}.jsonl"
+            with (session_dir / fname).open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "type": "response_item",
+                    "timestamp": "2025-06-01T10:00:01Z",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    },
+                }) + "\n")
+            adapter = CodexAdapter(pd)
+            session = adapter.load_session(sid)
+            self.assertNotIn("cacheHitRate", session["usage"])
