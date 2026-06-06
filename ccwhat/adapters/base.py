@@ -40,3 +40,9 @@ class AgentAdapter(ABC):
     @abstractmethod
     def load_session(self, session_id: str) -> dict[str, Any] | None:
         ...
+
+    @abstractmethod
+    def raw_to_normalized_events(
+        self, raw_entry: dict[str, Any], session_id: str
+    ) -> list[dict[str, Any]]:
+        ...

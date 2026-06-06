@@ -360,8 +360,14 @@ def _make_handler(
                     else:
                         data["agent"] = self._adapter_agent()
                         if "events" not in data:
-                            from ccwhat.adapters.claude import _normalize_event
-                            data["events"] = [_normalize_event(e, session_id) for e in data.get("main", [])]
+                            from ccwhat.adapters.claude import ClaudeAdapter as _ClaudeAdapter
+                            _tmp = _ClaudeAdapter()
+                            data["events"] = [
+                                ev for e in data.get("main", [])
+                                for ev in _tmp.raw_to_normalized_events(e, session_id)
+                            ]
+                        if "turns" not in data and "events" in data:
+                            data["turns"] = _ClaudeAdapter()._build_turns(data["events"])
                         self._send_json(data)
                 except AdapterNotImplementedError as exc:
                     self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)

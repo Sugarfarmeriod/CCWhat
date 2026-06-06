@@ -40,9 +40,9 @@
 - [x] 5.3 新增 ClaudeAdapter 测试，覆盖 normalized events 和 usage 字段映射
 - [x] 5.4 新增 usage 测试，确认缺失字段为空且不会默认计算 cache 命中率
 - [x] 5.5 新增 registry 测试，覆盖 `claude`、`claude-code`、`codex`、`opencode`、`open-code`、`open_code` 和未知 agent
-- [ ] 5.6 更新 web 命令测试，覆盖 `ccwhat web --agent claude` 可启动
-- [ ] 5.7 更新 web 命令测试，覆盖显式 `--projects-dir` 优先于 agent 默认路径
-- [ ] 5.8 更新 run 模式测试，覆盖 target agent 推断和 Codex/OpenCode 未实现 adapter 的 warning 或 fallback
+- [x] 5.6 更新 web 命令测试，覆盖 `ccwhat web --agent claude` 可启动
+- [x] 5.7 更新 web 命令测试，覆盖显式 `--projects-dir` 优先于 agent 默认路径
+- [x] 5.8 更新 run 模式测试，覆盖 target agent 推断和 Codex/OpenCode 未实现 adapter 的 warning 或 fallback
 - [x] 5.9 运行现有 export/import 测试，确认包结构和导入查看流程不被破坏
 - [x] 5.10 运行全量测试并修复回归
 
