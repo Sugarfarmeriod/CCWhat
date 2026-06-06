@@ -817,8 +817,7 @@ function eventsToEntries(events) {
   for (const ev of events || []) {
     const role = ev.role;
     const kind = ev.kind;
-    if (!role || kind === 'metadata' || kind === 'step' || kind === 'unknown') continue;
-    if (kind === 'reasoning') continue;
+
     if (role === 'user' && kind === 'message') {
       entries.push({
         type: 'user',
@@ -858,6 +857,27 @@ function eventsToEntries(events) {
         sessionId: ev.sessionId,
         _fileLine: 0,
         message: { content: [{ type: 'tool_result', tool_use_id: ev.toolCallId, content: ev.content || '' }] },
+      });
+    } else if (kind === 'reasoning') {
+      entries.push({
+        type: 'assistant',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        message: { content: [{ type: 'text', text: ev.summary || ev.content || '(reasoning)' }] },
+      });
+    } else if (kind === 'metadata' || kind === 'step' || kind === 'unknown') {
+      let label = kind;
+      if (ev.summary) label += ': ' + ev.summary;
+      entries.push({
+        type: 'system',
+        timestamp: ev.timestamp,
+        uuid: ev.id,
+        sessionId: ev.sessionId,
+        _fileLine: 0,
+        subtype: label,
+        message: { content: [{ type: 'text', text: JSON.stringify(ev.content, null, 2) || '' }] },
       });
     }
   }

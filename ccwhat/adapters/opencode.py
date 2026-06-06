@@ -46,18 +46,18 @@ def _normalize_usage(
                     break
         cache_raw = raw.get("cache")
         if cache_raw and isinstance(cache_raw, dict):
-            if "inputTokens" not in usage:
+            if "cacheReadTokens" not in usage:
                 cr = cache_raw.get("read") or cache_raw.get("cache_read") or cache_raw.get("read_tokens")
                 if cr is not None:
                     usage["cacheReadTokens"] = cr
-            if "outputTokens" not in usage:
+            if "cacheWriteTokens" not in usage:
                 cw = cache_raw.get("write") or cache_raw.get("cache_write") or cache_raw.get("write_tokens")
                 if cw is not None:
                     usage["cacheWriteTokens"] = cw
         if "totalTokens" not in usage:
-            inp = usage.get("inputTokens") or 0
-            outp = usage.get("outputTokens") or 0
-            if inp or outp:
+            inp = usage.get("inputTokens")
+            outp = usage.get("outputTokens")
+            if inp is not None and outp is not None:
                 usage["totalTokens"] = inp + outp
     usage["scope"] = scope
     usage["source"] = source
@@ -147,14 +147,16 @@ class OpenCodeAdapter(AgentAdapter):
         return rows[0] if rows else None
 
     def list_projects(self) -> list[dict[str, Any]]:
-        rows = self._query_dicts(
-            "SELECT DISTINCT s.directory AS project_dir, p.name, p.worktree "
+        session_rows = self._query_dicts(
+            "SELECT s.id, s.directory AS project_dir, p.name, p.worktree, "
+            "s.title, s.agent, s.model, "
+            "s.time_created, s.time_updated, s.tokens_input, s.tokens_output "
             "FROM session s "
             "LEFT JOIN project p ON s.project_id = p.id "
-            "ORDER BY s.directory"
+            "ORDER BY s.directory, s.time_created DESC"
         )
         seen: dict[str, dict[str, Any]] = {}
-        for row in rows:
+        for row in session_rows:
             d = row.get("project_dir") or row.get("worktree") or ""
             if not d:
                 continue
@@ -165,6 +167,16 @@ class OpenCodeAdapter(AgentAdapter):
                     "worktree": row.get("worktree") or d,
                     "sessions": [],
                 }
+            seen[d]["sessions"].append({
+                "id": row["id"],
+                "title": row.get("title") or "",
+                "agent": row.get("agent") or "opencode",
+                "model": row.get("model"),
+                "firstTimestamp": str(row.get("time_created") or ""),
+                "lastTimestamp": str(row.get("time_updated") or ""),
+                "tokensInput": row.get("tokens_input") or 0,
+                "tokensOutput": row.get("tokens_output") or 0,
+            })
         return list(seen.values())
 
     def list_sessions(self) -> list[dict[str, Any]]:
@@ -392,20 +404,28 @@ class OpenCodeAdapter(AgentAdapter):
             user_summary = ""
             assistant_summary = ""
             turn_usage: dict[str, Any] = {
-                "inputTokens": 0, "outputTokens": 0, "totalTokens": 0,
                 "scope": "turn", "source": "derived", "raw": None,
             }
+            inp_sum: int | None = None
+            outp_sum: int | None = None
             for ev in current_turn:
                 u = ev.get("usage", {})
-                inp = u.get("inputTokens") or 0
-                outp = u.get("outputTokens") or 0
-                turn_usage["inputTokens"] += inp
-                turn_usage["outputTokens"] += outp
+                inp = u.get("inputTokens")
+                outp = u.get("outputTokens")
+                if inp is not None:
+                    inp_sum = (inp_sum or 0) + inp
+                if outp is not None:
+                    outp_sum = (outp_sum or 0) + outp
                 if ev["role"] == "user" and ev["kind"] == "message":
                     user_summary = ev.get("summary", "")
                 elif ev["role"] == "assistant" and ev["kind"] == "message":
                     assistant_summary = ev.get("summary", "")
-            turn_usage["totalTokens"] = turn_usage["inputTokens"] + turn_usage["outputTokens"]
+            if inp_sum is not None:
+                turn_usage["inputTokens"] = inp_sum
+            if outp_sum is not None:
+                turn_usage["outputTokens"] = outp_sum
+            if inp_sum is not None and outp_sum is not None:
+                turn_usage["totalTokens"] = inp_sum + outp_sum
             ended_at = current_turn[-1].get("timestamp") if current_turn else None
             turns.append({
                 "id": turn_id,
@@ -574,23 +594,24 @@ class OpenCodeAdapter(AgentAdapter):
         turns = self._build_turns(events)
 
         usage: dict[str, Any] = {
-            "inputTokens": session_row.get("tokens_input") or 0,
-            "outputTokens": session_row.get("tokens_output") or 0,
-            "reasoningTokens": session_row.get("tokens_reasoning") or 0,
-            "cacheReadTokens": session_row.get("tokens_cache_read") or 0,
-            "cacheWriteTokens": session_row.get("tokens_cache_write") or 0,
             "scope": "session",
             "source": "agent_log",
             "raw": None,
         }
-        total = (
-            usage["inputTokens"]
-            + usage["outputTokens"]
-            + usage["reasoningTokens"]
-        )
-        usage["totalTokens"] = total or (
-            usage["inputTokens"] + usage["outputTokens"]
-        )
+        for key, col in (
+            ("inputTokens", "tokens_input"),
+            ("outputTokens", "tokens_output"),
+            ("reasoningTokens", "tokens_reasoning"),
+            ("cacheReadTokens", "tokens_cache_read"),
+            ("cacheWriteTokens", "tokens_cache_write"),
+        ):
+            val = session_row.get(col)
+            if val:
+                usage[key] = val
+        inp = usage.get("inputTokens")
+        outp = usage.get("outputTokens")
+        if inp is not None and outp is not None:
+            usage["totalTokens"] = inp + outp
 
         result: dict[str, Any] = {
             "sessionId": session_id,
