@@ -350,7 +350,7 @@ def _make_handler(
                     self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
             elif path.startswith("/api/session/"):
                 session_id = path[len("/api/session/"):]
-                if not re.fullmatch(r"[0-9a-f-]{36}", session_id):
+                if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
                     self._send_json({"error": "invalid session id"}, 400)
                     return
                 try:
@@ -359,14 +359,15 @@ def _make_handler(
                         self._send_json({"error": "session not found"}, 404)
                     else:
                         data["agent"] = self._adapter_agent()
-                        if "events" not in data:
+                        if "events" not in data and data.get("main"):
                             from ccwhat.adapters.claude import ClaudeAdapter as _ClaudeAdapter
                             _tmp = _ClaudeAdapter()
                             data["events"] = [
-                                ev for e in data.get("main", [])
+                                ev for e in data["main"]
                                 for ev in _tmp.raw_to_normalized_events(e, session_id)
                             ]
                         if "turns" not in data and "events" in data:
+                            from ccwhat.adapters.claude import ClaudeAdapter as _ClaudeAdapter
                             data["turns"] = _ClaudeAdapter()._build_turns(data["events"])
                         self._send_json(data)
                 except AdapterNotImplementedError as exc:

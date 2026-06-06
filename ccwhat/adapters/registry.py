@@ -5,6 +5,8 @@ from typing import Any
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
 from ccwhat.adapters.claude import ClaudeAdapter
+from ccwhat.adapters.codex import CodexAdapter
+from ccwhat.adapters.opencode import OpenCodeAdapter
 
 
 _AGENT_ALIASES: dict[str, str] = {
@@ -17,7 +19,7 @@ _AGENT_ALIASES: dict[str, str] = {
 }
 
 
-_IMPLEMENTED_AGENTS = frozenset({"claude"})
+_IMPLEMENTED_AGENTS = frozenset({"claude", "codex", "opencode"})
 
 
 def normalize_agent_name(name: str) -> str:
@@ -29,13 +31,21 @@ def is_implemented(agent: str) -> bool:
     return agent in _IMPLEMENTED_AGENTS
 
 
+def get_adapter_class(agent: str) -> type[AgentAdapter]:
+    normalized = normalize_agent_name(agent)
+    if normalized == "claude":
+        return ClaudeAdapter
+    if normalized == "codex":
+        return CodexAdapter
+    if normalized == "opencode":
+        return OpenCodeAdapter
+    raise AdapterNotImplementedError(agent)
+
+
 def create_adapter(agent: str, projects_dir: Path | None = None) -> AgentAdapter:
     normalized = normalize_agent_name(agent)
-    if not is_implemented(normalized):
-        raise AdapterNotImplementedError(agent)
-    if normalized == "claude":
-        return ClaudeAdapter(projects_dir)
-    raise AdapterNotImplementedError(agent)
+    cls = get_adapter_class(normalized)
+    return cls(projects_dir)
 
 
 def infer_agent_from_target(target_args: tuple[str, ...]) -> str:

@@ -13,7 +13,7 @@ from http.server import HTTPServer
 
 import click
 
-from ccwhat.adapters.registry import create_adapter, infer_agent_from_target, is_implemented
+from ccwhat.adapters.registry import create_adapter, infer_agent_from_target
 from ccwhat.config import (
     DEFAULT_RAW_LOG_DIR,
     generate_local_session_id,
@@ -286,14 +286,6 @@ def run(
     web_server: HTTPServer | None = None
 
     agent_name = infer_agent_from_target(target_args)
-    if not is_implemented(agent_name):
-        click.echo(
-            f"Warning: No log adapter available for '{target_args[0]}' (agent: {agent_name}). "
-            f"The viewer will show Claude Code logs as a fallback.\n"
-            f"Only Claude Code is supported for log viewing in this version.",
-            err=True,
-        )
-        agent_name = "claude"
 
     if _proxy_is_running(port):
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")

@@ -48,8 +48,8 @@
 
 ## 6. 手动验证
 
-- [ ] 6.1 手动运行 `ccwhat web --agent claude`，确认 viewer 使用 Claude 默认目录
-- [ ] 6.2 手动运行 `ccwhat web --projects-dir ~/.claude/projects`，确认显式目录仍可用
-- [ ] 6.3 手动运行 `ccwhat -- claude`，确认 viewer 和目标命令正常启动
-- [ ] 6.4 手动运行 `ccwhat -- codex`，确认未实现 adapter 的提示清晰且目标命令不因 viewer 崩溃
-- [ ] 6.5 手动运行 `ccwhat -- opencode`，确认未实现 adapter 的提示清晰且目标命令不因 viewer 崩溃
+- [x] 6.1 手动运行 `ccwhat web --agent claude`，确认 viewer 使用 Claude 默认目录
+- [x] 6.2 手动运行 `ccwhat web --projects-dir ~/.claude/projects`，确认显式目录仍可用
+- [x] 6.3 手动运行 `ccwhat -- claude`，确认 viewer 和目标命令正常启动
+- [x] 6.4 手动运行 `ccwhat -- codex`，确认未实现 adapter 的提示清晰且目标命令不因 viewer 崩溃
+- [x] 6.5 手动运行 `ccwhat -- opencode`，确认未实现 adapter 的提示清晰且目标命令不因 viewer 崩溃
