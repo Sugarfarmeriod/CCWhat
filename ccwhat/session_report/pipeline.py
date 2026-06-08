@@ -102,7 +102,8 @@ def build_html_session_report(
                 _diagnosis_prompt(data.diagnosis_context, custom_prompt),
                 allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
-                agent=analyzer_agent or report_session.primary_agent_type,
+                agent=analyzer_agent,
+                default_agent=report_session.primary_agent_type,
                 timeout=analyzer_timeout,
             )
             data.diagnosis_markdown = diagnosis
@@ -147,7 +148,8 @@ def build_generic_html_report(
                 _generic_prompt(data.diagnosis_context, custom_prompt),
                 allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
-                agent=analyzer_agent or report_session.primary_agent_type,
+                agent=analyzer_agent,
+                default_agent=report_session.primary_agent_type,
                 timeout=analyzer_timeout,
             )
             llm_status = {"available": True, "mode": "mc", "elapsedMs": llm_elapsed_ms}

@@ -6,7 +6,7 @@ import html
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import resources
 from typing import Any
 
@@ -54,6 +54,18 @@ class ReportData:
 def parse_ts(value: Any) -> datetime | None:
     if not value:
         return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if number > 10_000_000_000:
+            number = number / 1000
+        try:
+            return datetime.fromtimestamp(number, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return parse_ts(int(stripped))
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:

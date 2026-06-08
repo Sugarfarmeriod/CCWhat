@@ -50,3 +50,28 @@
 - [ ] 6.3 验证 `ccwhat -- codex` 后 Codex analyzer 以 experimental 状态运行或清晰失败
 - [ ] 6.4 验证 `CCWHAT_ANALYZE_AGENT=opencode ccwhat web --agent opencode`
 - [ ] 6.5 验证 `CCWHAT_ANALYZE_CMD='opencode run --format json'` 覆盖默认 analyzer
+
+## 7. Review 修复
+
+- [x] 7.1 修复 OpenCode DB session.agent 泄漏为 analyzer agent
+- [x] 7.2 修复 normalize_session_for_report 防御（unknown agent → claude fallback）
+- [x] 7.3 修复 Viewer Server 默认 analyzer agent 优先级（adapter.name 优于 session.agent）
+- [x] 7.4 修复 _resolve_analyzer_timeout 未使用 spec.timeout_seconds
+- [x] 7.5 实现 Codex last-message-file fallback（get_candidates 机制）
+- [x] 7.6 增加 OpenCode agent=build、Viewer priority、Codex timeout/fallback 测试
+- [ ] 7.7 重新手动验证 opencode/codex generic/yuanxi 报告
+
+## 8. OpenCode 真实 JSONL 回归修复
+
+- [x] 8.1 修复 OpenCode analyzer parser，兼容真实 `opencode run --format json` 输出中的 `part.text`
+- [x] 8.2 更新 OpenCode parser 测试，使用真实 `type=text` + `part.type=text` + `part.text` 结构
+- [x] 8.3 增加 OpenCode generic/yuanxi 报告链路回归测试，确认 parser 不再产出空报告
+- [x] 8.4 运行针对性测试、完整测试和 OpenCode analyzer 烟测，确认现有功能不回退
+
+## 9. OpenCode 报告渲染和时间轴修复
+
+- [x] 9.1 修复 OpenCode 本地 DB 数字时间戳归一化，统一转为 ISO timestamp
+- [x] 9.2 修复 OpenCode 工具事件使用 part/state start/end 时间，确保元析 phases 和图表有耗时数据
+- [x] 9.3 修复通用报告 Mermaid fallback，渲染失败时保留原始 Mermaid 源码并给出准确错误文案
+- [x] 9.4 收紧通用报告 prompt 的 Mermaid 输出约束，降低 OpenCode 生成非法 Mermaid 的概率
+- [x] 9.5 增加 OpenCode 时间轴和 Mermaid fallback 回归测试

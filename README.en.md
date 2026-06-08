@@ -2,7 +2,11 @@
 
 [中文](README.md) | English
 
-Current version: `v0.2.0` · [Changelog](CHANGELOG.md)
+Current version: `v0.3.0` · [Changelog](CHANGELOG.md)
+
+## Current Status
+
+`v0.3.0` focuses on OpenCode report generation and frontend display: OpenCode local sessions, tool calls, timelines, Yuanxi reports, generic reports, and Mermaid display are now usable. Codex is wired into the multi-agent log/analyzer architecture, but report generation still has known issues; Codex adaptation is the next planned step.
 
 **Your AI being sneaky again? See see what it's actually doing.**
 

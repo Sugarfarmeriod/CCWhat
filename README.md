@@ -2,7 +2,11 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v0.2.0` · [更新日志](CHANGELOG.md)
+当前版本：`v0.3.0` · [更新日志](CHANGELOG.md)
+
+## 当前版本状态
+
+`v0.3.0` 重点完成 OpenCode 的报告生成和前端展示适配：OpenCode 本地会话、工具调用、时间轴、元析报告、通用报告和 Mermaid 展示已进入可用状态。Codex 已接入基础日志/Analyzer 架构，但报告生成仍有已知问题，下一步会继续适配 Codex。
 
 **你的 AI 又嘴硬了？see see what！看看他在做什么。**
 

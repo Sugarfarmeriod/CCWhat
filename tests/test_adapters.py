@@ -1016,7 +1016,8 @@ class TestOpenCodeAdapter(unittest.TestCase):
 
     def _insert_part(
         self, db: Path, pid: str, mid: str, sid: str, ptype: str,
-        text: str = "", time_created: int = 1000050, extra: dict | None = None,
+        text: str = "", time_created: int = 1000050, time_updated: int | None = None,
+        extra: dict | None = None,
     ) -> None:
         conn = sqlite3.connect(str(db))
         data: dict = {"type": ptype}
@@ -1027,7 +1028,7 @@ class TestOpenCodeAdapter(unittest.TestCase):
         conn.execute(
             "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (pid, mid, sid, time_created, time_created, json.dumps(data)),
+            (pid, mid, sid, time_created, time_updated if time_updated is not None else time_created, json.dumps(data)),
         )
         conn.commit()
         conn.close()
@@ -1094,7 +1095,8 @@ class TestOpenCodeAdapter(unittest.TestCase):
             session = adapter.load_session(sid)
             self.assertIsNotNone(session)
             self.assertEqual(session["sessionId"], sid)
-            self.assertEqual(session["agent"], "build")
+            self.assertEqual(session["agent"], "opencode")
+            self.assertEqual(session["_metadata"]["opencodeAgent"], "build")
             self.assertIn("events", session)
             self.assertIn("turns", session)
             self.assertIn("usage", session)
@@ -1129,6 +1131,38 @@ class TestOpenCodeAdapter(unittest.TestCase):
             kinds = [e["kind"] for e in session["events"]]
             self.assertIn("tool_call", kinds)
             self.assertIn("reasoning", kinds)
+
+    def test_opencode_tool_timestamps_build_report_phases(self) -> None:
+        from ccwhat.session_report.core import build_report_data
+
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_tool_time_test"
+            user_mid = "msg_user"
+            tool_mid = "msg_asst_tool"
+            self._insert_session(db, sid)
+            self._insert_message(db, user_mid, sid, "user", 1780676608727, {"role": "user"})
+            self._insert_part(db, "prt_user", user_mid, sid, "text", "run git clone", time_created=1780676608727)
+            self._insert_message(db, tool_mid, sid, "assistant", 1780676610000, {"role": "assistant"})
+            self._insert_part(db, "prt_tool", tool_mid, sid, "tool", time_created=1780676613435, time_updated=1780676688822, extra={
+                "tool": "bash",
+                "callID": "call_bash_1",
+                "state": {
+                    "status": "completed",
+                    "input": {"command": "git clone repo"},
+                    "output": "done\n",
+                    "time": {"start": 1780676688807, "end": 1780676688820},
+                },
+            })
+
+            adapter = OpenCodeAdapter(db)
+            session = adapter.load_session(sid)
+            data = build_report_data(session)
+
+            self.assertGreater(data.summary["phaseCount"], 0)
+            self.assertGreater(data.summary["totalWallMin"], 0)
+            self.assertGreater(data.summary["toolEventCount"], 0)
+            self.assertGreaterEqual(data.tool_events[0]["duration_ms"], 13)
 
     def test_raw_to_normalized_events_user_text(self) -> None:
         entry = {

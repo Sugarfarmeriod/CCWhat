@@ -196,18 +196,36 @@ def _analyze_spec(
 
 def _resolve_analyzer_agent(
     agent: str | None = None,
+    *,
+    default_agent: str | None = None,
 ) -> str:
-    """Resolve the analyzer agent name from explicit param, env var, or default."""
+    """Resolve the analyzer agent name.
+
+    Priority:
+    1. Explicit ``agent`` parameter
+    2. CCWHAT_ANALYZE_AGENT env var
+    3. ``default_agent`` (adapter name / session agent)
+    4. ``"claude"`` fallback
+    """
     if agent:
         return _normalize_analyzer_agent(agent)
     env_agent = _os.environ.get("CCWHAT_ANALYZE_AGENT", "").strip()
     if env_agent:
         return _normalize_analyzer_agent(env_agent)
+    if default_agent:
+        return _normalize_analyzer_agent(default_agent)
     return "claude"
 
 
-def _resolve_analyzer_timeout(timeout: int | None = None) -> int:
-    """Resolve timeout from explicit param, env var, or default."""
+def _resolve_analyzer_timeout(timeout: int | None = None, spec: Any = None) -> int:
+    """Resolve timeout from explicit param, env var, spec default, or global default.
+
+    Priority:
+    1. Explicit ``timeout`` parameter
+    2. CCWHAT_ANALYZE_TIMEOUT env var
+    3. ``spec.timeout_seconds``
+    4. ``ANALYZE_TIMEOUT_SECONDS`` (120)
+    """
     if timeout is not None and timeout > 0:
         return timeout
     env_timeout = _os.environ.get("CCWHAT_ANALYZE_TIMEOUT", "").strip()
@@ -218,69 +236,58 @@ def _resolve_analyzer_timeout(timeout: int | None = None) -> int:
                 return parsed
         except ValueError:
             pass
+    if spec is not None and getattr(spec, "timeout_seconds", None) and spec.timeout_seconds > 0:
+        return spec.timeout_seconds
     return ANALYZE_TIMEOUT_SECONDS
 
 
-def run_mc_analysis(
+def _run_one_try(
     prompt: str,
-    timeout: int | None = None,
-    runner: Any | None = None,
-    cmd: list[str] | tuple[str, ...] | None = None,
-    allowed_dirs: list[str] | None = None,
-    agent: str | None = None,
+    cmd_list: list[str],
+    timeout_sec: int,
+    spec: Any,
+    runner: Any,
+    extra_files: dict[str, str] | None = None,
 ) -> tuple[str, int]:
-    normalized_agent = _resolve_analyzer_agent(agent)
-    effective_timeout = _resolve_analyzer_timeout(timeout)
-    spec, resolved_cmd = _analyze_spec(cmd, agent=normalized_agent)
-    env_cmd = _os.environ.get("CCWHAT_ANALYZE_CMD", "").strip()
-
-    # If cmd is provided explicitly or via env, use it regardless of spec
-    has_cmd_source = bool(cmd) or bool(env_cmd)
-    if spec is None and not has_cmd_source:
-        raise AnalysisError(
-            f"Analyzer protocol is not supported for agent '{normalized_agent}'. "
-            f"Supported agents: {', '.join(_list_analyzer_names())}",
-            "analyzer_not_supported",
-        )
-
+    """Run a single analyzer attempt and return (report, elapsed_ms) or raise AnalysisError."""
     started = time.monotonic()
-    run = runner or subprocess.run
+    resolved = _resolve_binary(cmd_list)
     try:
-        result = run(
-            resolved_cmd,
+        result = runner(
+            resolved,
             input=prompt,
             capture_output=True,
             text=True,
-            timeout=effective_timeout,
+            timeout=timeout_sec,
         )
     except FileNotFoundError as exc:
         raise AnalysisError(
-            f"Analyzer command not found: {resolved_cmd[0]!r}.\n"
+            f"Analyzer command not found: {resolved[0]!r}.\n"
             "Set CCWHAT_ANALYZE_CMD to your AI CLI command, e.g.:\n"
             "  export CCWHAT_ANALYZE_CMD='claude -p -'",
             "analyzer_not_found",
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        raise AnalysisError(f"Analysis timed out after {effective_timeout} seconds.", "analyzer_timeout") from exc
+        raise AnalysisError(f"Analysis timed out after {timeout_sec} seconds.", "analyzer_timeout") from exc
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
     stdout = (result.stdout or "").strip()
     stderr = (result.stderr or "").strip()
+
     if result.returncode != 0:
         detail = stderr or stdout or f"exit code {result.returncode}"
         raise AnalysisError(f"Analysis failed: {detail}", "analyzer_failed")
-    if not stdout:
-        detail = stderr or f"{resolved_cmd[0]} returned empty output"
+
+    if not stdout and spec and spec.output_mode == "stdout":
+        detail = stderr or f"{resolved[0]} returned empty output"
         raise AnalysisError(f"Analysis produced no report: {detail}", "empty_report")
 
-    # Apply output parser for non-stdout output modes (e.g. JSONL text extraction)
-    # stdout mode returns raw output unchanged for backward compatibility.
     if spec and spec.output_mode != "stdout" and spec.parse_output:
         try:
-            parsed = spec.parse_output(stdout, stderr)
+            parsed = spec.parse_output(stdout, stderr, extra_files or {})
             if not parsed.strip():
                 if not stdout.strip():
-                    detail = stderr or f"{resolved_cmd[0]} returned empty output"
+                    detail = stderr or f"{resolved[0]} returned empty output"
                     raise AnalysisError(
                         f"Analysis produced no report: {detail}",
                         "empty_report",
@@ -300,3 +307,110 @@ def run_mc_analysis(
             ) from exc
 
     return stdout, elapsed_ms
+
+
+def run_mc_analysis(
+    prompt: str,
+    timeout: int | None = None,
+    runner: Any | None = None,
+    cmd: list[str] | tuple[str, ...] | None = None,
+    allowed_dirs: list[str] | None = None,
+    agent: str | None = None,
+    default_agent: str | None = None,
+) -> tuple[str, int]:
+    from ccwhat.analyzers.registry import (
+        _normalize as _registry_normalize,
+        get_candidates,
+        prepare_candidate,
+    )
+
+    normalized_agent = _resolve_analyzer_agent(agent, default_agent=default_agent)
+    spec, resolved_cmd = _analyze_spec(cmd, agent=normalized_agent)
+    effective_timeout = _resolve_analyzer_timeout(timeout, spec=spec)
+    env_cmd = _os.environ.get("CCWHAT_ANALYZE_CMD", "").strip()
+
+    has_cmd_source = bool(cmd) or bool(env_cmd)
+
+    # If explicit cmd or env override, use it directly (no fallback)
+    if has_cmd_source:
+        if spec is None and not has_cmd_source:
+            raise AnalysisError(
+                f"Analyzer protocol is not supported for agent '{normalized_agent}'. "
+                f"Supported agents: {', '.join(_list_analyzer_names())}",
+                "analyzer_not_supported",
+            )
+        run = runner or subprocess.run
+        return _run_one_try(prompt, resolved_cmd, effective_timeout, spec, run)
+
+    # No explicit cmd — use the primary spec
+    if spec is None:
+        raise AnalysisError(
+            f"Analyzer protocol is not supported for agent '{normalized_agent}'. "
+            f"Supported agents: {', '.join(_list_analyzer_names())}",
+            "analyzer_not_supported",
+        )
+
+    run = runner or subprocess.run
+    candidates = get_candidates(normalized_agent)
+    if not candidates:
+        # No fallback candidates — try the primary spec once
+        return _run_one_try(prompt, resolved_cmd, effective_timeout, spec, run)
+
+    # Try primary spec first, then fallback candidates
+    last_error: AnalysisError | None = None
+    tmpdir: str | None = None
+    try:
+        return _run_one_try(prompt, resolved_cmd, effective_timeout, spec, run)
+    except (AnalysisError, subprocess.TimeoutExpired) as primary_err:
+        cmd_not_found = isinstance(primary_err, AnalysisError) and primary_err.code == "analyzer_not_found"
+        if cmd_not_found:
+            raise
+        last_error = _as_analysis_error(primary_err, effective_timeout)
+
+    # Try fallback candidates
+    import tempfile as _tf
+    _cleanup_dirs: list[str] = []
+    try:
+        for idx, candidate in enumerate(candidates):
+            try:
+                cand_cmd, extra = prepare_candidate(candidate)
+                _cleanup_dirs.append(str(Path(extra.get("last_message_file", "")).parent))
+                result = _run_one_try(prompt, cand_cmd, effective_timeout, candidate, run, extra_files=extra)
+                return result
+            except (AnalysisError, subprocess.TimeoutExpired) as fallback_err:
+                fnf = isinstance(fallback_err, AnalysisError) and fallback_err.code == "analyzer_not_found"
+                if fnf:
+                    raise
+                last_error = _as_analysis_error(fallback_err, effective_timeout)
+                continue
+    finally:
+        for d in _cleanup_dirs:
+            if d and Path(d).is_dir():
+                import shutil as _su
+                try:
+                    _su.rmtree(d, ignore_errors=True)
+                except Exception:
+                    pass
+
+    if last_error:
+        raise AnalysisError(
+            f"{last_error.message}\n\n"
+            f"Analyzer agent: {normalized_agent} (experimental={spec.experimental}). "
+            f"Timeout: {effective_timeout}s. "
+            f"Fallback tried: {len(candidates)} candidate(s). "
+            f"Try setting CCWHAT_ANALYZE_TIMEOUT to a larger value or "
+            f"CCWHAT_ANALYZE_AGENT=claude to use the stable analyzer.",
+            code=last_error.code,
+        )
+    raise AnalysisError(
+        f"All analyzer attempts failed for agent '{normalized_agent}'.",
+        "analyzer_failed",
+    )
+
+
+def _as_analysis_error(exc: Exception, timeout_sec: int) -> AnalysisError:
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return AnalysisError(f"Analysis timed out after {timeout_sec} seconds.", "analyzer_timeout")
+    if isinstance(exc, AnalysisError):
+        return exc
+    return AnalysisError(str(exc), "analyzer_failed")

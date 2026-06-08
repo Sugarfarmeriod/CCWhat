@@ -2,6 +2,25 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.2.0`。
 
+## v0.3.0 - 2026-06-09
+
+### 新增
+
+- 完成 OpenCode 报告生成链路的第一版适配。
+- OpenCode Analyzer 默认使用 `opencode run --format json`，并支持真实 JSONL 输出中的 `part.text`。
+- OpenCode 本地 DB 日志接入元析报告和通用报告的数据管线。
+
+### 改进
+
+- 修复 OpenCode 数字时间戳归一化，工具事件可正确进入时间轴、阶段统计、柱状图和饼图。
+- 修复通用报告 Mermaid 渲染失败时的 fallback 展示，保留原始 Mermaid 源码并区分语法失败和库未加载。
+- 收紧通用报告 prompt 中的 Mermaid 输出约束，降低 OpenCode 生成非法 Mermaid 的概率。
+- 增加 OpenCode 报告链路和 Mermaid fallback 的回归测试。
+
+### 已知问题
+
+- Codex 已接入多 Agent 日志/Analyzer 架构，但报告生成仍存在耗时和协议解析问题，下一步会继续适配 Codex。
+
 ## v0.2.0 - 2026-06-06
 
 ### 新增
