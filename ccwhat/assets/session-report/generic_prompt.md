@@ -35,6 +35,7 @@ The business-level content (what was being built or fixed) should be mentioned i
 You MUST follow the exact structure of the template below. Do not add, remove, or rename any section. Fill in every placeholder marked with [brackets]. Write all content in Chinese (Simplified).
 
 The Mermaid flowchart in "核心编排流程" is mandatory. It must show tools, skills, subagent dispatches, and decision points as nodes, with information/control flow as edges. Keep it to 8–15 nodes.
+Mermaid syntax must be simple and valid: use `flowchart TD`; use ASCII node ids such as `A`, `B`, `C1`; put all node labels in double quotes like `A["用户请求"]`; avoid raw parentheses, colons, semicolons, Markdown, emoji, or code fences inside node labels; do not output Mermaid CSS, theme config, comments, or unsupported directives.
 
 ---
 
@@ -52,12 +53,12 @@ The Mermaid flowchart in "核心编排流程" is mandatory. It must show tools, 
 
 ```mermaid
 flowchart TD
-    A[用户请求] --> B[skill: xxx]
-    B --> C{决策点}
-    C -->|是| D[sub-agent: xxx]
+    A["用户请求"] --> B["skill xxx"]
+    B --> C{"决策点"}
+    C -->|是| D["sub-agent xxx"]
     C -->|否| B
-    D --> E[tool: xxx]
-    E --> F[结果]
+    D --> E["tool xxx"]
+    E --> F["结果"]
 ```
 
 ---

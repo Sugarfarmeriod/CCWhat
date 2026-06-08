@@ -209,8 +209,27 @@ def _normalize_generic_turns(session: dict[str, Any]) -> list[ReportTurn]:
     return _derive_turns_from_events(events, "main")
 
 
+_VALID_REPORT_AGENTS = frozenset({"claude", "codex", "opencode"})
+
+
+def _canonical_report_agent(session: dict[str, Any]) -> str:
+    """Return a supported report agent type, filtering out internal agent names like 'build'."""
+    raw = str(session.get("agent") or "claude").strip().lower()
+    if raw in _VALID_REPORT_AGENTS:
+        return raw
+    meta = session.get("_metadata")
+    if isinstance(meta, dict):
+        source = str(meta.get("opencodeAgent") or meta.get("sourceAgent") or "").strip().lower()
+        if source in _VALID_REPORT_AGENTS:
+            return source
+        protocol = str(meta.get("protocolAgent") or "").strip().lower()
+        if protocol in _VALID_REPORT_AGENTS:
+            return protocol
+    return "claude"
+
+
 def normalize_session_for_report(session: dict[str, Any]) -> ReportSession:
-    agent_type = str(session.get("agent") or "claude")
+    agent_type = _canonical_report_agent(session)
     project = _project_ref(session, agent_type)
     if agent_type == "claude":
         agents = _normalize_claude_agents(session, agent_type)

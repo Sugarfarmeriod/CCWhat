@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,30 @@ def _make_event_id() -> str:
 def _truncate(text: Any, max_len: int = 120) -> str:
     s = str(text) if text is not None else ""
     return s[:max_len] + ("..." if len(s) > max_len else "")
+
+
+def _to_iso_timestamp(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            number = float(stripped)
+        except ValueError:
+            return stripped
+    else:
+        return None
+
+    if number > 10_000_000_000:
+        number = number / 1000
+    try:
+        return datetime.fromtimestamp(number, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    except (OSError, OverflowError, ValueError):
+        return None
 
 
 def _normalize_usage(
@@ -169,10 +194,12 @@ class OpenCodeAdapter(AgentAdapter):
                 }
             ti = row.get("tokens_input")
             to = row.get("tokens_output")
+            raw_agent = row.get("agent") or "opencode"
             sess_data: dict[str, Any] = {
                 "id": row["id"],
                 "title": row.get("title") or "",
-                "agent": row.get("agent") or "opencode",
+                "agent": "opencode",
+                "opencodeAgent": raw_agent,
                 "model": row.get("model"),
                 "firstTimestamp": str(row.get("time_created") or ""),
                 "lastTimestamp": str(row.get("time_updated") or ""),
@@ -195,11 +222,13 @@ class OpenCodeAdapter(AgentAdapter):
         for row in rows:
             ti = row.get("tokens_input")
             to = row.get("tokens_output")
+            raw_agent = row.get("agent") or "opencode"
             sess: dict[str, Any] = {
                 "id": row["id"],
                 "projectDir": row.get("project_dir") or "",
                 "title": row.get("title") or "",
-                "agent": row.get("agent") or "opencode",
+                "agent": "opencode",
+                "opencodeAgent": raw_agent,
                 "model": row.get("model"),
                 "firstTimestamp": str(row.get("time_created") or ""),
                 "lastTimestamp": str(row.get("time_updated") or ""),
@@ -219,7 +248,7 @@ class OpenCodeAdapter(AgentAdapter):
         msg_data = raw_entry.get("message_data", {})
         parts = raw_entry.get("parts", [])
         role = msg_data.get("role", "unknown")
-        ts = raw_entry.get("time_created") or msg_data.get("time", {}).get("created")
+        ts = _to_iso_timestamp(raw_entry.get("time_created") or msg_data.get("time", {}).get("created"))
 
         tokens_raw = msg_data.get("tokens")
         usage = _normalize_usage(tokens_raw)
@@ -228,6 +257,7 @@ class OpenCodeAdapter(AgentAdapter):
             for part in parts:
                 pdata = part.get("data", {})
                 ptype = pdata.get("type", "")
+                part_ts = _to_iso_timestamp(part.get("time_created")) or ts
                 if ptype == "text":
                     text = pdata.get("text", "")
                     if text:
@@ -236,7 +266,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": part_ts,
                             "role": "user",
                             "kind": "message",
                             "content": text,
@@ -252,6 +282,8 @@ class OpenCodeAdapter(AgentAdapter):
             for part in parts:
                 pdata = part.get("data", {})
                 ptype = pdata.get("type", "")
+                part_ts = _to_iso_timestamp(part.get("time_created")) or ts
+                part_end_ts = _to_iso_timestamp(part.get("time_updated")) or part_ts
 
                 if ptype == "text":
                     text = pdata.get("text", "")
@@ -261,7 +293,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": part_ts,
                             "role": "assistant",
                             "kind": "message",
                             "content": text,
@@ -281,7 +313,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": part_ts,
                             "role": "assistant",
                             "kind": "reasoning",
                             "content": text,
@@ -298,12 +330,16 @@ class OpenCodeAdapter(AgentAdapter):
                     call_id = pdata.get("callID", "")
                     tool_state = _find_tool_state(pdata)
                     if tool_state and tool_state["status"] == "completed":
+                        raw_state = pdata.get("state")
+                        state_time = raw_state.get("time", {}) if isinstance(raw_state, dict) else {}
+                        tool_start = _to_iso_timestamp(state_time.get("start")) or part_ts
+                        tool_end = _to_iso_timestamp(state_time.get("end")) or part_end_ts
                         events.append({
                             "id": _make_event_id(),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": tool_start,
                             "role": "assistant",
                             "kind": "tool_call",
                             "content": tool_state.get("input", {}),
@@ -319,7 +355,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": tool_end,
                             "role": "tool",
                             "kind": "tool_result",
                             "content": tool_state.get("output", ""),
@@ -341,7 +377,7 @@ class OpenCodeAdapter(AgentAdapter):
                         "agent": "opencode",
                         "sessionId": session_id,
                         "turnId": None,
-                        "timestamp": ts,
+                        "timestamp": part_ts,
                         "role": None,
                         "kind": "step",
                         "content": {"reason": reason} if reason else None,
@@ -361,7 +397,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
-                            "timestamp": ts,
+                            "timestamp": part_ts,
                             "role": "user",
                             "kind": "message",
                             "content": text,
@@ -379,7 +415,7 @@ class OpenCodeAdapter(AgentAdapter):
                         "agent": "opencode",
                         "sessionId": session_id,
                         "turnId": None,
-                        "timestamp": ts,
+                        "timestamp": part_ts,
                         "role": role,
                         "kind": ptype,
                         "content": pdata,
@@ -478,7 +514,7 @@ class OpenCodeAdapter(AgentAdapter):
             (session_id,),
         )
         part_rows = self._query_dicts(
-            "SELECT id, message_id, session_id, time_created, data FROM part "
+            "SELECT id, message_id, session_id, time_created, time_updated, data FROM part "
             "WHERE session_id = ? ORDER BY time_created ASC",
             (session_id,),
         )
@@ -514,7 +550,7 @@ class OpenCodeAdapter(AgentAdapter):
                     model_info = sm_data.get("model")
                     agent_info = sm_data.get("agent")
                     ordered.append({
-                        "time_created": sm_data.get("time", {}).get("created"),
+                        "time_created": _to_iso_timestamp(sm_data.get("time", {}).get("created")),
                         "message_id": sm["id"],
                         "message_data": {
                             "role": None,
@@ -534,7 +570,7 @@ class OpenCodeAdapter(AgentAdapter):
                         msg_data = {}
                     msg_data.setdefault("role", "user" if sm_type == "input" else "assistant")
                     ordered.append({
-                        "time_created": sm_data.get("time", {}).get("created"),
+                        "time_created": _to_iso_timestamp(sm_data.get("time", {}).get("created")),
                         "message_id": msg_id,
                         "message_data": msg_data,
                         "parts": parts_by_msg.get(msg_id, []),
@@ -550,7 +586,7 @@ class OpenCodeAdapter(AgentAdapter):
                 except (json.JSONDecodeError, TypeError):
                     md = {}
                 ordered.append({
-                    "time_created": mr["time_created"],
+                    "time_created": _to_iso_timestamp(mr["time_created"]),
                     "message_id": mid,
                     "message_data": md,
                     "parts": parts_by_msg.get(mid, []),
@@ -562,7 +598,7 @@ class OpenCodeAdapter(AgentAdapter):
                 except (json.JSONDecodeError, TypeError):
                     md = {}
                 ordered.append({
-                    "time_created": mr["time_created"],
+                    "time_created": _to_iso_timestamp(mr["time_created"]),
                     "message_id": mr["id"],
                     "message_data": md,
                     "parts": parts_by_msg.get(mr["id"], []),
@@ -628,7 +664,7 @@ class OpenCodeAdapter(AgentAdapter):
             "projectDir": project_dir,
             "main": [],
             "subagents": [],
-            "agent": agent_name,
+            "agent": "opencode",
             "events": events,
             "turns": turns,
             "usage": usage,
@@ -636,6 +672,7 @@ class OpenCodeAdapter(AgentAdapter):
                 "title": session_row.get("title") or "",
                 "model": model_info,
                 "cost": session_row.get("cost") or 0,
+                "opencodeAgent": agent_name,
             },
         }
         return result

@@ -285,10 +285,10 @@ def _make_handler(
                 return _adapter.load_session(session_id)
             return get_session(session_id, projects_dir)
 
-        def _adapter_agent(self) -> str:
+        def _adapter_agent(self) -> str | None:
             if _adapter is not None:
                 return _adapter.name
-            return "unknown"
+            return None
 
         def do_OPTIONS(self) -> None:
             self.send_response(204)
@@ -326,7 +326,7 @@ def _make_handler(
                 report_session = normalize_session_for_report(session)
                 allowed = [report_session.project_path] if report_session.project_path else None
                 report_started = time.monotonic()
-                effective_agent = _analyzer_agent or report_session.primary_agent_type
+                effective_agent = _analyzer_agent or self._adapter_agent() or report_session.primary_agent_type or "claude"
                 if mode == "generic":
                     result = build_generic_html_report(
                         session,
@@ -379,7 +379,7 @@ def _make_handler(
                 )
                 report_session = normalize_session_for_report(session)
                 prompt, truncated = build_analysis_prompt(session)
-                effective_agent = _analyzer_agent or report_session.primary_agent_type
+                effective_agent = _analyzer_agent or self._adapter_agent() or report_session.primary_agent_type or "claude"
                 try:
                     report, elapsed_ms = run_mc_analysis(
                         prompt,
@@ -421,10 +421,10 @@ def _make_handler(
                 try:
                     projects = self._get_sessions_data()
                     for proj in projects:
-                        proj["agent"] = self._adapter_agent()
+                        proj["agent"] = self._adapter_agent() or "claude"
                     self._send_json(projects)
                 except AdapterNotImplementedError as exc:
-                    self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
+                    self._send_json({"error": str(exc), "agent": self._adapter_agent() or "claude"}, 501)
             elif path.startswith("/api/session/"):
                 session_id = path[len("/api/session/"):]
                 if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
@@ -436,7 +436,7 @@ def _make_handler(
                         self._send_json({"error": "session not found"}, 404)
                     else:
                         report_session = normalize_session_for_report(data)
-                        data["agent"] = data.get("agent") or report_session.primary_agent_type or self._adapter_agent()
+                        data["agent"] = data.get("agent") or report_session.primary_agent_type or self._adapter_agent() or "claude"
                         data["events"] = [
                             {
                                 "id": event.event_id,
@@ -469,7 +469,7 @@ def _make_handler(
                         ]
                         self._send_json(data)
                 except AdapterNotImplementedError as exc:
-                    self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
+                    self._send_json({"error": str(exc), "agent": self._adapter_agent() or "claude"}, 501)
             elif path == "/api/logs":
                 from urllib.parse import parse_qs
                 params = parse_qs(query)

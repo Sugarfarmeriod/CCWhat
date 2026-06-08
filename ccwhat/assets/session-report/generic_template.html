@@ -139,7 +139,7 @@ function renderMarkdown(text) {
       i++;
       const code = codeLines.join('\n');
       if (lang === 'mermaid') {
-        out.push('<div class="mermaid-wrap"><div class="mermaid">' + escRaw(code) + '</div></div>');
+        out.push('<div class="mermaid-wrap"><div class="mermaid" data-source="' + escRaw(code) + '">' + escRaw(code) + '</div></div>');
       } else {
         out.push('<pre><code' + (lang ? ' class="language-' + escRaw(lang) + '"' : '') + '>' + escRaw(code) + '</code></pre>');
       }
@@ -205,23 +205,27 @@ function renderMarkdown(text) {
 function initMermaid() {
   const nodes = Array.from(document.querySelectorAll('.mermaid-wrap .mermaid'));
   if (!nodes.length) return;
-  if (typeof mermaid !== 'undefined') {
-    try {
-      mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
-      mermaid.run({ nodes }).catch(function() { nodes.forEach(fallbackMermaid); });
-    } catch(e) { nodes.forEach(fallbackMermaid); }
-  } else {
-    nodes.forEach(fallbackMermaid);
-  }
-}
-
-function fallbackMermaid(el) {
-  const wrap = el.closest('.mermaid-wrap') || el.parentNode;
-  const code = el.textContent || el.innerText || '';
-  wrap.innerHTML =
-    '<pre class="mermaid-source">' + escRaw(code) + '</pre>' +
-    '<div class="mermaid-note">（Mermaid 渲染库未加载，以上为原始图表代码）</div>';
-}
+	  if (typeof mermaid !== 'undefined') {
+	    try {
+	      mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+	      mermaid.run({ nodes }).catch(function() {
+	        nodes.forEach(el => fallbackMermaid(el, 'Mermaid 语法解析失败，以下为原始图表代码'));
+	      });
+	    } catch(e) {
+	      nodes.forEach(el => fallbackMermaid(el, 'Mermaid 语法解析失败，以下为原始图表代码'));
+	    }
+	  } else {
+	    nodes.forEach(el => fallbackMermaid(el, 'Mermaid 渲染库未加载，以下为原始图表代码'));
+	  }
+	}
+	
+	function fallbackMermaid(el, reason) {
+	  const wrap = el.closest('.mermaid-wrap') || el.parentNode;
+	  const code = el.getAttribute('data-source') || el.textContent || el.innerText || '';
+	  wrap.innerHTML =
+	    '<pre class="mermaid-source">' + escRaw(code) + '</pre>' +
+	    '<div class="mermaid-note">（' + escRaw(reason || 'Mermaid 渲染失败，以下为原始图表代码') + '）</div>';
+	}
 </script>
 
 </body>
