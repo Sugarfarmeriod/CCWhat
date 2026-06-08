@@ -1,8 +1,8 @@
 # 更新日志 / Changelog
 
-这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.2.0`。
+这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
-## v0.3.0 - 2026-06-09
+## v0.1.2 - 2026-06-09
 
 ### 新增
 
@@ -21,7 +21,7 @@
 
 - Codex 已接入多 Agent 日志/Analyzer 架构，但报告生成仍存在耗时和协议解析问题，下一步会继续适配 Codex。
 
-## v0.2.0 - 2026-06-06
+## v0.1.1 - 2026-06-06
 
 ### 新增
 
