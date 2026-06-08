@@ -6,6 +6,8 @@ import argparse
 import json
 import re
 import sys
+import time
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -15,6 +17,7 @@ from urllib.parse import urlparse
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
 from ccwhat.adapters.claude import ClaudeAdapter
 from ccwhat.adapters.registry import create_adapter
+from ccwhat.session_report import normalize_session_for_report
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +223,7 @@ def _make_handler(
 ):
     viewer_dir = Path(__file__).parent
     _adapter = adapter
+    report_store: dict[str, dict] = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:
@@ -280,7 +284,7 @@ def _make_handler(
         def _adapter_agent(self) -> str:
             if _adapter is not None:
                 return _adapter.name
-            return "claude"
+            return "unknown"
 
         def do_OPTIONS(self) -> None:
             self.send_response(204)
@@ -290,6 +294,7 @@ def _make_handler(
             self.end_headers()
 
         def do_POST(self) -> None:
+            total_started = time.monotonic()
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
             if path != "/api/analyze":
@@ -300,30 +305,83 @@ def _make_handler(
                 self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
                 return
             session_id = str(payload.get("sessionId", "")).strip()
-            if not re.fullmatch(r"[0-9a-f-]{36}", session_id):
+            if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
                 self._send_json({"ok": False, "error": "invalid session id"}, 400)
                 return
+            mode = str(payload.get("mode", "")).strip()
+            custom_prompt = str(payload.get("customPrompt", "")).strip()
+
             session = self._get_session_data(session_id)
             if session is None:
                 self._send_json({"ok": False, "error": "session not found"}, 404)
                 return
-            from ccwhat.analyzer import (
-                AnalysisError,
-                build_analysis_prompt,
-                run_mc_analysis,
-            )
-            prompt, truncated = build_analysis_prompt(session)
-            try:
-                report, elapsed_ms = run_mc_analysis(prompt, cmd=analyzer_cmd)
-            except AnalysisError as exc:
-                self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
-                return
-            self._send_json({
-                "ok": True,
-                "report": report,
-                "elapsedMs": elapsed_ms,
-                "truncated": truncated,
-            })
+
+            if mode in ("yuanxi", "generic"):
+                # New HTML report pipeline (session_report module)
+                from ccwhat.session_report import build_generic_html_report, build_html_session_report
+                report_session = normalize_session_for_report(session)
+                allowed = [report_session.project_path] if report_session.project_path else None
+                report_started = time.monotonic()
+                if mode == "generic":
+                    result = build_generic_html_report(
+                        session,
+                        allowed_dirs=allowed,
+                        custom_prompt=custom_prompt,
+                        analyzer_cmd=analyzer_cmd,
+                        analyzer_agent=report_session.primary_agent_type,
+                    )
+                else:
+                    result = build_html_session_report(
+                        session,
+                        allowed_dirs=allowed,
+                        custom_prompt=custom_prompt,
+                        analyzer_cmd=analyzer_cmd,
+                        analyzer_agent=report_session.primary_agent_type,
+                    )
+                report_id = uuid.uuid4().hex
+                report_html = str(result.get("reportHtml") or "")
+                report_store[report_id] = {"html": report_html, "mode": mode, "sessionId": session_id}
+                report_url = f"/api/analysis-report/{report_id}"
+                export_url = f"/api/analysis-report/{report_id}/export"
+                self._send_json({
+                    "ok": True,
+                    "reportType": result["reportType"],
+                    "reportMode": result.get("reportMode", mode),
+                    "reportUrl": report_url,
+                    "exportUrl": export_url,
+                    "summary": result.get("summary"),
+                    "elapsedMs": result["elapsedMs"],
+                    "truncated": bool((result.get("compression") or {}).get("omittedEvents")),
+                    "compression": result.get("compression"),
+                    "diagnosisStatus": result.get("diagnosisStatus"),
+                    "llmStatus": result.get("llmStatus"),
+                    "buildMs": int((time.monotonic() - report_started) * 1000),
+                    "totalMs": int((time.monotonic() - total_started) * 1000),
+                })
+            else:
+                # Legacy markdown report via ccwhat.analyzer (no mode specified)
+                from ccwhat.analyzer import (
+                    AnalysisError,
+                    build_analysis_prompt,
+                    run_mc_analysis,
+                )
+                report_session = normalize_session_for_report(session)
+                prompt, truncated = build_analysis_prompt(session)
+                try:
+                    report, elapsed_ms = run_mc_analysis(
+                        prompt,
+                        cmd=analyzer_cmd,
+                        agent=report_session.primary_agent_type,
+                    )
+                except AnalysisError as exc:
+                    self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
+                    return
+                self._send_json({
+                    "ok": True,
+                    "report": report,
+                    "elapsedMs": elapsed_ms,
+                    "truncated": truncated,
+                })
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -358,17 +416,38 @@ def _make_handler(
                     if data is None:
                         self._send_json({"error": "session not found"}, 404)
                     else:
-                        data["agent"] = self._adapter_agent()
-                        if "events" not in data and data.get("main"):
-                            from ccwhat.adapters.claude import ClaudeAdapter as _ClaudeAdapter
-                            _tmp = _ClaudeAdapter()
-                            data["events"] = [
-                                ev for e in data["main"]
-                                for ev in _tmp.raw_to_normalized_events(e, session_id)
-                            ]
-                        if "turns" not in data and "events" in data:
-                            from ccwhat.adapters.claude import ClaudeAdapter as _ClaudeAdapter
-                            data["turns"] = _ClaudeAdapter()._build_turns(data["events"])
+                        report_session = normalize_session_for_report(data)
+                        data["agent"] = data.get("agent") or report_session.primary_agent_type or self._adapter_agent()
+                        data["events"] = [
+                            {
+                                "id": event.event_id,
+                                "agentId": event.agent_id,
+                                "timestamp": event.timestamp,
+                                "role": event.role,
+                                "kind": event.kind,
+                                "content": event.content,
+                                "summary": event.summary,
+                                "toolName": event.tool_name,
+                                "toolCallId": event.tool_call_id,
+                                "parentId": event.parent_event_id,
+                                "usage": event.usage,
+                                "raw": event.raw,
+                            }
+                            for event in report_session.events
+                        ]
+                        data["turns"] = [
+                            {
+                                "id": turn.turn_id,
+                                "agentId": turn.agent_id,
+                                "startedAt": turn.started_at,
+                                "endedAt": turn.ended_at,
+                                "userSummary": turn.user_summary,
+                                "assistantSummary": turn.assistant_summary,
+                                "events": [{"id": event_id} for event_id in turn.event_ids],
+                                "usage": turn.usage,
+                            }
+                            for turn in report_session.turns
+                        ]
                         self._send_json(data)
                 except AdapterNotImplementedError as exc:
                     self._send_json({"error": str(exc), "agent": self._adapter_agent()}, 501)
@@ -455,6 +534,27 @@ def _make_handler(
                     self._send_json({"error": str(exc)}, 404)
                     return
                 self._send_binary(data, "application/gzip", filename)
+            elif path.startswith("/api/analysis-report/") and path.endswith("/export"):
+                report_id = path[len("/api/analysis-report/"):-len("/export")]
+                entry = report_store.get(report_id)
+                if entry is None:
+                    self._send_json({"error": "report not found or expired"}, 404)
+                else:
+                    report_mode = entry.get("mode", "report")
+                    filename = f"session-report-{report_mode}-{report_id[:8]}.html"
+                    self._send_binary(entry["html"].encode("utf-8"), "text/html; charset=utf-8", filename)
+            elif path.startswith("/api/analysis-report/"):
+                report_id = path[len("/api/analysis-report/"):]
+                entry = report_store.get(report_id)
+                if entry is None:
+                    self._send_json({"error": "report not found or expired"}, 404)
+                else:
+                    html_bytes = entry["html"].encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(html_bytes)))
+                    self.end_headers()
+                    self.wfile.write(html_bytes)
             else:
                 self._send_json({"error": "not found"}, 404)
     return Handler
