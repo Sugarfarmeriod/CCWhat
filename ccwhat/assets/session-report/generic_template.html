@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>通用流程分析报告 — {{session_id}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; background: #f6f8fa; color: #24292e; }
+    .header { background: linear-gradient(135deg, #1a1b27 0%, #2d2e44 100%); color: #e6edf3; padding: 24px 32px 20px; }
+    .header h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .header-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #8b949e; }
+    .header-meta span { background: rgba(255,255,255,0.07); padding: 3px 10px; border-radius: 12px; }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px 24px 48px; }
+    .report-card { background: #ffffff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 28px 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    /* Markdown styles */
+    .md-view h1 { font-size: 22px; font-weight: 700; border-bottom: 2px solid #e1e4e8; padding-bottom: 8px; margin: 24px 0 12px; color: #1b1f24; }
+    .md-view h2 { font-size: 17px; font-weight: 600; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin: 20px 0 10px; color: #24292e; }
+    .md-view h3 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; color: #24292e; }
+    .md-view h4, .md-view h5, .md-view h6 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+    .md-view p { margin: 0 0 12px; line-height: 1.7; }
+    .md-view ul, .md-view ol { margin: 0 0 12px; padding-left: 24px; line-height: 1.7; }
+    .md-view li { margin: 4px 0; }
+    .md-view blockquote { margin: 12px 0; padding: 8px 16px; border-left: 4px solid #d0d7de; color: #57606a; background: #f6f8fa; border-radius: 0 4px 4px 0; }
+    .md-view hr { border: none; border-top: 1px solid #e1e4e8; margin: 20px 0; }
+    .md-view code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; background: #f6f8fa; padding: 2px 5px; border-radius: 4px; border: 1px solid #e1e4e8; }
+    .md-view pre { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin: 0 0 14px; }
+    .md-view pre code { background: none; border: none; padding: 0; font-size: 12px; }
+    .md-view table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 14px; }
+    .md-view th { background: #f6f8fa; font-weight: 600; border: 1px solid #d0d7de; padding: 6px 10px; text-align: left; }
+    .md-view td { border: 1px solid #d0d7de; padding: 6px 10px; }
+    .md-view tr:nth-child(even) td { background: #f9fafb; }
+    /* Mermaid */
+    .mermaid-wrap { background: #ffffff; border: 1px solid #e1e4e8; border-radius: 6px; padding: 16px; margin: 12px 0; text-align: center; overflow-x: auto; }
+    .mermaid-wrap svg { max-width: 100%; height: auto; }
+    .mermaid-source { background: #f0f4f8; border: 1px dashed #8b949e; border-radius: 6px; padding: 12px 14px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: #57606a; white-space: pre-wrap; margin: 12px 0; }
+    .mermaid-note { font-size: 11px; color: #8b949e; margin-top: 4px; }
+    .empty-msg { padding: 32px; color: #8b949e; text-align: center; font-size: 15px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 通用流程分析报告</h1>
+  <div class="header-meta">
+    <span>Session: {{session_id}}</span>
+    <span>Project: {{project_dir}}</span>
+    <span>生成时间: {{generated_at}}</span>
+    {{custom_prompt_note}}
+  </div>
+</div>
+
+<div class="container">
+  <div class="report-card">
+    <div class="md-view" id="report-body"></div>
+  </div>
+</div>
+
+<script id="report-raw" type="application/json">{{report_content_json}}</script>
+
+{{mermaid_script_tag}}
+
+<script>
+function escRaw(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderInline(text) {
+  const spans = [];
+  let s = String(text ?? '').replace(/`([^`]+)`/g, (_, c) => {
+    const t = '\x00S' + spans.length + '\x00';
+    spans.push('<code>' + escRaw(c) + '</code>');
+    return t;
+  });
+  s = escRaw(s);
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+  spans.forEach((v, i) => { s = s.split('\x00S' + i + '\x00').join(v); });
+  return s;
+}
+
+function splitRow(line) {
+  let r = line.trim();
+  if (r.startsWith('|')) r = r.slice(1);
+  if (r.endsWith('|')) r = r.slice(0, -1);
+  return r.split('|').map(c => c.trim());
+}
+
+function isSepRow(line) {
+  const cells = splitRow(line);
+  return cells.length > 1 && cells.every(c => /^:?-{3,}:?$/.test(c));
+}
+
+function isHr(line) {
+  return /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+}
+
+function renderMarkdown(text) {
+  const lines = String(text ?? '').replace(/\r\n/g,'\n').split('\n');
+  const out = [];
+  let i = 0;
+
+  function flushList(tag, items) {
+    out.push('<' + tag + '>' + items.map(x => '<li>' + renderInline(x) + '</li>').join('') + '</' + tag + '>');
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    if (isHr(line)) { out.push('<hr>'); i++; continue; }
+
+    const hm = line.match(/^(#{1,6})\s+(.+)/);
+    if (hm) {
+      const lv = hm[1].length;
+      out.push('<h' + lv + '>' + renderInline(hm[2]) + '</h' + lv + '>');
+      i++; continue;
+    }
+
+    if (line.startsWith('> ') || line === '>') {
+      const bq = [];
+      while (i < lines.length && (lines[i].startsWith('> ') || lines[i] === '>')) {
+        bq.push(lines[i].slice(2));
+        i++;
+      }
+      out.push('<blockquote>' + renderMarkdown(bq.join('\n')) + '</blockquote>');
+      continue;
+    }
+
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++;
+      const code = codeLines.join('\n');
+      if (lang === 'mermaid') {
+        out.push('<div class="mermaid-wrap"><div class="mermaid">' + escRaw(code) + '</div></div>');
+      } else {
+        out.push('<pre><code' + (lang ? ' class="language-' + escRaw(lang) + '"' : '') + '>' + escRaw(code) + '</code></pre>');
+      }
+      continue;
+    }
+
+    if (line.match(/^\s*[-*]\s+/)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\s*[-*]\s+/)) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      flushList('ul', items);
+      continue;
+    }
+
+    if (line.match(/^\s*\d+\.\s+/)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\s*\d+\.\s+/)) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      flushList('ol', items);
+      continue;
+    }
+
+    if (line.includes('|') && i + 1 < lines.length && isSepRow(lines[i + 1])) {
+      const headers = splitRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|')) {
+        rows.push(splitRow(lines[i]));
+        i++;
+      }
+      let tbl = '<table><thead><tr>' + headers.map(h => '<th>' + renderInline(h) + '</th>').join('') + '</tr></thead><tbody>';
+      rows.forEach(r => { tbl += '<tr>' + r.map(c => '<td>' + renderInline(c) + '</td>').join('') + '</tr>'; });
+      tbl += '</tbody></table>';
+      out.push(tbl);
+      continue;
+    }
+
+    out.push('<p>' + renderInline(line) + '</p>');
+    i++;
+  }
+  return out.join('\n');
+}
+
+(function() {
+  try {
+    const raw = JSON.parse(document.getElementById('report-raw').textContent);
+    const body = document.getElementById('report-body');
+    if (!raw) {
+      body.innerHTML = '<div class="empty-msg">报告内容不可用。</div>';
+      return;
+    }
+    body.innerHTML = renderMarkdown(raw);
+    initMermaid();
+  } catch(e) {
+    document.getElementById('report-body').innerHTML = '<div class="empty-msg">报告渲染失败：' + escRaw(e.message) + '</div>';
+  }
+})();
+
+function initMermaid() {
+  const nodes = Array.from(document.querySelectorAll('.mermaid-wrap .mermaid'));
+  if (!nodes.length) return;
+  if (typeof mermaid !== 'undefined') {
+    try {
+      mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+      mermaid.run({ nodes }).catch(function() { nodes.forEach(fallbackMermaid); });
+    } catch(e) { nodes.forEach(fallbackMermaid); }
+  } else {
+    nodes.forEach(fallbackMermaid);
+  }
+}
+
+function fallbackMermaid(el) {
+  const wrap = el.closest('.mermaid-wrap') || el.parentNode;
+  const code = el.textContent || el.innerText || '';
+  wrap.innerHTML =
+    '<pre class="mermaid-source">' + escRaw(code) + '</pre>' +
+    '<div class="mermaid-note">（Mermaid 渲染库未加载，以上为原始图表代码）</div>';
+}
+</script>
+
+</body>
+</html>
