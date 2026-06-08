@@ -220,9 +220,13 @@ def _make_handler(
     config_path: Path | None = None,
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
     adapter: AgentAdapter | None = None,
+    analyzer_agent: str | None = None,
+    analyzer_timeout: int | None = None,
 ):
     viewer_dir = Path(__file__).parent
     _adapter = adapter
+    _analyzer_agent = analyzer_agent
+    _analyzer_timeout = analyzer_timeout
     report_store: dict[str, dict] = {}
 
     class Handler(BaseHTTPRequestHandler):
@@ -322,13 +326,15 @@ def _make_handler(
                 report_session = normalize_session_for_report(session)
                 allowed = [report_session.project_path] if report_session.project_path else None
                 report_started = time.monotonic()
+                effective_agent = _analyzer_agent or report_session.primary_agent_type
                 if mode == "generic":
                     result = build_generic_html_report(
                         session,
                         allowed_dirs=allowed,
                         custom_prompt=custom_prompt,
                         analyzer_cmd=analyzer_cmd,
-                        analyzer_agent=report_session.primary_agent_type,
+                        analyzer_agent=effective_agent,
+                        analyzer_timeout=_analyzer_timeout,
                     )
                 else:
                     result = build_html_session_report(
@@ -336,13 +342,16 @@ def _make_handler(
                         allowed_dirs=allowed,
                         custom_prompt=custom_prompt,
                         analyzer_cmd=analyzer_cmd,
-                        analyzer_agent=report_session.primary_agent_type,
+                        analyzer_agent=effective_agent,
+                        analyzer_timeout=_analyzer_timeout,
                     )
                 report_id = uuid.uuid4().hex
                 report_html = str(result.get("reportHtml") or "")
                 report_store[report_id] = {"html": report_html, "mode": mode, "sessionId": session_id}
                 report_url = f"/api/analysis-report/{report_id}"
                 export_url = f"/api/analysis-report/{report_id}/export"
+                from ccwhat.analyzers.registry import get as _get_analyzer_spec
+                analyzer_spec = _get_analyzer_spec(effective_agent)
                 self._send_json({
                     "ok": True,
                     "reportType": result["reportType"],
@@ -357,6 +366,9 @@ def _make_handler(
                     "llmStatus": result.get("llmStatus"),
                     "buildMs": int((time.monotonic() - report_started) * 1000),
                     "totalMs": int((time.monotonic() - total_started) * 1000),
+                    "analyzerAgent": effective_agent,
+                    "analyzerOutputMode": analyzer_spec.output_mode if analyzer_spec else "unknown",
+                    "experimental": analyzer_spec.experimental if analyzer_spec else False,
                 })
             else:
                 # Legacy markdown report via ccwhat.analyzer (no mode specified)
@@ -367,20 +379,27 @@ def _make_handler(
                 )
                 report_session = normalize_session_for_report(session)
                 prompt, truncated = build_analysis_prompt(session)
+                effective_agent = _analyzer_agent or report_session.primary_agent_type
                 try:
                     report, elapsed_ms = run_mc_analysis(
                         prompt,
                         cmd=analyzer_cmd,
-                        agent=report_session.primary_agent_type,
+                        agent=effective_agent,
+                        timeout=_analyzer_timeout,
                     )
                 except AnalysisError as exc:
                     self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
                     return
+                from ccwhat.analyzers.registry import get as _get_analyzer_spec
+                analyzer_spec = _get_analyzer_spec(effective_agent)
                 self._send_json({
                     "ok": True,
                     "report": report,
                     "elapsedMs": elapsed_ms,
                     "truncated": truncated,
+                    "analyzerAgent": effective_agent,
+                    "analyzerOutputMode": analyzer_spec.output_mode if analyzer_spec else "stdout",
+                    "experimental": analyzer_spec.experimental if analyzer_spec else False,
                 })
 
         def do_GET(self) -> None:
@@ -575,8 +594,10 @@ def create_server(
     config_path: Path | None = None,
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
     adapter: AgentAdapter | None = None,
+    analyzer_agent: str | None = None,
+    analyzer_timeout: int | None = None,
 ) -> HTTPServer:
-    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd, adapter=adapter)
+    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd, adapter=adapter, analyzer_agent=analyzer_agent, analyzer_timeout=analyzer_timeout)
     return HTTPServer(("127.0.0.1", port), handler)
 
 
@@ -590,8 +611,10 @@ def run_server(
     logs_dir: Path,
     config_path: Path | None = None,
     adapter: AgentAdapter | None = None,
+    analyzer_agent: str | None = None,
+    analyzer_timeout: int | None = None,
 ) -> None:
-    server = create_server(port, projects_dir, logs_dir, config_path, adapter=adapter)
+    server = create_server(port, projects_dir, logs_dir, config_path, adapter=adapter, analyzer_agent=analyzer_agent, analyzer_timeout=analyzer_timeout)
     url = viewer_url(port)
     agent_name = adapter.name if adapter is not None else "claude"
     print(f"Viewer API listening on http://127.0.0.1:{port}")

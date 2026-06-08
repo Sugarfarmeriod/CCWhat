@@ -89,6 +89,7 @@ def build_html_session_report(
     custom_prompt: str = "",
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
     analyzer_agent: str | None = None,
+    analyzer_timeout: int | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     report_session = normalize_session_for_report(session)
@@ -102,6 +103,7 @@ def build_html_session_report(
                 allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
                 agent=analyzer_agent or report_session.primary_agent_type,
+                timeout=analyzer_timeout,
             )
             data.diagnosis_markdown = diagnosis
             diagnosis_status = {"available": True, "mode": "mc", "elapsedMs": llm_elapsed_ms}
@@ -130,6 +132,7 @@ def build_generic_html_report(
     custom_prompt: str = "",
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
     analyzer_agent: str | None = None,
+    analyzer_timeout: int | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     report_session = normalize_session_for_report(session)
@@ -145,6 +148,7 @@ def build_generic_html_report(
                 allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
                 agent=analyzer_agent or report_session.primary_agent_type,
+                timeout=analyzer_timeout,
             )
             llm_status = {"available": True, "mode": "mc", "elapsedMs": llm_elapsed_ms}
         except AnalysisError as exc:

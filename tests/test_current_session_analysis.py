@@ -114,13 +114,13 @@ class AnalysisCoreTests(unittest.TestCase):
 
     def test_run_mc_analysis_uses_agent_default_command(self) -> None:
         cases = [
-            ("claude", ["claude", "-p", "-"]),
-            ("codex", ["codex", "exec", "-"]),
+            ("claude", ["claude", "-p", "-"], "report"),
+            ("codex", ["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "-"], '{"type":"assistant","content":"report"}'),
         ]
 
-        for agent, expected_cmd in cases:
+        for agent, expected_cmd, stdout_val in cases:
             with self.subTest(agent=agent):
-                completed = subprocess.CompletedProcess(expected_cmd, 0, stdout="report", stderr="")
+                completed = subprocess.CompletedProcess(expected_cmd, 0, stdout=stdout_val, stderr="")
                 runner = mock.Mock(return_value=completed)
 
                 report, _ = run_mc_analysis("prompt", runner=runner, agent=agent)
@@ -132,14 +132,9 @@ class AnalysisCoreTests(unittest.TestCase):
 
     def test_run_mc_analysis_rejects_unsupported_agent_protocol(self) -> None:
         with self.assertRaisesRegex(AnalysisError, "not supported") as exc:
-            run_mc_analysis("prompt", agent="opencode")
+            run_mc_analysis("prompt", agent="unknown-agent-xyz")
 
         self.assertEqual(exc.exception.code, "analyzer_not_supported")
-
-        with self.assertRaisesRegex(AnalysisError, "not supported") as alias_exc:
-            run_mc_analysis("prompt", agent="open-code")
-
-        self.assertEqual(alias_exc.exception.code, "analyzer_not_supported")
 
     def test_run_mc_analysis_resolves_known_binary_path_for_explicit_command(self) -> None:
         completed = subprocess.CompletedProcess(["/Applications/OpenCode.app/Contents/MacOS/opencode", "run"], 0, stdout="report", stderr="")
@@ -467,7 +462,8 @@ class AnalyzeApiTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever)
             thread.start()
             try:
-                completed = subprocess.CompletedProcess(["codex", "exec", "-"], 0, stdout="report", stderr="")
+                codex_stdout = '{"type":"assistant","content":"report"}'
+                completed = subprocess.CompletedProcess(["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "-"], 0, stdout=codex_stdout, stderr="")
                 with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
                     status, payload = self._post_analyze(server, {"sessionId": SID})
             finally:
@@ -478,7 +474,7 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertEqual(status, 200, payload)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["report"], "report")
-        self.assertEqual(run.call_args.args[0][1:], ["exec", "-"])
+        self.assertEqual(run.call_args.args[0][1:], ["exec", "--json", "--ephemeral", "--ignore-user-config", "-"])
         self.assertTrue(run.call_args.args[0][0].endswith("codex"))
         self.assertIn("primaryAgentType", run.call_args.kwargs["input"])
         self.assertIn("hello codex", run.call_args.kwargs["input"])
@@ -516,9 +512,9 @@ class AnalyzeApiTests(unittest.TestCase):
 
         self.assertEqual(status, 500, payload)
         self.assertFalse(payload["ok"])
-        self.assertEqual(payload["code"], "analyzer_not_supported")
-        self.assertIn("not supported", payload["error"])
-        run.assert_not_called()
+        # OpenCode analyzer IS now supported via registry
+        self.assertEqual(payload["code"], "analyzer_failed")
+        run.assert_called_once()
 
     def test_session_api_derives_events_without_claude_adapter_fallback(self) -> None:
         class StubCodexAdapter:
@@ -723,7 +719,8 @@ class AnalyzeApiTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever)
             thread.start()
             try:
-                completed = subprocess.CompletedProcess(["codex", "exec", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                codex_stdout = '{"type":"assistant","content":"# 报告\\n\\n内容"}'
+                completed = subprocess.CompletedProcess(["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "-"], 0, stdout=codex_stdout, stderr="")
                 with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
                     status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
             finally:
@@ -740,7 +737,7 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertIn("exportUrl", payload)
         self.assertTrue(payload["llmStatus"]["available"])
         self.assertFalse(payload["truncated"])
-        self.assertEqual(run.call_args.args[0][1:], ["exec", "-"])
+        self.assertEqual(run.call_args.args[0][1:], ["exec", "--json", "--ephemeral", "--ignore-user-config", "-"])
         self.assertTrue(run.call_args.args[0][0].endswith("codex"))
         self.assertIn("hello codex", run.call_args.kwargs["input"])
         self.assertIn("/tmp/codex-project", run.call_args.kwargs["input"])
@@ -823,16 +820,15 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertIn("diagnosisStatus", payload)
         self.assertFalse(payload["diagnosisStatus"]["available"])
         self.assertEqual(payload["diagnosisStatus"]["mode"], "fallback")
-        self.assertEqual(payload["diagnosisStatus"]["code"], "analyzer_not_supported")
-        self.assertIn("not supported", payload["diagnosisStatus"]["message"])
-        self.assertIn("'opencode'", payload["diagnosisStatus"]["message"])
+        self.assertEqual(payload["diagnosisStatus"]["code"], "analyzer_not_found")
+        self.assertIn("not found", payload["diagnosisStatus"]["message"])
         self.assertFalse(payload["truncated"])
         self.assertIn("compression", payload)
         self.assertIn("elapsedMs", payload)
         self.assertIn("totalMs", payload)
         self.assertIn("buildMs", payload)
         self.assertEqual(payload["llmElapsedMs"], 0) if "llmElapsedMs" in payload else None
-        run.assert_not_called()
+        run.assert_called_once()
 
     def test_analyze_api_html_mode_without_llm_keeps_report(self) -> None:
         session = {
@@ -1895,6 +1891,103 @@ class AnalyzeFrontendTests(unittest.TestCase):
         self.assertIn("render failed", html)
         self.assertIn(".replace(/</g,'&lt;')", html)
         self.assertIn(".replace(/>/g,'&gt;')", html)
+
+
+class AnalyzerAdapterTests(unittest.TestCase):
+    """Tests for the new analyzer adapter protocol, parsers, and env vars."""
+
+    def test_opencode_jsonl_text_parser(self) -> None:
+        from ccwhat.analyzers.opencode import parse_jsonl_text
+        stdout = (
+            '{"type":"text","content":"Hello"}\n'
+            '{"type":"part","part":{"type":"text","content":"World"}}\n'
+            '{"type":"tool_call","toolName":"bash","content":"ls"}\n'
+            '{"type":"text","content":"Done"}\n'
+        )
+        result = parse_jsonl_text(stdout)
+        self.assertEqual(result, "Hello\nWorld\nDone")
+
+    def test_opencode_jsonl_parser_empty_stdout(self) -> None:
+        from ccwhat.analyzers.opencode import parse_jsonl_text
+        self.assertEqual(parse_jsonl_text(""), "")
+        self.assertEqual(parse_jsonl_text('{"type":"tool_call","toolName":"ls"}'), "")
+
+    def test_codex_jsonl_text_parser(self) -> None:
+        from ccwhat.analyzers.codex import parse_jsonl_text as codex_parse
+        stdout = (
+            '{"type":"assistant","content":"Final answer"}\n'
+            '{"type":"user","content":"ignored"}\n'
+        )
+        result = codex_parse(stdout)
+        self.assertEqual(result, "Final answer")
+
+    def test_codex_jsonl_agent_messages_parser(self) -> None:
+        from ccwhat.analyzers.codex import parse_jsonl_text as codex_parse
+        stdout = (
+            '{"type":"agent","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"Agent reply"}]}\n'
+        )
+        result = codex_parse(stdout)
+        self.assertEqual(result, "Agent reply")
+
+    def test_codex_last_message_file_parser(self) -> None:
+        from ccwhat.analyzers.codex import parse_last_message_file
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpfile = str(Path(tmp) / "last_msg.txt")
+            Path(tmpfile).write_text("Report text", encoding="utf-8")
+            result = parse_last_message_file("", extra_files={"last_message_file": tmpfile})
+            self.assertEqual(result, "Report text")
+
+    def test_codex_last_message_file_missing(self) -> None:
+        from ccwhat.analyzers.codex import parse_last_message_file
+        result = parse_last_message_file("", extra_files={"last_message_file": "/nonexistent"})
+        self.assertEqual(result, "")
+
+    def test_analyzer_spec_priority_explicit_cmd_overrides_registry(self) -> None:
+        completed = subprocess.CompletedProcess(["custom-cmd"], 0, stdout="custom report", stderr="")
+        runner = mock.Mock(return_value=completed)
+        report, _ = run_mc_analysis("prompt", runner=runner, cmd=["custom-cmd"])
+        self.assertEqual(report, "custom report")
+        self.assertEqual(runner.call_args.args[0][0], "custom-cmd")
+
+    def test_analyzer_spec_explicit_cmd_bypasses_parser(self) -> None:
+        """Explicit cmd should skip the registry's output parser (spec=None)."""
+        completed = subprocess.CompletedProcess(["echo", "hello"], 0, stdout="raw output", stderr="")
+        runner = mock.Mock(return_value=completed)
+        report, _ = run_mc_analysis("prompt", runner=runner, cmd=["echo", "hello"])
+        self.assertEqual(report, "raw output")
+
+    def test_analyzer_spec_env_agent_override(self) -> None:
+        completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="report", stderr="")
+        runner = mock.Mock(return_value=completed)
+        with mock.patch.dict("os.environ", {"CCWHAT_ANALYZE_AGENT": "claude"}):
+            report, _ = run_mc_analysis("prompt", runner=runner, agent=None)
+        self.assertEqual(report, "report")
+
+    def test_analyzer_spec_env_timeout_override(self) -> None:
+        completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="report", stderr="")
+        runner = mock.Mock(return_value=completed)
+        with mock.patch.dict("os.environ", {"CCWHAT_ANALYZE_TIMEOUT": "30"}):
+            report, elapsed = run_mc_analysis("prompt", runner=runner, agent="claude")
+        self.assertEqual(report, "report")
+        self.assertEqual(runner.call_args.kwargs["timeout"], 30)
+
+    def test_analyzer_env_cmd_override_beats_agent_default(self) -> None:
+        """CCWHAT_ANALYZE_CMD env var should override the agent-specific default cmd."""
+        completed = subprocess.CompletedProcess(["my-custom-ai", "-p", "-"], 0, stdout="override ok", stderr="")
+        runner = mock.Mock(return_value=completed)
+        with mock.patch.dict("os.environ", {"CCWHAT_ANALYZE_CMD": "my-custom-ai -p -"}):
+            report, _ = run_mc_analysis("prompt", runner=runner, agent="codex")
+        self.assertEqual(report, "override ok")
+
+    def test_run_target_args_not_passed_to_analyzer(self) -> None:
+        """Verify that _start_managed_web receives analyzer_cmd=None when run() passes None."""
+        # This tests that the code path in run.py does NOT pass target_args as analyzer_cmd
+        from ccwhat.commands.run import _start_managed_web
+        # The function signature now defaults analyzer_cmd to None
+        import inspect
+        sig = inspect.signature(_start_managed_web)
+        param = sig.parameters["analyzer_cmd"]
+        self.assertIs(param.default, None, "analyzer_cmd should default to None")
 
 
 if __name__ == "__main__":

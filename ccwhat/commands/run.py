@@ -158,7 +158,7 @@ def _start_managed_web(
     port: int,
     req_resp_dir: Path,
     config_path: Path | None,
-    analyzer_cmd: tuple[str, ...],
+    analyzer_cmd: tuple[str, ...] | None = None,
     agent_name: str = "claude",
 ) -> HTTPServer | None:
     from viewer.server import create_server, open_viewer, viewer_url
@@ -328,7 +328,7 @@ def run(
             sys.exit(1)
 
     if web:
-        web_server = _start_managed_web(web_port, output, config_path, target_args, agent_name=agent_name)
+        web_server = _start_managed_web(web_port, output, config_path, None, agent_name=agent_name)
 
     # Build child environment
     ca_cert = Path.home() / ".mitmproxy" / "mitmproxy-ca-cert.pem"
