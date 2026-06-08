@@ -16,6 +16,8 @@ from ccwhat.analyzer import (
     run_mc_analysis,
     serialize_session_for_analysis,
 )
+from ccwhat.session_report import normalize_session_for_report
+from ccwhat.session_report.pipeline import build_generic_html_report, build_html_session_report
 from viewer.server import _make_handler
 
 
@@ -61,17 +63,27 @@ class AnalysisCoreTests(unittest.TestCase):
         self.assertIn("[TRUNCATED]", prompt)
         self.assertNotIn("{{content}}", prompt)
 
-    def test_serialize_session_includes_subagents(self) -> None:
+    def test_serialize_session_uses_unified_report_model(self) -> None:
         content, truncated = serialize_session_for_analysis({
             "sessionId": SID,
             "projectDir": "project-c",
-            "main": [{"type": "user"}],
-            "subagents": [{"agentId": "one", "entries": [{"type": "assistant"}]}],
+            "agent": "claude",
+            "main": [{"type": "user", "message": {"content": "hello"}}],
+            "subagents": [{
+                "agentId": "one",
+                "meta": {"agentType": "general-purpose", "description": "helper"},
+                "entries": [{"type": "assistant", "message": {"content": "done"}}],
+            }],
         })
 
         self.assertFalse(truncated)
         self.assertIn('"sessionId": "cccccccc-cccc-cccc-cccc-cccccccccccc"', content)
-        self.assertIn('"agentId": "one"', content)
+        self.assertIn('"primaryAgentType": "claude"', content)
+        self.assertIn('"agents"', content)
+        self.assertIn('"agentType": "general-purpose"', content)
+        self.assertIn('"events"', content)
+        self.assertNotIn('"main":', content)
+        self.assertNotIn('"subagents":', content)
 
     def test_run_mc_analysis_maps_failures(self) -> None:
         with self.assertRaisesRegex(AnalysisError, "not found"):
@@ -96,8 +108,231 @@ class AnalysisCoreTests(unittest.TestCase):
 
         self.assertEqual(report, "report")
         call = runner.call_args
-        self.assertEqual(call.args[0], ["mc", "--code"])
+        self.assertEqual(call.args[0][-1], "--code")
+        self.assertTrue(call.args[0][0].endswith("mc"))
         self.assertEqual(call.kwargs["input"], "prompt")
+
+    def test_run_mc_analysis_uses_agent_default_command(self) -> None:
+        cases = [
+            ("claude", ["claude", "-p", "-"]),
+            ("codex", ["codex", "exec", "-"]),
+        ]
+
+        for agent, expected_cmd in cases:
+            with self.subTest(agent=agent):
+                completed = subprocess.CompletedProcess(expected_cmd, 0, stdout="report", stderr="")
+                runner = mock.Mock(return_value=completed)
+
+                report, _ = run_mc_analysis("prompt", runner=runner, agent=agent)
+
+                self.assertEqual(report, "report")
+                self.assertEqual(runner.call_args.args[0][1:], expected_cmd[1:])
+                self.assertTrue(runner.call_args.args[0][0].endswith(expected_cmd[0]))
+                self.assertEqual(runner.call_args.kwargs["input"], "prompt")
+
+    def test_run_mc_analysis_rejects_unsupported_agent_protocol(self) -> None:
+        with self.assertRaisesRegex(AnalysisError, "not supported") as exc:
+            run_mc_analysis("prompt", agent="opencode")
+
+        self.assertEqual(exc.exception.code, "analyzer_not_supported")
+
+        with self.assertRaisesRegex(AnalysisError, "not supported") as alias_exc:
+            run_mc_analysis("prompt", agent="open-code")
+
+        self.assertEqual(alias_exc.exception.code, "analyzer_not_supported")
+
+    def test_run_mc_analysis_resolves_known_binary_path_for_explicit_command(self) -> None:
+        completed = subprocess.CompletedProcess(["/Applications/OpenCode.app/Contents/MacOS/opencode", "run"], 0, stdout="report", stderr="")
+        runner = mock.Mock(return_value=completed)
+        with mock.patch("ccwhat.analyzer.shutil.which", return_value=None), mock.patch("ccwhat.analyzer.Path.is_file", return_value=True):
+            report, _ = run_mc_analysis("prompt", runner=runner, cmd=("opencode", "run"))
+
+        self.assertEqual(report, "report")
+        self.assertEqual(runner.call_args.args[0][1:], ["run"])
+        self.assertTrue(runner.call_args.args[0][0].endswith("opencode"))
+        self.assertEqual(runner.call_args.kwargs["input"], "prompt")
+
+    def test_run_mc_analysis_env_override_beats_agent_default(self) -> None:
+        completed = subprocess.CompletedProcess(["mc", "--code"], 0, stdout="report", stderr="")
+        runner = mock.Mock(return_value=completed)
+
+        with mock.patch.dict("os.environ", {"CCWHAT_ANALYZE_CMD": "mc --code"}):
+            report, _ = run_mc_analysis("prompt", runner=runner, agent="codex")
+
+        self.assertEqual(report, "report")
+        self.assertEqual(runner.call_args.args[0][-1], "--code")
+        self.assertTrue(runner.call_args.args[0][0].endswith("mc"))
+        self.assertEqual(runner.call_args.kwargs["input"], "prompt")
+
+
+class SessionReportNormalizationTests(unittest.TestCase):
+    def test_normalize_claude_session_keeps_subagents(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "agent": "claude",
+            "main": [{"type": "user", "timestamp": "2026-05-29T03:00:00Z", "message": {"content": "hello"}}],
+            "subagents": [{
+                "agentId": "agent-one",
+                "meta": {"description": "helper", "agentType": "general-purpose"},
+                "entries": [{"type": "assistant", "timestamp": "2026-05-29T03:01:00Z", "message": {"content": "done"}}],
+            }],
+            "turns": [],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.session_id, SID)
+        self.assertEqual(normalized.primary_agent_id, "main")
+        self.assertEqual(len(normalized.agents), 2)
+        self.assertEqual(normalized.agents[1].role, "delegated")
+        self.assertEqual(normalized.project_display, "project-c")
+        self.assertEqual(sum(1 for event in normalized.events if event.agent_id == "agent-one"), 1)
+
+    def test_normalize_codex_session_uses_events_and_turns(self) -> None:
+        session = {
+            "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello codex",
+                "summary": "hello codex",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello codex",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.primary_agent_type, "codex")
+        self.assertEqual(len(normalized.agents), 1)
+        self.assertEqual(normalized.agents[0].agent_id, "main")
+        self.assertEqual(len(normalized.events), 1)
+        self.assertEqual(normalized.events[0].agent_id, "main")
+        self.assertEqual(len(normalized.turns), 1)
+        self.assertEqual(normalized.project_path, "/tmp/codex-project")
+
+    def test_normalize_opencode_session_uses_events_and_turns(self) -> None:
+        session = {
+            "sessionId": "ses_test123",
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": "ses_test123",
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "tool_call",
+                "content": {"command": "ls"},
+                "summary": "Tool: bash",
+                "toolName": "bash",
+                "toolCallId": "call1",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:02Z",
+                "userSummary": "",
+                "assistantSummary": "ran bash",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.primary_agent_type, "opencode")
+        self.assertEqual(len(normalized.events), 1)
+        self.assertEqual(normalized.events[0].tool_name, "bash")
+        self.assertEqual(normalized.turns[0].event_ids, ["ev1"])
+
+    def test_html_report_pipeline_supports_codex_session(self) -> None:
+        session = {
+            "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [
+                {
+                    "id": "ev1",
+                    "agent": "codex",
+                    "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+                    "timestamp": "2026-05-29T03:00:00Z",
+                    "role": "user",
+                    "kind": "message",
+                    "content": "hello codex",
+                    "summary": "hello codex",
+                },
+                {
+                    "id": "ev2",
+                    "agent": "codex",
+                    "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+                    "timestamp": "2026-05-29T03:00:01Z",
+                    "role": "assistant",
+                    "kind": "tool_call",
+                    "content": {"command": "pwd"},
+                    "summary": "Tool: Bash",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+                {
+                    "id": "ev3",
+                    "agent": "codex",
+                    "sessionId": "019e9837-9271-7192-bfbf-f5b74ebe585c",
+                    "timestamp": "2026-05-29T03:00:02Z",
+                    "role": "tool",
+                    "kind": "tool_result",
+                    "content": "/tmp/codex-project",
+                    "summary": "/tmp/codex-project",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+            ],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:02Z",
+                "userSummary": "hello codex",
+                "assistantSummary": "ran pwd",
+                "events": [{"id": "ev1"}, {"id": "ev2"}, {"id": "ev3"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+        generic = build_generic_html_report(session, enable_llm=False)
+
+        self.assertEqual(result["reportType"], "html")
+        self.assertEqual(result["reportMode"], "yuanxi")
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(generic["reportMode"], "generic")
+        self.assertEqual(generic["summary"]["agentCount"], 1)
+        self.assertEqual(generic["llmStatus"]["mode"], "not_requested")
+        self.assertIn("/tmp/codex-project", generic["reportHtml"])
+        self.assertIn("019e9837-9271-7192-bfbf-f5b74ebe585c", generic["reportHtml"])
 
 
 class AnalyzeApiTests(unittest.TestCase):
@@ -122,7 +357,7 @@ class AnalyzeApiTests(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever)
             thread.start()
             try:
-                completed = subprocess.CompletedProcess(["mc"], 0, stdout="Agent 交互分析报告", stderr="")
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="Agent 交互分析报告", stderr="")
                 with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
                     status, payload = self._post_analyze(server, {"sessionId": SID, "turnKeys": ["main:0"]})
             finally:
@@ -134,7 +369,8 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["report"], "Agent 交互分析报告")
         call = run.call_args
-        self.assertEqual(call.args[0][:2], ["claude", "-p"])  # default analyzer cmd
+        self.assertEqual(call.args[0][1:], ["-p", "-"])
+        self.assertTrue(call.args[0][0].endswith("claude"))
         self.assertIn("hello", call.kwargs["input"])
         self.assertIn("helper", call.kwargs["input"])
 
@@ -161,7 +397,8 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["report"], "report")
         call = run.call_args
-        self.assertEqual(call.args[0], ["mc", "--code"])
+        self.assertEqual(call.args[0][-1], "--code")
+        self.assertTrue(call.args[0][0].endswith("mc"))
         self.assertIn("hello", call.kwargs["input"])
 
     def test_analyze_api_handles_missing_session_and_mc_error(self) -> None:
@@ -188,6 +425,1422 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertEqual(error_status, 500, error_payload)
         self.assertEqual(error_payload["code"], "analyzer_not_found")
 
+    def test_legacy_analyze_api_uses_agent_aware_default_command(self) -> None:
+        class StubCodexAdapter:
+            name = "codex"
+
+            def list_projects(self):
+                return []
+
+            def load_session(self, session_id: str):
+                if session_id != SID:
+                    return None
+                return {
+                    "sessionId": SID,
+                    "projectDir": "/tmp/codex-project",
+                    "agent": "codex",
+                    "events": [{
+                        "id": "ev1",
+                        "agent": "codex",
+                        "sessionId": SID,
+                        "timestamp": "2026-05-29T03:00:00Z",
+                        "role": "user",
+                        "kind": "message",
+                        "content": "hello codex",
+                        "summary": "hello codex",
+                    }],
+                    "turns": [{
+                        "id": "turn1",
+                        "agent": "codex",
+                        "startedAt": "2026-05-29T03:00:00Z",
+                        "endedAt": "2026-05-29T03:00:01Z",
+                        "userSummary": "hello codex",
+                        "assistantSummary": "",
+                        "events": [{"id": "ev1"}],
+                        "usage": {},
+                    }],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubCodexAdapter()))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["codex", "exec", "-"], 0, stdout="report", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
+                    status, payload = self._post_analyze(server, {"sessionId": SID})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["report"], "report")
+        self.assertEqual(run.call_args.args[0][1:], ["exec", "-"])
+        self.assertTrue(run.call_args.args[0][0].endswith("codex"))
+        self.assertIn("primaryAgentType", run.call_args.kwargs["input"])
+        self.assertIn("hello codex", run.call_args.kwargs["input"])
+
+    def test_legacy_analyze_api_fast_fails_for_unsupported_agent_protocol(self) -> None:
+        class StubOpenCodeAdapter:
+            name = "opencode"
+
+            def list_projects(self):
+                return []
+
+            def load_session(self, session_id: str):
+                if session_id != SID:
+                    return None
+                return {
+                    "sessionId": SID,
+                    "projectDir": "/tmp/opencode-project",
+                    "agent": "opencode",
+                    "events": [],
+                    "turns": [],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubOpenCodeAdapter()))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                with mock.patch("ccwhat.analyzer.subprocess.run") as run:
+                    status, payload = self._post_analyze(server, {"sessionId": SID})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 500, payload)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["code"], "analyzer_not_supported")
+        self.assertIn("not supported", payload["error"])
+        run.assert_not_called()
+
+    def test_session_api_derives_events_without_claude_adapter_fallback(self) -> None:
+        class StubCodexAdapter:
+            name = "codex"
+
+            def list_projects(self):
+                return []
+
+            def load_session(self, session_id: str):
+                if session_id != SID:
+                    return None
+                return {
+                    "sessionId": SID,
+                    "projectDir": "/tmp/codex-project",
+                    "agent": "codex",
+                    "events": [{
+                        "id": "ev1",
+                        "agent": "codex",
+                        "sessionId": SID,
+                        "timestamp": "2026-05-29T03:00:00Z",
+                        "role": "user",
+                        "kind": "message",
+                        "content": "hello codex",
+                        "summary": "hello codex",
+                    }],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubCodexAdapter()))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", f"/api/session/{SID}")
+                response = conn.getresponse()
+                payload = json.loads(response.read().decode("utf-8"))
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 200, payload)
+        self.assertEqual(payload["agent"], "codex")
+        self.assertIn("events", payload)
+        self.assertIn("turns", payload)
+        self.assertEqual(payload["turns"][0]["agentId"], "main")
+        self.assertEqual(payload["events"][0]["agentId"], "main")
+        self.assertEqual(payload["events"][0]["kind"], "message")
+        self.assertEqual(payload["events"][0]["content"], "hello codex")
+        self.assertEqual(payload["turns"][0]["events"], [{"id": "ev1"}])
+        self.assertNotEqual(payload["agent"], "claude")
+
+    def test_session_api_without_adapter_keeps_claude_agent_for_claude_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", f"/api/session/{SID}")
+                response = conn.getresponse()
+                payload = json.loads(response.read().decode("utf-8"))
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 200, payload)
+        self.assertEqual(payload["agent"], "claude")
+        self.assertIn("events", payload)
+        self.assertIn("turns", payload)
+        self.assertEqual(payload["turns"][0]["agentId"], "main")
+
+    def test_analyze_api_html_mode_works_without_project_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reportType"], "html")
+        self.assertEqual(payload["reportMode"], "generic")
+        self.assertIn("reportUrl", payload)
+        self.assertIn("exportUrl", payload)
+        self.assertIn("summary", payload)
+        self.assertEqual(payload["summary"]["agentCount"], 2)
+        self.assertIn("compression", payload)
+        self.assertTrue(payload["llmStatus"]["available"])
+        self.assertNotIn("error", payload)
+
+    def test_analyze_api_html_mode_works_without_project_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reportType"], "html")
+        self.assertEqual(payload["reportMode"], "generic")
+        self.assertIn("reportUrl", payload)
+        self.assertIn("exportUrl", payload)
+        self.assertIn("summary", payload)
+        self.assertEqual(payload["summary"]["agentCount"], 2)
+        self.assertIn("compression", payload)
+        self.assertTrue(payload["llmStatus"]["available"])
+        self.assertNotIn("error", payload)
+
+    def test_analyze_api_html_mode_with_codex_adapter(self) -> None:
+        class StubCodexAdapter:
+            name = "codex"
+
+            def list_projects(self):
+                return []
+
+            def load_session(self, session_id: str):
+                if session_id != SID:
+                    return None
+                return {
+                    "sessionId": SID,
+                    "projectDir": "/tmp/codex-project",
+                    "agent": "codex",
+                    "main": [],
+                    "subagents": [],
+                    "events": [
+                        {
+                            "id": "ev1",
+                            "agent": "codex",
+                            "sessionId": SID,
+                            "timestamp": "2026-05-29T03:00:00Z",
+                            "role": "user",
+                            "kind": "message",
+                            "content": "hello codex",
+                            "summary": "hello codex",
+                        },
+                        {
+                            "id": "ev2",
+                            "agent": "codex",
+                            "sessionId": SID,
+                            "timestamp": "2026-05-29T03:00:01Z",
+                            "role": "assistant",
+                            "kind": "tool_call",
+                            "content": {"command": "pwd"},
+                            "summary": "Tool: Bash",
+                            "toolName": "Bash",
+                            "toolCallId": "call-1",
+                        },
+                        {
+                            "id": "ev3",
+                            "agent": "codex",
+                            "sessionId": SID,
+                            "timestamp": "2026-05-29T03:00:02Z",
+                            "role": "tool",
+                            "kind": "tool_result",
+                            "content": "/tmp/codex-project",
+                            "summary": "/tmp/codex-project",
+                            "toolName": "Bash",
+                            "toolCallId": "call-1",
+                        },
+                    ],
+                    "turns": [{
+                        "id": "turn1",
+                        "agent": "codex",
+                        "startedAt": "2026-05-29T03:00:00Z",
+                        "endedAt": "2026-05-29T03:00:02Z",
+                        "userSummary": "hello codex",
+                        "assistantSummary": "ran pwd",
+                        "events": [{"id": "ev1"}, {"id": "ev2"}, {"id": "ev3"}],
+                        "usage": {},
+                    }],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubCodexAdapter()))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["codex", "exec", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reportType"], "html")
+        self.assertEqual(payload["reportMode"], "generic")
+        self.assertEqual(payload["summary"]["agentCount"], 1)
+        self.assertIn("reportUrl", payload)
+        self.assertIn("exportUrl", payload)
+        self.assertTrue(payload["llmStatus"]["available"])
+        self.assertFalse(payload["truncated"])
+        self.assertEqual(run.call_args.args[0][1:], ["exec", "-"])
+        self.assertTrue(run.call_args.args[0][0].endswith("codex"))
+        self.assertIn("hello codex", run.call_args.kwargs["input"])
+        self.assertIn("/tmp/codex-project", run.call_args.kwargs["input"])
+        self.assertEqual(run.call_args.kwargs["timeout"], 120)
+
+    def test_analyze_api_html_mode_with_opencode_adapter(self) -> None:
+        class StubOpenCodeAdapter:
+            name = "opencode"
+
+            def list_projects(self):
+                return []
+
+            def load_session(self, session_id: str):
+                if session_id != SID:
+                    return None
+                return {
+                    "sessionId": SID,
+                    "projectDir": "/tmp/opencode-project",
+                    "agent": "opencode",
+                    "main": [],
+                    "subagents": [],
+                    "events": [
+                        {
+                            "id": "ev1",
+                            "agent": "opencode",
+                            "sessionId": SID,
+                            "timestamp": "2026-05-29T03:00:00Z",
+                            "role": "assistant",
+                            "kind": "tool_call",
+                            "content": {"command": "ls"},
+                            "summary": "Tool: bash",
+                            "toolName": "bash",
+                            "toolCallId": "call-1",
+                        },
+                        {
+                            "id": "ev2",
+                            "agent": "opencode",
+                            "sessionId": SID,
+                            "timestamp": "2026-05-29T03:00:01Z",
+                            "role": "tool",
+                            "kind": "tool_result",
+                            "content": "file.txt",
+                            "summary": "file.txt",
+                            "toolName": "bash",
+                            "toolCallId": "call-1",
+                        },
+                    ],
+                    "turns": [{
+                        "id": "turn1",
+                        "agent": "opencode",
+                        "startedAt": "2026-05-29T03:00:00Z",
+                        "endedAt": "2026-05-29T03:00:01Z",
+                        "userSummary": "",
+                        "assistantSummary": "ran ls",
+                        "events": [{"id": "ev1"}, {"id": "ev2"}],
+                        "usage": {},
+                    }],
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubOpenCodeAdapter()))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                with mock.patch("ccwhat.analyzer.subprocess.run", side_effect=FileNotFoundError()) as run:
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "yuanxi"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["reportType"], "html")
+        self.assertEqual(payload["reportMode"], "yuanxi")
+        self.assertEqual(payload["summary"]["agentCount"], 1)
+        self.assertIn("reportUrl", payload)
+        self.assertIn("exportUrl", payload)
+        self.assertIn("diagnosisStatus", payload)
+        self.assertFalse(payload["diagnosisStatus"]["available"])
+        self.assertEqual(payload["diagnosisStatus"]["mode"], "fallback")
+        self.assertEqual(payload["diagnosisStatus"]["code"], "analyzer_not_supported")
+        self.assertIn("not supported", payload["diagnosisStatus"]["message"])
+        self.assertIn("'opencode'", payload["diagnosisStatus"]["message"])
+        self.assertFalse(payload["truncated"])
+        self.assertIn("compression", payload)
+        self.assertIn("elapsedMs", payload)
+        self.assertIn("totalMs", payload)
+        self.assertIn("buildMs", payload)
+        self.assertEqual(payload["llmElapsedMs"], 0) if "llmElapsedMs" in payload else None
+        run.assert_not_called()
+
+    def test_analyze_api_html_mode_without_llm_keeps_report(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "done",
+                "summary": "done",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "done",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["reportMode"], "yuanxi")
+        self.assertFalse(result["diagnosisStatus"]["available"])
+        self.assertEqual(result["diagnosisStatus"]["mode"], "not_requested")
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["llmElapsedMs"], 0)
+        self.assertIn("compression", result)
+        self.assertIn("elapsedMs", result)
+        self.assertFalse(bool(result["compression"]["omittedEvents"]))
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+
+    def test_generic_report_without_llm_keeps_html_shell(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "done",
+                "summary": "done",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "done",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_generic_html_report(session, enable_llm=False)
+
+        self.assertEqual(result["reportMode"], "generic")
+        self.assertIn("reportHtml", result)
+        self.assertFalse(result["llmStatus"]["available"])
+        self.assertEqual(result["llmStatus"]["mode"], "not_requested")
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["llmElapsedMs"], 0)
+        self.assertIn("compression", result)
+        self.assertIn("elapsedMs", result)
+        self.assertIn(SID, result["reportHtml"])
+        self.assertIn("/tmp/opencode-project", result["reportHtml"])
+
+    def test_report_summary_counts_delegated_agents_for_claude(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "agent": "claude",
+            "main": [{"type": "user", "timestamp": "2026-05-29T03:00:00Z", "message": {"content": "hello"}}],
+            "subagents": [{
+                "agentId": "agent-one",
+                "meta": {"description": "helper", "agentType": "general-purpose"},
+                "entries": [{"type": "assistant", "timestamp": "2026-05-29T03:01:00Z", "message": {"content": "done"}}],
+            }],
+            "turns": [],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 2)
+        self.assertEqual(result["compression"]["subagents"], 1)
+        self.assertEqual(result["compression"]["mainEntries"], 1)
+        self.assertEqual(result["compression"]["subagentEntries"], 1)
+        self.assertIn("reportHtml", result)
+        self.assertIn("project-c", result["reportHtml"])
+        self.assertFalse(result["diagnosisStatus"]["available"])
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+        self.assertEqual(result["summary"]["toolEventCount"], 0)
+        self.assertEqual(result["summary"]["findingCount"], 1)
+        self.assertGreaterEqual(result["elapsedMs"], 0)
+        self.assertEqual(result["llmElapsedMs"], 0)
+        self.assertIn("compression", result)
+        self.assertEqual(result["compression"]["events"], 0)
+        self.assertGreaterEqual(result["compression"]["rawChars"], 1)
+        self.assertGreaterEqual(result["compression"]["compressedChars"], 1)
+        self.assertEqual(result["compression"]["truncatedEvents"], 0)
+        self.assertGreaterEqual(result["compression"]["omittedEvents"], 0)
+
+    def test_report_pipeline_ignores_project_path_residue(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "projectPath": "/tmp/project-c",
+            "agent": "claude",
+            "main": [{"type": "user", "timestamp": "2026-05-29T03:00:00Z", "message": {"content": "hello"}}],
+            "subagents": [],
+            "turns": [],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.project_display, "project-c")
+        self.assertEqual(normalized.project_path, "/tmp/project-c")
+        result = build_html_session_report(session, enable_llm=False)
+        self.assertEqual(result["summary"]["projectDir"], "project-c")
+        self.assertIn("project-c", result["reportHtml"])
+        self.assertNotIn("projectPath", result["reportHtml"])
+
+    def test_generic_report_merges_tool_call_and_result(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [
+                {
+                    "id": "ev1",
+                    "agent": "codex",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:01Z",
+                    "role": "assistant",
+                    "kind": "tool_call",
+                    "content": {"command": "pwd"},
+                    "summary": "Tool: Bash",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+                {
+                    "id": "ev2",
+                    "agent": "codex",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:02Z",
+                    "role": "tool",
+                    "kind": "tool_result",
+                    "content": "/tmp/codex-project",
+                    "summary": "/tmp/codex-project",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+            ],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:01Z",
+                "endedAt": "2026-05-29T03:00:02Z",
+                "userSummary": "",
+                "assistantSummary": "ran pwd",
+                "events": [{"id": "ev1"}, {"id": "ev2"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["toolEventCount"], 1)
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+        self.assertIn("reportHtml", result)
+        self.assertIn("codex-project", result["reportHtml"])
+
+    def test_phase_inference_uses_turns_for_non_claude_agents(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [
+                {
+                    "id": "ev1",
+                    "agent": "opencode",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:00Z",
+                    "role": "user",
+                    "kind": "message",
+                    "content": "first",
+                    "summary": "first",
+                },
+                {
+                    "id": "ev2",
+                    "agent": "opencode",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:05:00Z",
+                    "role": "user",
+                    "kind": "message",
+                    "content": "second",
+                    "summary": "second",
+                },
+            ],
+            "turns": [
+                {
+                    "id": "turn1",
+                    "agent": "opencode",
+                    "startedAt": "2026-05-29T03:00:00Z",
+                    "endedAt": "2026-05-29T03:01:00Z",
+                    "userSummary": "first",
+                    "assistantSummary": "",
+                    "events": [{"id": "ev1"}],
+                    "usage": {},
+                },
+                {
+                    "id": "turn2",
+                    "agent": "opencode",
+                    "startedAt": "2026-05-29T03:05:00Z",
+                    "endedAt": "2026-05-29T03:06:00Z",
+                    "userSummary": "second",
+                    "assistantSummary": "",
+                    "events": [{"id": "ev2"}],
+                    "usage": {},
+                },
+            ],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["phaseCount"], 2)
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["compression"]["subagents"], 0)
+        self.assertEqual(result["summary"]["toolEventCount"], 0)
+        self.assertGreaterEqual(result["summary"]["totalWallMin"], 1.0)
+
+    def test_signal_detection_works_for_non_claude_events(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "测试通过，任务完成",
+                "summary": "测试通过，任务完成",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "测试通过，任务完成",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertGreaterEqual(result["summary"]["findingCount"], 0)
+        self.assertIn("reportHtml", result)
+
+    def test_truncation_count_tracks_large_tool_inputs(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "tool_call",
+                "content": {"command": "x" * 1000},
+                "summary": "Tool: Bash",
+                "toolName": "Bash",
+                "toolCallId": "call-1",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertGreaterEqual(result["compression"]["truncatedEvents"], 1)
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["summary"]["toolEventCount"], 1)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+
+    def test_error_tool_result_counts_as_failure(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [
+                {
+                    "id": "ev1",
+                    "agent": "opencode",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:00Z",
+                    "role": "assistant",
+                    "kind": "tool_call",
+                    "content": {"command": "bad"},
+                    "summary": "Tool: Bash",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+                {
+                    "id": "ev2",
+                    "agent": "opencode",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:01Z",
+                    "role": "tool",
+                    "kind": "tool_result",
+                    "content": "error: failed",
+                    "summary": "error: failed",
+                    "toolName": "Bash",
+                    "toolCallId": "call-1",
+                },
+            ],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}, {"id": "ev2"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertGreaterEqual(result["summary"]["findingCount"], 1)
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["summary"]["toolEventCount"], 1)
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertGreaterEqual(result["compression"]["compressedChars"], 1)
+        self.assertGreaterEqual(result["compression"]["rawChars"], 1)
+
+    def test_findings_include_delegated_agents_for_claude(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "agent": "claude",
+            "main": [{"type": "user", "timestamp": "2026-05-29T03:00:00Z", "message": {"content": "hello"}}],
+            "subagents": [{
+                "agentId": "agent-one",
+                "meta": {"description": "helper", "agentType": "general-purpose"},
+                "entries": [{"type": "assistant", "timestamp": "2026-05-29T03:01:00Z", "message": {"content": "done"}}],
+            }],
+            "turns": [],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertGreaterEqual(result["summary"]["findingCount"], 1)
+        self.assertIn("reportHtml", result)
+
+    def test_non_claude_project_dir_used_for_report_title(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello",
+                "summary": "hello",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_generic_html_report(session, enable_llm=False)
+
+        self.assertIn("/tmp/codex-project", result["reportHtml"])
+        self.assertEqual(result["summary"]["projectDir"], "/tmp/codex-project")
+        self.assertEqual(result["summary"]["agentCount"], 1)
+
+    def test_normalization_keeps_project_path_when_present(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "projectPath": "/tmp/project-c",
+            "agent": "claude",
+            "main": [],
+            "subagents": [],
+            "turns": [],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.project_display, "project-c")
+        self.assertEqual(normalized.project_path, "/tmp/project-c")
+        self.assertEqual(normalized.primary_agent_type, "claude")
+        self.assertEqual(normalized.primary_agent_id, "main")
+        self.assertEqual(len(normalized.agents), 1)
+
+    def test_normalization_sets_project_path_for_codex(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [],
+            "turns": [],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.project_display, "/tmp/codex-project")
+        self.assertEqual(normalized.project_path, "/tmp/codex-project")
+        self.assertEqual(normalized.primary_agent_type, "codex")
+
+    def test_normalization_sets_project_path_for_opencode(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "main": [],
+            "subagents": [],
+            "events": [],
+            "turns": [],
+        }
+
+        normalized = normalize_session_for_report(session)
+
+        self.assertEqual(normalized.project_display, "/tmp/opencode-project")
+        self.assertEqual(normalized.project_path, "/tmp/opencode-project")
+        self.assertEqual(normalized.primary_agent_type, "opencode")
+
+    def test_report_html_contains_agent_summary_section(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello",
+                "summary": "hello",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertIn("reportHtml", result)
+        self.assertIn("diagnosisMarkdown", result["reportHtml"])
+
+    def test_report_data_handles_empty_events(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "main": [],
+            "subagents": [],
+            "events": [],
+            "turns": [],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["phaseCount"], 0)
+        self.assertEqual(result["summary"]["toolEventCount"], 0)
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertIn("reportHtml", result)
+        self.assertEqual(result["compression"]["events"], 0)
+        self.assertEqual(result["compression"]["mainEntries"], 0)
+        self.assertEqual(result["compression"]["subagentEntries"], 0)
+
+    def test_report_summary_uses_project_display(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "projectPath": "/tmp/project-c",
+            "agent": "claude",
+            "main": [],
+            "subagents": [],
+            "turns": [],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["projectDir"], "project-c")
+        self.assertIn("project-c", result["reportHtml"])
+        self.assertNotIn("/tmp/project-c", result["summary"]["projectDir"])
+
+    def test_generic_report_uses_project_display(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "projectPath": "/tmp/project-c",
+            "agent": "claude",
+            "main": [],
+            "subagents": [],
+            "turns": [],
+        }
+
+        result = build_generic_html_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["projectDir"], "project-c")
+        self.assertIn("project-c", result["reportHtml"])
+
+    def test_report_html_mode_returns_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "yuanxi"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(status, 200, payload)
+        self.assertIn("reportUrl", payload)
+        self.assertIn("exportUrl", payload)
+        self.assertEqual(payload["reportType"], "html")
+        self.assertEqual(payload["reportMode"], "yuanxi")
+        self.assertTrue(payload["ok"])
+        self.assertIn("summary", payload)
+
+    def test_report_export_endpoint_serves_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+                self.assertEqual(status, 200, payload)
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", payload["exportUrl"])
+                response = conn.getresponse()
+                body = response.read().decode("utf-8")
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 200)
+        self.assertIn("text/html", response.getheader("Content-Type"))
+        self.assertIn("内容", body)
+        self.assertIn(SID, body)
+
+    def test_report_open_endpoint_serves_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+                self.assertEqual(status, 200, payload)
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", payload["reportUrl"])
+                response = conn.getresponse()
+                body = response.read().decode("utf-8")
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 200)
+        self.assertIn("text/html", response.getheader("Content-Type"))
+        self.assertIn("内容", body)
+        self.assertIn(SID, body)
+
+    def test_missing_report_url_returns_404(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", "/api/analysis-report/notfound")
+                response = conn.getresponse()
+                body = json.loads(response.read().decode("utf-8"))
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 404)
+        self.assertEqual(body["error"], "report not found or expired")
+
+    def test_missing_report_export_url_returns_404(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                conn = HTTPConnection("127.0.0.1", server.server_port)
+                conn.request("GET", "/api/analysis-report/notfound/export")
+                response = conn.getresponse()
+                body = json.loads(response.read().decode("utf-8"))
+                conn.close()
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertEqual(response.status, 404)
+        self.assertEqual(body["error"], "report not found or expired")
+
+    def test_html_pipeline_does_not_require_main_subagents_for_codex(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello",
+                "summary": "hello",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+        self.assertIn("reportHtml", result)
+
+    def test_html_pipeline_does_not_require_main_subagents_for_opencode(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "done",
+                "summary": "done",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "done",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertEqual(result["summary"]["phaseCount"], 1)
+        self.assertIn("reportHtml", result)
+
+    def test_html_pipeline_uses_claude_main_subagents_when_present(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "project-c",
+            "agent": "claude",
+            "main": [{"type": "user", "timestamp": "2026-05-29T03:00:00Z", "message": {"content": "hello"}}],
+            "subagents": [{
+                "agentId": "agent-one",
+                "meta": {"description": "helper", "agentType": "general-purpose"},
+                "entries": [{"type": "assistant", "timestamp": "2026-05-29T03:01:00Z", "message": {"content": "done"}}],
+            }],
+            "turns": [],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 2)
+        self.assertEqual(result["compression"]["mainEntries"], 1)
+        self.assertEqual(result["compression"]["subagentEntries"], 1)
+        self.assertEqual(result["compression"]["subagents"], 1)
+
+    def test_generic_pipeline_uses_unified_model_for_codex(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello",
+                "summary": "hello",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_generic_html_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertIn("/tmp/codex-project", result["reportHtml"])
+
+    def test_generic_pipeline_uses_unified_model_for_opencode(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "done",
+                "summary": "done",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "done",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_generic_html_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertIn("/tmp/opencode-project", result["reportHtml"])
+
+    def test_yuanxi_pipeline_uses_unified_model_for_opencode(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/opencode-project",
+            "agent": "opencode",
+            "events": [{
+                "id": "ev1",
+                "agent": "opencode",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "done",
+                "summary": "done",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "opencode",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "",
+                "assistantSummary": "done",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertIn("/tmp/opencode-project", result["reportHtml"])
+
+    def test_yuanxi_pipeline_uses_unified_model_for_codex(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "user",
+                "kind": "message",
+                "content": "hello",
+                "summary": "hello",
+            }],
+            "turns": [{
+                "id": "turn1",
+                "agent": "codex",
+                "startedAt": "2026-05-29T03:00:00Z",
+                "endedAt": "2026-05-29T03:00:01Z",
+                "userSummary": "hello",
+                "assistantSummary": "",
+                "events": [{"id": "ev1"}],
+                "usage": {},
+            }],
+        }
+
+        result = build_html_session_report(session, enable_llm=False)
+
+        self.assertEqual(result["summary"]["agentCount"], 1)
+        self.assertIn("/tmp/codex-project", result["reportHtml"])
+
+    def test_html_mode_keeps_urls_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            projects_dir = _make_projects(tmp)
+            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="# 报告\n\n内容", stderr="")
+                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed):
+                    status, payload = self._post_analyze(server, {"sessionId": SID, "mode": "generic"})
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+        self.assertTrue(payload["reportUrl"].startswith("/api/analysis-report/"))
+        self.assertTrue(payload["exportUrl"].endswith("/export"))
+        self.assertEqual(status, 200)
+
+    def test_html_mode_yuanxi_without_llm_has_not_requested_status(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/test",
+            "agent": "codex",
+            "events": [],
+            "turns": [],
+        }
+        result = build_html_session_report(session, enable_llm=False)
+        self.assertEqual(result["diagnosisStatus"]["mode"], "not_requested")
+        self.assertFalse(result["diagnosisStatus"]["available"])
+
+    def test_pipeline_explicit_analyzer_cmd_overrides_agent_default(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [],
+            "turns": [],
+        }
+        completed = subprocess.CompletedProcess(["custom-analyzer", "--json"], 0, stdout="# report", stderr="")
+        with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
+            result = build_generic_html_report(
+                session,
+                analyzer_cmd=("custom-analyzer", "--json"),
+                analyzer_agent="codex",
+            )
+
+        self.assertTrue(result["llmStatus"]["available"])
+        self.assertEqual(run.call_args.args[0], ["custom-analyzer", "--json"])
+        self.assertIn("/tmp/codex-project", run.call_args.kwargs["input"])
+
+    def test_html_mode_generic_without_llm_has_not_requested_status(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/test",
+            "agent": "codex",
+            "events": [],
+            "turns": [],
+        }
+        result = build_generic_html_report(session, enable_llm=False)
+        self.assertEqual(result["llmStatus"]["mode"], "not_requested")
+        self.assertFalse(result["llmStatus"]["available"])
+
+    def test_generic_html_includes_session_and_project(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/test",
+            "agent": "codex",
+            "events": [],
+            "turns": [],
+        }
+        result = build_generic_html_report(session, enable_llm=False)
+        self.assertIn(SID, result["reportHtml"])
+        self.assertIn("/tmp/test", result["reportHtml"])
+
+    def test_normalize_session_for_report_accepts_empty_claude(self) -> None:
+        session = {"sessionId": SID, "projectDir": "p", "agent": "claude", "main": [], "subagents": [], "turns": []}
+        normalized = normalize_session_for_report(session)
+        self.assertEqual(normalized.primary_agent_id, "main")
+        self.assertEqual(len(normalized.agents), 1)
+        self.assertEqual(len(normalized.events), 0)
+
+    def test_normalize_session_for_report_accepts_empty_codex(self) -> None:
+        session = {"sessionId": SID, "projectDir": "/tmp/p", "agent": "codex", "events": [], "turns": []}
+        normalized = normalize_session_for_report(session)
+        self.assertEqual(normalized.primary_agent_id, "main")
+        self.assertEqual(len(normalized.agents), 1)
+        self.assertEqual(len(normalized.events), 0)
+
+    def test_normalize_session_for_report_accepts_empty_opencode(self) -> None:
+        session = {"sessionId": SID, "projectDir": "/tmp/p", "agent": "opencode", "events": [], "turns": []}
+        normalized = normalize_session_for_report(session)
+        self.assertEqual(normalized.primary_agent_id, "main")
+        self.assertEqual(len(normalized.agents), 1)
+        self.assertEqual(len(normalized.events), 0)
 
 class AnalyzeFrontendTests(unittest.TestCase):
     def test_frontend_uses_current_session_only(self) -> None:
@@ -197,20 +1850,27 @@ class AnalyzeFrontendTests(unittest.TestCase):
         self.assertIn("分析当前 Session", html)
         self.assertIn("analyzeCurrentSession()", html)
         self.assertIn("fetch(`${apiBase()}/api/analyze`", html)
-        self.assertIn("body: JSON.stringify({sessionId})", html)
+        self.assertIn("body: JSON.stringify({sessionId, mode, customPrompt})", html)
         self.assertNotIn("turnKeys", html)
 
     def test_frontend_caches_reports_and_supports_reanalysis(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "viewer" / "claude-log.html").read_text(encoding="utf-8")
 
         self.assertIn("const analysisReports = {}", html)
-        self.assertIn("analysisReports[sessionId] = cached", html)
-        self.assertIn("analysisReports[sessionId] ? '查看分析报告' : '分析当前 Session'", html)
-        self.assertIn("function showCachedAnalysisReport()", html)
+        self.assertIn("analysisReports[cacheKey] = cached", html)
+        self.assertIn("analysisReports[preserveKey] = previous", html)
+        self.assertIn("function showCachedAnalysisReport(key)", html)
         self.assertIn("function reanalyzeCurrentSession()", html)
-        self.assertIn("preserveCached && previous", html)
-        self.assertIn("analysisReports[sessionId] = previous", html)
+        self.assertIn("function analyzeCurrentSession()", html)
+        self.assertIn("openModeModal()", html)
+        self.assertIn("modeOverlay", html)
+        self.assertIn("modeConfirmBtn", html)
+        self.assertIn("查看上一次报告", html)
+        self.assertIn("打开报告", html)
+        self.assertIn("导出报告", html)
         self.assertIn("重新分析失败", html)
+        self.assertIn("analysisCacheKey", html)
+        self.assertIn("selectedMode", html)
 
     def test_frontend_renders_analysis_markdown_richly(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "viewer" / "claude-log.html").read_text(encoding="utf-8")
