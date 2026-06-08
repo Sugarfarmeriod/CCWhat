@@ -16,8 +16,8 @@
   /* ── Top bar ── */
   .topbar {
     background: #161b22; border-bottom: 1px solid #30363d;
-    padding: 8px 14px; display: flex; align-items: center;
-    gap: 8px; flex-shrink: 0;
+    padding: 6px 10px; display: flex; align-items: center;
+    gap: 4px 6px; flex-shrink: 0; flex-wrap: wrap;
   }
   .topbar h1 { font-size: 14px; font-weight: 600; color: #f0f6fc; white-space: nowrap; }
   .adv-wrap { position: relative; }
@@ -46,13 +46,13 @@
   .btn {
     background: #21262d; color: #e1e4e8;
     border: 1px solid #30363d; border-radius: 5px;
-    padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+    padding: 4px 8px; font-size: 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
   }
   .btn:hover { background: #30363d; }
   .btn:disabled { opacity: 0.55; cursor: default; }
   .btn:disabled:hover { background: #21262d; }
   .badge { font-size: 11px; color: #8b949e; white-space: nowrap; }
-  .nav-links { margin-left: auto; display: flex; gap: 10px; }
+  .nav-links { margin-left: auto; display: flex; gap: 10px; flex-shrink: 0; }
   .nav-link { font-size: 12px; color: #58a6ff; text-decoration: none; white-space: nowrap; }
 
   /* ── Main layout ── */
@@ -194,7 +194,7 @@
   .tool-input { color: #adbac7; font-family: monospace; font-size: 11px; word-break: break-all; }
 
   /* Type filter checkboxes */
-  .type-filters { display: flex; gap: 5px; align-items: center; }
+  .type-filters { display: flex; gap: 5px; align-items: center; overflow-x: auto; flex-shrink: 1; min-width: 0; }
   .type-check {
     display: flex; align-items: center; gap: 3px;
     font-size: 11px; cursor: pointer; user-select: none;
@@ -371,13 +371,13 @@
       <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址">
     </div>
   </div>
-  <select class="field" id="projectSel" onchange="onProjectChange()">
+  <select class="field" id="projectSel" onchange="onProjectChange()" style="min-width:0;flex-shrink:1">
     <option value="">— project —</option>
   </select>
-  <select class="field" id="sessionSel" style="max-width:280px" onchange="loadSession()">
+  <select class="field" id="sessionSel" style="max-width:180px;min-width:0;flex-shrink:1" onchange="loadSession()">
     <option value="">— session —</option>
   </select>
-  <input class="field" id="searchBox" placeholder="搜索…" oninput="renderList()" style="width:130px">
+  <input class="field" id="searchBox" placeholder="搜索…" oninput="renderList()" style="width:100px;flex-shrink:1;min-width:60px">
   <div class="type-filters" id="typeFilters">
     <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
     <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
