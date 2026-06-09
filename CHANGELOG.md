@@ -2,6 +2,20 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v0.1.3 - 2026-06-09
+
+### 新增
+
+- 完成 Codex 报告生成链路的完整适配，元析报告和通用报告在 Codex 会话上均可正常生成。
+- 至此，codelenagent 已全面支持三大主流 AI Coding Agent：**Claude Code（VS Code）**、**Codex** 和 **OpenCode**，日志查看、分析报告、时间轴、工具耗时、Agent 摘要等核心功能对三者均可用。
+
+### 改进
+
+- Codex 报告生成的协议解析和超时问题已修复。
+- 三大 Agent 的 Analyzer 适配器统一收归 `ccwhat/analyzers/` 模块，结构更清晰。
+
+---
+
 ## v0.1.2 - 2026-06-09
 
 ### 新增
