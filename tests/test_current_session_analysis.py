@@ -741,7 +741,7 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertTrue(run.call_args.args[0][0].endswith("codex"))
         self.assertIn("hello codex", run.call_args.kwargs["input"])
         self.assertIn("/tmp/codex-project", run.call_args.kwargs["input"])
-        self.assertEqual(run.call_args.kwargs["timeout"], 300)
+        self.assertEqual(run.call_args.kwargs["timeout"], 45)
 
     def test_analyze_api_html_mode_with_opencode_adapter(self) -> None:
         class StubOpenCodeAdapter:
@@ -1942,6 +1942,17 @@ class AnalyzerAdapterTests(unittest.TestCase):
         result = codex_parse(stdout)
         self.assertEqual(result, "Agent reply")
 
+    def test_codex_jsonl_real_event_parser(self) -> None:
+        from ccwhat.analyzers.codex import parse_jsonl_text as codex_parse
+        stdout = (
+            '{"type":"thread.started","thread_id":"t"}\n'
+            '{"type":"turn.started"}\n'
+            '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Final from response item"}]}}\n'
+            '{"type":"event_msg","payload":{"type":"agent_message","message":"Final from event msg","phase":"commentary"}}\n'
+        )
+        result = codex_parse(stdout)
+        self.assertEqual(result, "Final from response item\nFinal from event msg")
+
     def test_codex_last_message_file_parser(self) -> None:
         from ccwhat.analyzers.codex import parse_last_message_file
         with tempfile.TemporaryDirectory() as tmp:
@@ -2002,8 +2013,8 @@ class AnalyzerAdapterTests(unittest.TestCase):
         param = sig.parameters["analyzer_cmd"]
         self.assertIs(param.default, None, "analyzer_cmd should default to None")
 
-    def test_codex_spec_timeout_300(self) -> None:
-        """Codex AnalyzerSpec.timeout_seconds should set default timeout to 300."""
+    def test_codex_spec_timeout_45(self) -> None:
+        """Codex AnalyzerSpec.timeout_seconds should keep experimental runs short."""
         completed = subprocess.CompletedProcess(
             ["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "-"],
             0,
@@ -2013,7 +2024,73 @@ class AnalyzerAdapterTests(unittest.TestCase):
         runner = mock.Mock(return_value=completed)
         report, _ = run_mc_analysis("prompt", runner=runner, agent="codex")
         self.assertEqual(report, "report")
-        self.assertEqual(runner.call_args.kwargs["timeout"], 300)
+        self.assertEqual(runner.call_args.kwargs["timeout"], 45)
+
+    def test_codex_generic_timeout_falls_back_to_local_report(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [
+                {
+                    "id": "ev1",
+                    "agent": "codex",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:00Z",
+                    "role": "assistant",
+                    "kind": "tool_call",
+                    "content": {"command": "pwd"},
+                    "summary": "Tool: bash",
+                    "toolName": "bash",
+                    "toolCallId": "call-1",
+                },
+                {
+                    "id": "ev2",
+                    "agent": "codex",
+                    "sessionId": SID,
+                    "timestamp": "2026-05-29T03:00:02Z",
+                    "role": "tool",
+                    "kind": "tool_result",
+                    "content": "/tmp/codex-project",
+                    "summary": "/tmp/codex-project",
+                    "toolName": "bash",
+                    "toolCallId": "call-1",
+                },
+            ],
+            "turns": [],
+        }
+        with mock.patch("ccwhat.analyzer.subprocess.run", side_effect=subprocess.TimeoutExpired("codex", 45)):
+            result = build_generic_html_report(session, analyzer_agent="codex")
+
+        self.assertEqual(result["llmStatus"]["mode"], "fallback")
+        self.assertEqual(result["llmStatus"]["code"], "analyzer_timeout")
+        self.assertIn("Agent 交互分析报告", result["reportHtml"])
+        self.assertIn("本地日志结构化分析", result["reportHtml"])
+        self.assertNotIn("报告生成失败", result["reportHtml"])
+
+    def test_codex_yuanxi_timeout_falls_back_to_local_diagnosis(self) -> None:
+        session = {
+            "sessionId": SID,
+            "projectDir": "/tmp/codex-project",
+            "agent": "codex",
+            "events": [{
+                "id": "ev1",
+                "agent": "codex",
+                "sessionId": SID,
+                "timestamp": "2026-05-29T03:00:00Z",
+                "role": "assistant",
+                "kind": "message",
+                "content": "测试通过，任务完成",
+                "summary": "测试通过，任务完成",
+            }],
+            "turns": [],
+        }
+        with mock.patch("ccwhat.analyzer.subprocess.run", side_effect=subprocess.TimeoutExpired("codex", 45)):
+            result = build_html_session_report(session, analyzer_agent="codex")
+
+        self.assertEqual(result["diagnosisStatus"]["mode"], "fallback")
+        self.assertEqual(result["diagnosisStatus"]["code"], "analyzer_timeout")
+        self.assertIn("本地结构化诊断", result["reportHtml"])
 
     def test_default_agent_fallback_to_claude(self) -> None:
         """When agent=None and no env var, default_agent should be used before 'claude'."""

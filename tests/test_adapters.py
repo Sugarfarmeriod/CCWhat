@@ -933,6 +933,80 @@ class TestCodexAdapter(unittest.TestCase):
             self.assertTrue(hasattr(adapter, attr))
         self.assertEqual(adapter.name, "codex")
 
+    def test_developer_and_environment_context_are_metadata(self) -> None:
+        developer_entry = {
+            "type": "response_item",
+            "timestamp": "2025-06-01T10:00:00Z",
+            "payload": {
+                "type": "message",
+                "role": "developer",
+                "content": [{"type": "input_text", "text": "<skills_instructions>huge system text</skills_instructions>"}],
+            },
+        }
+        environment_entry = {
+            "type": "response_item",
+            "timestamp": "2025-06-01T10:00:01Z",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "<environment_context><cwd>/tmp/project</cwd></environment_context>"}],
+            },
+        }
+
+        dev_events = CodexAdapter().raw_to_normalized_events(developer_entry, "sid")
+        env_events = CodexAdapter().raw_to_normalized_events(environment_entry, "sid")
+
+        self.assertEqual(dev_events[0]["kind"], "metadata")
+        self.assertIsNone(dev_events[0]["role"])
+        self.assertIsNone(dev_events[0]["content"])
+        self.assertEqual(env_events[0]["kind"], "metadata")
+        self.assertIsNone(env_events[0]["role"])
+        self.assertIsNone(env_events[0]["content"])
+
+    def test_sqlite_metadata_uses_real_codex_schema(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "state_5.sqlite"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute(
+                "CREATE TABLE threads ("
+                "id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, created_at INTEGER NOT NULL, "
+                "updated_at INTEGER NOT NULL, source TEXT NOT NULL, model_provider TEXT NOT NULL, "
+                "cwd TEXT NOT NULL, title TEXT NOT NULL, sandbox_policy TEXT NOT NULL, "
+                "approval_mode TEXT NOT NULL, tokens_used INTEGER NOT NULL DEFAULT 0, "
+                "has_user_event INTEGER NOT NULL DEFAULT 0, archived INTEGER DEFAULT 0, model TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO threads (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, "
+                "sandbox_policy, approval_mode, tokens_used, has_user_event, archived, model) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "thread-1",
+                    "/tmp/rollout.jsonl",
+                    1780000000,
+                    1780000100,
+                    "cli",
+                    "openai",
+                    "/tmp/codex-project",
+                    "Codex session",
+                    "workspace-write",
+                    "on-request",
+                    1234,
+                    1,
+                    0,
+                    "gpt-5",
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            adapter = CodexAdapter()
+            adapter._sqlite_path = db_path
+            meta = adapter._load_sqlite_metadata()
+
+        self.assertEqual(meta["thread-1"]["provider"], "openai")
+        self.assertEqual(meta["thread-1"]["cwd"], "/tmp/codex-project")
+        self.assertEqual(meta["thread-1"]["tokens_used"], 1234)
+
 
 # ---------------------------------------------------------------------------
 # OpenCodeAdapter tests
