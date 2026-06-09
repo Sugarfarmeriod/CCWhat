@@ -75,3 +75,13 @@
 - [x] 9.3 修复通用报告 Mermaid fallback，渲染失败时保留原始 Mermaid 源码并给出准确错误文案
 - [x] 9.4 收紧通用报告 prompt 的 Mermaid 输出约束，降低 OpenCode 生成非法 Mermaid 的概率
 - [x] 9.5 增加 OpenCode 时间轴和 Mermaid fallback 回归测试
+
+## 10. Codex 报告生成修复
+
+- [x] 10.1 修复 Codex SQLite metadata 查询，兼容 `model_provider` 等真实字段
+- [x] 10.2 修复 Codex 本地 rollout 中 developer/environment context 被当成正文的问题，避免报告 prompt 被系统上下文污染
+- [x] 10.3 增强 Codex analyzer JSONL parser，兼容 `thread.started`、`turn.started`、`response_item`、`event_msg` 等真实事件结构
+- [x] 10.4 降低 Codex experimental analyzer 默认 timeout，并确保 fallback candidate 使用各自 timeout，避免 UI 长时间等待
+- [x] 10.5 为 Codex analyzer 超时增加本地结构化 fallback，确保 yuanxi/generic 报告页面仍有可读内容
+- [x] 10.6 增加 Codex parser、adapter 过滤、timeout fallback 回归测试
+- [x] 10.7 运行完整测试；Codex 真实端到端报告生成保留为用户手动验收项

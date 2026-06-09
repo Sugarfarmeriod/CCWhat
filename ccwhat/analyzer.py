@@ -375,13 +375,15 @@ def run_mc_analysis(
             try:
                 cand_cmd, extra = prepare_candidate(candidate)
                 _cleanup_dirs.append(str(Path(extra.get("last_message_file", "")).parent))
-                result = _run_one_try(prompt, cand_cmd, effective_timeout, candidate, run, extra_files=extra)
+                candidate_timeout = _resolve_analyzer_timeout(timeout, spec=candidate)
+                result = _run_one_try(prompt, cand_cmd, candidate_timeout, candidate, run, extra_files=extra)
                 return result
             except (AnalysisError, subprocess.TimeoutExpired) as fallback_err:
                 fnf = isinstance(fallback_err, AnalysisError) and fallback_err.code == "analyzer_not_found"
                 if fnf:
                     raise
-                last_error = _as_analysis_error(fallback_err, effective_timeout)
+                candidate_timeout = _resolve_analyzer_timeout(timeout, spec=candidate)
+                last_error = _as_analysis_error(fallback_err, candidate_timeout)
                 continue
     finally:
         for d in _cleanup_dirs:

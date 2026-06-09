@@ -97,7 +97,7 @@ _register(AnalyzerSpec(
     output_mode="jsonl_text",
     experimental=True,
     parse_output=codex_parsers.parse_jsonl_text,
-    timeout_seconds=300,
+    timeout_seconds=45,
 ))
 
 # Register codex last-message-file as a fallback candidate
@@ -107,5 +107,5 @@ _register_candidate(AnalyzerSpec(
     output_mode="last_message_file",
     experimental=True,
     parse_output=codex_parsers.parse_last_message_file,
-    timeout_seconds=300,
+    timeout_seconds=45,
 ))

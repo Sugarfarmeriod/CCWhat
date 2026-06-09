@@ -45,6 +45,58 @@ def _truncate(text: Any, max_len: int = 120) -> str:
     return s[:max_len] + ("..." if len(s) > max_len else "")
 
 
+_CONTEXT_BLOB_MARKERS = (
+    "<environment_context>",
+    "<codex_internal_context",
+    "<permissions instructions>",
+    "<app-context>",
+    "<apps_instructions>",
+    "<skills_instructions>",
+    "<plugins_instructions>",
+    "<collaboration_mode>",
+)
+
+
+def _content_blocks_text(content_blocks: Any, text_types: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    for block in content_blocks if isinstance(content_blocks, list) else [content_blocks]:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") in text_types:
+            parts.append(str(block.get("text", "")))
+    return "\n".join(part for part in parts if part).strip()
+
+
+def _is_context_blob(text: str) -> bool:
+    stripped = text.lstrip()
+    lowered = stripped.lower()
+    return any(lowered.startswith(marker.lower()) for marker in _CONTEXT_BLOB_MARKERS)
+
+
+def _metadata_event(
+    raw_entry: dict[str, Any],
+    session_id: str,
+    summary: str,
+    content: Any = None,
+) -> dict[str, Any]:
+    return {
+        "id": _make_event_id(),
+        "agent": "codex",
+        "sessionId": session_id,
+        "turnId": None,
+        "timestamp": raw_entry.get("timestamp"),
+        "role": None,
+        "kind": "metadata",
+        "content": content,
+        "summary": summary,
+        "toolName": None,
+        "toolCallId": None,
+        "parentId": None,
+        "usage": _normalize_usage_helper(None),
+        "raw": raw_entry,
+    }
+
+
 def _normalize_usage_helper(
     raw_usage: dict[str, Any] | None, scope: str = "event", source: str = "agent_log"
 ) -> dict[str, Any]:
@@ -159,8 +211,8 @@ class CodexAdapter(AgentAdapter):
             conn = sqlite3.connect(str(sp))
             cur = conn.cursor()
             cur.execute(
-                "SELECT id, title, cwd, model, provider, updated_at, tokens_used "
-                "FROM threads LIMIT 10000"
+                "SELECT id, title, cwd, model, model_provider, updated_at, tokens_used, "
+                "created_at, rollout_path FROM threads LIMIT 10000"
             )
             for row in cur.fetchall():
                 tid = str(row[0]) if row[0] else ""
@@ -177,6 +229,10 @@ class CodexAdapter(AgentAdapter):
                     meta["updated_at"] = row[5]
                 if row[6]:
                     meta["tokens_used"] = row[6]
+                if len(row) > 7 and row[7]:
+                    meta["created_at"] = row[7]
+                if len(row) > 8 and row[8]:
+                    meta["rollout_path"] = row[8]
                 result[tid] = meta
             conn.close()
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -275,13 +331,11 @@ class CodexAdapter(AgentAdapter):
             content_blocks = payload.get("content", [])
 
             if rtype == "message" and role == "user":
-                text = ""
-                for block in content_blocks if isinstance(content_blocks, list) else [content_blocks]:
-                    if isinstance(block, dict) and block.get("type") == "input_text":
-                        bt = block.get("text", "")
-                        text += bt + "\n"
-                text = text.strip()
+                text = _content_blocks_text(content_blocks, ("input_text", "text"))
                 if text:
+                    if _is_context_blob(text):
+                        events.append(_metadata_event(raw_entry, session_id, "context: environment"))
+                        return events
                     events.append({
                         "id": _make_event_id(),
                         "agent": "codex",
@@ -299,15 +353,15 @@ class CodexAdapter(AgentAdapter):
                         "raw": raw_entry,
                     })
 
-            elif rtype == "message" and role in ("assistant", "developer"):
-                full_text = ""
-                for block in content_blocks if isinstance(content_blocks, list) else [content_blocks]:
-                    if isinstance(block, dict):
-                        bt = block.get("type", "")
-                        if bt in ("output_text", "input_text"):
-                            text = block.get("text", "")
-                            full_text += text + "\n"
-                full_text = full_text.strip()
+            elif rtype == "message" and role == "developer":
+                full_text = _content_blocks_text(content_blocks, ("output_text", "input_text", "text"))
+                summary = "context: developer"
+                if full_text and not _is_context_blob(full_text):
+                    summary = f"context: developer - {_truncate(full_text, 80)}"
+                events.append(_metadata_event(raw_entry, session_id, summary))
+
+            elif rtype == "message" and role == "assistant":
+                full_text = _content_blocks_text(content_blocks, ("output_text", "input_text", "text"))
                 if full_text:
                     events.append({
                         "id": _make_event_id(),
