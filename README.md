@@ -111,6 +111,17 @@ ccwhat import <archive> --open # 还原别人的 session，一起破案
 
 ---
 
+## 🤝 开发协作文档
+
+想一起开发 CCWhat，可以先读这几份文档：
+
+- [架构总览](docs/ARCHITECTURE.md)
+- [多 Agent Log Adapter](docs/ADAPTERS.md)
+- [Analyzer 报告生成协议](docs/ANALYZER.md)
+- [贡献指南](docs/CONTRIBUTING.md)
+
+---
+
 ## 🧬 还有更多功能在赶来的路上
 
 这个项目正在疯狂迭代，欢迎提意见、提 PR、疯狂转发。
