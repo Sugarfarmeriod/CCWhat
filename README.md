@@ -2,11 +2,11 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v0.1.2` · [更新日志](CHANGELOG.md)
+当前版本：`v0.1.3` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-`v0.1.2` 重点完成 OpenCode 的报告生成和前端展示适配：OpenCode 本地会话、工具调用、时间轴、元析报告、通用报告和 Mermaid 展示已进入可用状态。Codex 已接入基础日志/Analyzer 架构，但报告生成仍有已知问题，下一步会继续适配 Codex。
+`v0.1.3` 完成了 Codex 的完整适配。**现在 codelenagent 已全面支持三大主流 AI Coding Agent：Claude Code（VS Code）、Codex 和 OpenCode。** 日志查看、分析报告、时间轴、工具耗时统计、Agent 摘要等核心功能对三者均可用。
 
 **你的 AI 又嘴硬了？see see what！看看他在做什么。**
 

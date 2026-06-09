@@ -2,11 +2,11 @@
 
 [中文](README.md) | English
 
-Current version: `v0.1.2` · [Changelog](CHANGELOG.md)
+Current version: `v0.1.3` · [Changelog](CHANGELOG.md)
 
 ## Current Status
 
-`v0.1.2` focuses on OpenCode report generation and frontend display: OpenCode local sessions, tool calls, timelines, Yuanxi reports, generic reports, and Mermaid display are now usable. Codex is wired into the multi-agent log/analyzer architecture, but report generation still has known issues; Codex adaptation is the next planned step.
+`v0.1.3` completes full Codex support. **codelenagent now works with all three major AI coding agents: Claude Code (VS Code), Codex, and OpenCode.** Log viewing, analysis reports, timelines, tool timing, and agent summaries all work across all three.
 
 **Your AI being sneaky again? See see what it's actually doing.**
 
