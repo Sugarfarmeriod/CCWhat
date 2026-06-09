@@ -48,5 +48,4 @@ sample_data/
 *.tar.gz
 
 # local-only working directories, not part of the public release
-docs/
 元析bug定位/
