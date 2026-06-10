@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -617,7 +617,9 @@ def create_server(
     analyzer_timeout: int | None = None,
 ) -> HTTPServer:
     handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd, adapter=adapter, analyzer_agent=analyzer_agent, analyzer_timeout=analyzer_timeout)
-    return HTTPServer(("127.0.0.1", port), handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server.daemon_threads = True
+    return server
 
 
 def open_viewer(port: int) -> None:

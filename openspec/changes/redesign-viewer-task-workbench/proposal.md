@@ -1,31 +1,48 @@
 ## Why
 
-当前 viewer 仍以原始日志树为中心，已经无法承载从 Session 到 Task 的核心工作流。V1 需要把多轮 Agent session 自动拆成真实 coding task，并围绕 task 展示边界、证据、文件改动、命令、测试、错误和诊断结果，因此需要把界面从 Session Log Viewer 升级为 Task-first 的 Agent Session Workbench。
+当前 viewer 改版把页面拆成了很多导航项：Overview、Timeline、Sessions、Raw Events、Req / Resp、Diff、Diagnostics、Export、Settings。这个方向过早扩大了范围，导致最基本的两个工作流没有稳定落地：
+
+- 用户选择 session 后，`Session` 页面应该能直接看到旧版日志树和日志详情。
+- 用户进入 `Tasks` 页面后，应该能进行任务切分并查看 Task List + Task Detail。
+
+现在用户在左侧点击 `Sessions` 后主区域没有可用的 session 详情展示，这属于迁移 bug，而不是“功能尚未实现”的可接受状态。
 
 ## What Changes
 
-- 将 Claude Log viewer 重构为桌面端 App Shell：左侧一级功能导航、顶部全局上下文栏、主工作区按功能页面切换。
-- 默认进入当前 Session 的 `Tasks` 页面，而不是 Raw Events 页面。
-- 左侧导航改为一级功能导航，包含 `Tasks`、`Overview`、`Timeline`、`Sessions`、`Raw Events`、`Req / Resp`、`Diff`、`Diagnostics`、`Export`、`Settings`。
-- 顶部只保留全局上下文：Agent、Project、Session、Search、Refresh；具体功能按钮进入对应页面。
-- Tasks 页面采用 Task List + Task Detail 的主工作区布局，展示任务拆分结果、边界依据、证据链、turn 摘要、文件 diff、命令测试、原始事件跳转和调试 JSON。
-- 引入 canonical navigation target 模型，使 task 的 start/end、evidence、turn、command、error 都能稳定定位到 Raw Events / Diff / Req-Resp 等证据视图。
-- 保留现有 V0 能力：原始日志、工具调用、Subagent 日志、原始请求响应、Diff、Export，但将它们收敛为 Task-first 工作台中的证据页面。
-- 吸收并取代 `improve-task-segmentation-navigation` 中的旧界面局部修补需求；后续不再基于旧 Raw Event Tree 全局布局继续修补。
+- 将本 change 的目标收敛为两个核心模块：
+  - `Session`：承接旧版本地日志展示能力，包括 turn 树、entry 列表、entry 详情、类型筛选、搜索和定位。
+  - `Tasks`：承接任务切分能力，包括切分入口、Task List、Task Detail、证据跳转和 raw debug。
+- 左侧导航第一阶段只需要稳定支持 `Session` 和 `Tasks`。
+- 其他页面，如 Overview、Timeline、Req / Resp、Diff、Diagnostics、Export、Settings，不作为本阶段核心验收目标；可以保留入口或占位，但不能影响 Session / Tasks 主流程。
+- 用户选择 Project + Session 后，主页面必须有可见内容，不允许出现空白主工作区。
+- 默认页面改为 `Session`，因为当前最重要的是先完整迁移旧版日志查看能力。
+- Task 跳转到原始事件时，应跳回 `Session` 页面并定位对应 entry。
+- 已加载 session 后点击 `Tasks`，页面必须自动基于当前 session 发起任务切分或展示已有切分结果，不允许显示空白。
+- 从 `Session -> Tasks -> Session` 往返切换时，必须保留当前 session 的日志列表和详情区。
+- `Session` 页面恢复“报告分析”入口，复用已有 `/api/analyze` 与分析模式弹窗，不新建报告链路。
 
 ## Capabilities
 
-### New Capabilities
-
-None.
-
 ### Modified Capabilities
 
-- `session-viewer`: 将现有 viewer 从日志查看器重构为 Task Trace Workbench，新增 task-first 页面结构、稳定证据定位模型和多页面工作台导航。
+- `session-viewer`: 从过宽的多页面工作台收敛为 `Session + Tasks` 双模块工作台，优先保证本地日志查看和任务切分可用。
 
 ## Impact
 
-- 影响代码：主要是 `viewer/claude-log.html` 的布局、导航、Task 页面、Overview、Raw Events、Diff、Diagnostics、Export 视图，以及必要的前端状态与导航 helper。
-- 影响测试：需要新增/更新前端静态测试和必要 DOM 交互测试，覆盖默认页面、导航结构、Tasks 页面、canonical navigation target、Raw Events 定位、Diff/Diagnostics/Export 页面入口。
-- 设计参考：`/Users/elon-ge/Downloads/index.html` 中的 OpenDesign 原型，作为布局、信息架构和视觉密度参考，不要求逐像素复刻。
-- 行为边界：不修改 task segmentation 规则算法；不引入离线 eval runner；不实现 Dataset Builder 的完整流程；不展示完整 V2-V7 路线，只为 V0→V1 做界面升级。
+- 主要影响：
+  - `viewer/claude-log.html`
+  - `tests/test_task_segmentation_frontend.py`
+  - `tests/test_current_session_analysis.py`
+  - `tests/test_task_segmentation_dom.js`
+- OpenSpec 影响：
+  - 重写本 change 的 design/spec/tasks，使验收目标聚焦于 Session 展示和 Tasks 切分。
+- 回归修复：
+  - 修复点击 `Tasks` 后空白。
+  - 修复 `Tasks` 切回 `Session` 后仍空白。
+  - 修复报告分析入口在新版 `Session` 页面缺失。
+- 不要求本阶段完成：
+  - Diff 页面完整实现
+  - Req / Resp 页面迁移
+  - Diagnostics 页面完整实现
+  - Export 页面重构
+  - Dataset preview

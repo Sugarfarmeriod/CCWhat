@@ -33,6 +33,57 @@ class TestTaskSegmentationButton(unittest.TestCase):
         self.assertIn("method: 'POST'", _HTML)
 
 
+class TestSessionTasksWorkbenchScope(unittest.TestCase):
+    """Session + Tasks scoped workbench regression tests."""
+
+    def test_session_is_default_active_page(self):
+        self.assertIn("activeView: 'sessions'", _HTML)
+        session_nav_idx = _HTML.index('data-page="sessions"')
+        session_nav_snippet = _HTML[max(0, session_nav_idx - 80):session_nav_idx + 160]
+        self.assertIn("nav-item active", session_nav_snippet)
+
+    def test_left_nav_core_modules_are_session_and_tasks(self):
+        nav_start = _HTML.index('<nav class="left-nav">')
+        nav_end = _HTML.index('</nav>', nav_start)
+        nav = _HTML[nav_start:nav_end]
+        self.assertIn('data-page="sessions"', nav)
+        self.assertIn('> Session', nav)
+        self.assertIn('data-page="tasks"', nav)
+        self.assertNotIn('data-page="overview"', nav)
+        self.assertNotIn('data-page="raw-events"', nav)
+        self.assertNotIn('data-page="differential"', nav)
+
+    def test_session_page_contains_migrated_log_viewer(self):
+        self.assertIn('data-page="sessions"', _HTML)
+        self.assertIn('id="entryList"', _HTML)
+        self.assertIn('id="detailPanel"', _HTML)
+        self.assertIn('id="typeFilters"', _HTML)
+        self.assertIn('id="countBadge"', _HTML)
+
+    def test_raw_events_alias_routes_to_session(self):
+        self.assertIn("pageId === 'raw-events'", _HTML)
+        self.assertIn("pageId === 'session'", _HTML)
+
+    def test_evidence_alias_routes_to_session(self):
+        self.assertIn("pageId === 'evidence'", _HTML)
+
+    def test_missing_page_falls_back_to_session(self):
+        fn_start = _HTML.index("function navigateToPage")
+        fn_end = _HTML.index("function renderPage", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn('.page[data-page="${normalizedPageId}"]', snippet)
+        self.assertIn("if (!page)", snippet)
+        self.assertIn("normalizedPageId = 'sessions'", snippet)
+
+    def test_load_session_does_not_auto_jump_without_tasks(self):
+        fn_start = _HTML.index("async function loadSession")
+        fn_end = _HTML.index("function resetAnalysisState", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertNotIn("navigateToPage('raw-events')", snippet)
+        self.assertNotIn("taskSegmentReports[sessionId]?.tasks?.length", snippet)
+        self.assertIn("renderPage(workbenchState.activeView)", snippet)
+
+
 class TestTaskSegmentationCache(unittest.TestCase):
     """7.2 — cache and state behavior"""
 
@@ -61,9 +112,23 @@ class TestTaskSegmentationCache(unittest.TestCase):
     def test_on_click_handler_exists(self):
         self.assertIn("function onTaskSegmentsBtnClick", _HTML)
 
+    def test_tasks_page_auto_runs_for_loaded_session(self):
+        fn_start = _HTML.index("function renderTasksPage")
+        fn_end = _HTML.index("function renderReqRespPage", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("sessionId !== currentLoadedSessionId", snippet)
+        self.assertIn("正在切分当前 Session 的任务", snippet)
+        self.assertIn("runTaskSegmentationForCurrentSession({ navigate: false })", snippet)
+
+    def test_task_runner_accepts_navigation_option(self):
+        fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
+        snippet = _HTML[fn_start:fn_start + 500]
+        self.assertIn("{ navigate = true } = {}", snippet)
+        self.assertIn("if (navigate && workbenchState.activeView !== 'tasks')", snippet)
+
     def test_reset_calls_update_button(self):
         idx = _HTML.index("function resetAnalysisState")
-        snippet = _HTML[idx:idx + 400]
+        snippet = _HTML[idx:idx + 700]
         self.assertIn("updateTaskSegmentsButton", snippet)
 
     def test_load_session_calls_update_button(self):
@@ -249,7 +314,7 @@ class TestBugFixes(unittest.TestCase):
     def test_reset_clears_loaded_session_id(self):
         """P2: resetAnalysisState clears currentLoadedSessionId."""
         fn_start = _HTML.index("function resetAnalysisState")
-        snippet = _HTML[fn_start:fn_start + 400]
+        snippet = _HTML[fn_start:fn_start + 700]
         self.assertIn("currentLoadedSessionId = null", snippet)
 
 
@@ -341,6 +406,47 @@ class TestNavigationImprovements(unittest.TestCase):
 
     def test_nav_flash_css_exists(self):
         self.assertIn(".nav-flash", _HTML)
+
+
+class TestWorkbenchReviewFixes(unittest.TestCase):
+    """Review Fix 8 — static coverage for second-review regressions."""
+
+    def test_style_tag_closes_before_mermaid_script(self):
+        style_close = _HTML.index("</style>")
+        mermaid_script = _HTML.index("mermaid.min.js")
+        self.assertLess(style_close, mermaid_script)
+
+    def test_events_to_entries_assigns_event_id_on_each_pushed_entry(self):
+        fn_start = _HTML.index("function eventsToEntries")
+        fn_end = _HTML.index("// ── Load session entries", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertGreaterEqual(snippet.count("_eventId,"), 6)
+        self.assertIn("if (!pushed && _eventId && entries.length > 0)", snippet)
+
+    def test_overview_turn_count_uses_entry_turn_keys(self):
+        fn_start = _HTML.index("function renderOverviewPage")
+        fn_end = _HTML.index("function renderTimelinePage", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("new Set(allEntries.map(e => e._turnKey).filter(Boolean))", snippet)
+        self.assertNotIn("Object.keys(turnCollapsed).length", snippet)
+
+    def test_analysis_cache_writes_by_cache_key_and_session_id(self):
+        fn_start = _HTML.index("async function runAnalysisForCurrentSession")
+        fn_end = _HTML.index("function analyzeCurrentSession", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("analysisReports[cacheKey] = cached", snippet)
+        self.assertIn("analysisReports[sessionId] = cached", snippet)
+        self.assertIn("analysisReports[preserveKey] = previous", snippet)
+
+    def test_session_analysis_button_is_visible_in_session_toolbar(self):
+        self.assertIn('id="sessionAnalyzeBtn"', _HTML)
+        self.assertIn('onclick="analyzeCurrentSession()"', _HTML)
+        self.assertIn("报告分析", _HTML)
+
+    def test_analysis_no_longer_navigates_to_missing_evidence_page(self):
+        self.assertNotIn("navigateToPage('evidence')", _HTML)
+        self.assertIn("function ensureSessionAnalysisPanel", _HTML)
+        self.assertIn("navigateToPage('sessions')", _HTML)
 
 
 if __name__ == "__main__":
