@@ -2538,7 +2538,10 @@ async function loadSession() {
     workbenchState.sessionData = data;
     rebuildCanonicalNavIndex();
 
-    // Auto-refresh pages
+    // Auto-refresh pages & navigate to raw-events to show entries
+    if (workbenchState.activeView === 'tasks' && (!taskSegmentReports[sessionId]?.tasks?.length)) {
+      navigateToPage('raw-events');
+    }
     renderPage('overview');
     renderPage('timeline');
   } catch(e) {
