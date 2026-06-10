@@ -33,11 +33,11 @@
 
 ## 5. 手动验收
 
-- [ ] 5.1 启动 viewer，选择一个 Claude / Codex / OpenCode session，默认看到 `Session` 页面日志内容
-- [ ] 5.2 点击左侧 `Session`，主页面仍显示当前 session 的日志树和详情区
-- [ ] 5.3 点击左侧 `Tasks`，可运行任务切分并看到 Task List + Task Detail
-- [ ] 5.4 从 task start/end/evidence 点击定位，能回到 `Session` 并聚焦对应 entry
-- [ ] 5.5 在 Session 和 Tasks 之间切换，不丢失当前 session
+- [x] 5.1 启动 viewer，选择一个 Claude / Codex / OpenCode session，默认看到 `Session` 页面日志内容
+- [x] 5.2 点击左侧 `Session`，主页面仍显示当前 session 的日志树和详情区
+- [x] 5.3 点击左侧 `Tasks`，可运行任务切分并看到 Task List + Task Detail
+- [x] 5.4 从 task start/end/evidence 点击定位，能回到 `Session` 并聚焦对应 entry
+- [x] 5.5 在 Session 和 Tasks 之间切换，不丢失当前 session
 
 ## 6. 空白页与报告入口回归修复
 

@@ -1710,6 +1710,17 @@ document.addEventListener('click', e => {
 function apiBase() {
   return (document.getElementById('apiUrl').value || window.location.origin).replace(/\/$/, '');
 }
+async function apiError(resp, url) {
+  let detail = '';
+  try {
+    const data = await resp.clone().json();
+    detail = data?.error || data?.message || '';
+  } catch {
+    try { detail = (await resp.clone().text()).slice(0, 180); } catch {}
+  }
+  const suffix = detail ? `: ${detail}` : '';
+  return new Error(`HTTP ${resp.status}${suffix} (${url})`);
+}
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -2249,8 +2260,9 @@ function navigateToEventId(eventId) {
 // ── Init: load projects ──────────────────────────────────────────────────
 async function init() {
   try {
-    const resp = await fetch(`${apiBase()}/api/projects`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const url = `${apiBase()}/api/projects`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw await apiError(resp, url);
     allProjects = await resp.json();
 
     // Show agent from first project
@@ -2432,8 +2444,9 @@ async function loadSession() {
   document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">加载中…</div>';
 
   try {
-    const resp = await fetch(`${apiBase()}/api/session/${encodeURIComponent(sessionId)}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const url = `${apiBase()}/api/session/${encodeURIComponent(sessionId)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw await apiError(resp, url);
     const data = await resp.json();
 
     // Build groups: main + each subagent (or events for non-Claude)

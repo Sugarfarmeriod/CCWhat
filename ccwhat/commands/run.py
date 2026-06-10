@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import signal
 import socket
 import subprocess
 import sys
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from http.server import HTTPServer
 
@@ -165,6 +168,21 @@ def _start_managed_web(
 
     url = viewer_url(port)
     if _proxy_port_in_use(port):
+        existing_agent = _probe_viewer_agent(port)
+        if existing_agent is not None and existing_agent != agent_name:
+            click.echo(
+                f"Error: viewer port {port} is already serving agent '{existing_agent}', "
+                f"but this run needs '{agent_name}'.\n"
+                f"Stop the existing ccwhat process or use --web-port <other-port>.",
+                err=True,
+            )
+            return None
+        if existing_agent is None:
+            click.echo(
+                f"Warning: viewer port {port} is already in use but did not expose ccwhat status. "
+                "Opening it anyway; if the page is stale, stop the old process or use --web-port.",
+                err=True,
+            )
         click.echo(f"Viewer: {url}")
         open_viewer(port)
         return None
@@ -183,6 +201,34 @@ def _start_managed_web(
     click.echo(f"Viewer: {url}")
     open_viewer(port)
     return server
+
+
+def _probe_viewer_agent(port: int) -> str | None:
+    """Return the agent served by an existing viewer, or None if unknown."""
+    def _read_json(path: str, timeout: float = 0.5) -> dict | list | None:
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}{path}",
+                timeout=timeout,
+            ) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (OSError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+            return None
+
+    data = _read_json("/api/viewer/status")
+    if isinstance(data, dict):
+        agent = data.get("agent")
+        if agent:
+            return str(agent)
+
+    # Backwards-compatible probe for older viewer processes that predate
+    # /api/viewer/status but already include agent on /api/projects rows.
+    data = _read_json("/api/projects", timeout=1.0)
+    if isinstance(data, list) and data:
+        first = data[0]
+        if isinstance(first, dict) and first.get("agent"):
+            return str(first["agent"])
+    return None
 
 
 def _stop_managed_web(server: HTTPServer | None) -> None:

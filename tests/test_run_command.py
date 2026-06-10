@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import tempfile
@@ -372,11 +373,52 @@ class ViewerRunTests(unittest.TestCase):
         from ccwhat.commands.run import _start_managed_web
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch("ccwhat.commands.run._proxy_port_in_use", return_value=True), \
+             mock.patch("ccwhat.commands.run._probe_viewer_agent", return_value="opencode"), \
              mock.patch("viewer.server.open_viewer") as open_viewer:
-            server = _start_managed_web(7789, Path(tmp), None, ("mc", "--code"))
+            server = _start_managed_web(7789, Path(tmp), None, ("mc", "--code"), agent_name="opencode")
 
         self.assertIsNone(server)
         open_viewer.assert_called_once_with(7789)
+
+    def test_start_managed_web_refuses_mismatched_existing_viewer(self) -> None:
+        from ccwhat.commands.run import _start_managed_web
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch("ccwhat.commands.run._proxy_port_in_use", return_value=True), \
+             mock.patch("ccwhat.commands.run._probe_viewer_agent", return_value="claude"), \
+             mock.patch("viewer.server.open_viewer") as open_viewer:
+            server = _start_managed_web(7789, Path(tmp), None, agent_name="opencode")
+
+        self.assertIsNone(server)
+        open_viewer.assert_not_called()
+
+    def test_probe_viewer_agent_falls_back_to_projects(self) -> None:
+        from ccwhat.commands.run import _probe_viewer_agent
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+        calls: list[str] = []
+
+        def fake_urlopen(url, timeout=0.5):
+            calls.append(url)
+            if url.endswith("/api/viewer/status"):
+                raise OSError("not found")
+            return FakeResponse([{"projectDir": "/tmp/p", "agent": "opencode", "sessions": []}])
+
+        with mock.patch("ccwhat.commands.run.urllib.request.urlopen", side_effect=fake_urlopen):
+            self.assertEqual(_probe_viewer_agent(7789), "opencode")
+
+        self.assertEqual(len(calls), 2)
 
     def test_web_command_opens_existing_viewer_when_port_busy(self) -> None:
         from ccwhat.commands.web_server import web_server

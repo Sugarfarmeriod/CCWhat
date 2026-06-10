@@ -60,6 +60,15 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         self.assertIn('id="typeFilters"', _HTML)
         self.assertIn('id="countBadge"', _HTML)
 
+    def test_session_load_error_includes_backend_detail_and_url(self):
+        self.assertIn("async function apiError", _HTML)
+        self.assertIn("data?.error", _HTML)
+        self.assertIn("(${url})", _HTML)
+        fn_start = _HTML.index("async function loadSession")
+        fn_end = _HTML.index("function resetAnalysisState", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("throw await apiError(resp, url)", snippet)
+
     def test_raw_events_alias_routes_to_session(self):
         self.assertIn("pageId === 'raw-events'", _HTML)
         self.assertIn("pageId === 'session'", _HTML)

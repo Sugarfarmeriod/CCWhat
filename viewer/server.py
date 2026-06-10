@@ -433,7 +433,13 @@ def _make_handler(
             if path in _static:
                 self._send_file(viewer_dir / _static[path])
                 return
-            if path == "/api/recording/status":
+            if path == "/api/viewer/status":
+                self._send_json({
+                    "ok": True,
+                    "agent": self._adapter_agent() or "claude",
+                    "projectsDir": str(projects_dir),
+                })
+            elif path == "/api/recording/status":
                 self._send_json(get_recording_status(logs_dir, config_path))
             elif path == "/api/projects":
                 try:
