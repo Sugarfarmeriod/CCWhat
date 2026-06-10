@@ -77,3 +77,34 @@
 - [ ] 9.4 验证 Task Detail 中的 Overview、Evidence、Turns、Files & Diff、Commands、Raw 都能展示真实数据或明确空状态
 - [ ] 9.5 验证长 command、error、diff、JSON、req/resp 内容不会撑坏布局
 - [ ] 9.6 对照 OpenDesign 原型确认布局方向一致，但以真实数据可用性为准
+
+## 10. Review Fix — Spec Alignment (second review)
+
+### 10.1 HTML structure
+
+- [x] Fix 1 — 修复 `</style>` 缺失关闭标签：在 mermaid script 前插入 `</style>`，使 CSS block 正确闭合，避免后续 `<script>` 被解析为 style 内容导致全白页
+
+### 10.2 Canonical navigation index completeness
+
+- [x] Fix 4 — `rebuildCanonicalNavIndex` 现在注册：`agent-<id>:<line>`（subagent entries）、tool_use_id（来自 assistant tool_use blocks 和 user tool_result blocks）、task startEventId/endEventId
+
+### 10.3 eventsToEntries _eventId binding
+
+- [x] Fix 5 — 将 `_eventId` 在每个 push 时直接设置到 entry 对象，避免 unhandled kind 迭代时错误绑定到前一条 entry。仅当未 push 且有 `_eventId` 时回退到 `entries[last]._eventId = _eventId`
+
+### 10.4 Evidence analysis cache persistence
+
+- [x] Fix 6 — `runAnalysisForCurrentSession` 同时写入 `analysisReports[cacheKey]` 和 `analysisReports[sessionId]`，确保 `currentAnalysisReport()` 无参调用时能命中缓存
+
+### 10.5 Overview turnCount
+
+- [x] Fix 7 — `renderOverviewPage` 使用 `new Set(allEntries.map(e => e._turnKey).filter(Boolean)).size` 替代 `Object.keys(turnCollapsed).length`，避免已折叠/展开状态干扰计数
+
+### 10.6 Tasks page & Task Detail
+
+- [x] Fix 2 — 左侧导航 `Tasks` 页面已实现 dual-pane（`.task-workbench`：`.task-list-pane` 360px + `.task-detail-pane` flex:1）
+- [x] Fix 3 — Task Detail 已实现 6 个 tabs（Overview / Evidence / Turns / Files & Diff / Commands / Raw），通过 `switchTaskTab` 切换
+
+### 10.7 Test
+
+- [ ] Fix 8 — 补充前端测试覆盖 `</style>` 存在性、`eventsToEntries` _eventId 正确性、turnCount 计数、analysis cache 持久化
