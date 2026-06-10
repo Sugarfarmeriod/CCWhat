@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1177,6 +1178,37 @@ class TestOpenCodeAdapter(unittest.TestCase):
             self.assertGreater(len(session["events"]), 0)
             self.assertEqual(session["main"], [])
             self.assertEqual(session["subagents"], [])
+
+    def test_load_session_after_list_projects_from_another_thread(self) -> None:
+        """Threaded viewer may serve /api/projects and /api/session on different threads."""
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_threaded_open"
+            self._insert_session(db, sid, directory="/tmp/threaded", agent="build")
+            self._insert_message(db, "msg_thread_user", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "prt_thread_user", "msg_thread_user", sid, "text", "hello")
+
+            adapter = OpenCodeAdapter(db)
+            self.assertGreater(len(adapter.list_projects()), 0)
+
+            loaded: list[dict | None] = []
+            errors: list[BaseException] = []
+
+            def _load() -> None:
+                try:
+                    loaded.append(adapter.load_session(sid))
+                except BaseException as exc:
+                    errors.append(exc)
+
+            t = threading.Thread(target=_load)
+            t.start()
+            t.join(timeout=5)
+
+            self.assertFalse(t.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(len(loaded), 1)
+            self.assertIsNotNone(loaded[0])
+            self.assertEqual(loaded[0]["sessionId"], sid)
 
     def test_load_session_with_tool_parts(self) -> None:
         with TemporaryDirectory() as tmp:
