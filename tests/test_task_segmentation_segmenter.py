@@ -106,6 +106,26 @@ class TestMultipleUserTasks(unittest.TestCase):
             f"第二个任务的边界原因应包含新任务信号，实际: {second.boundary_reasons}",
         )
 
+    def test_task_titles_are_stable_ordinals(self):
+        """Task card titles should be stable labels, not raw noisy user text."""
+        noisy_first_prompt = '{"role":"user","content":[{"type":"input_text","text":"帮我修复登录 bug"}]}'
+        entries = [
+            _user(noisy_first_prompt, 1),
+            _assistant("好的，我来查看...", 2),
+            _tool_use("Edit", {"file_path": "auth.py", "new_str": "fix"}, line=3),
+            _tool_result(content="ok", line=4),
+            _assistant("登录 bug 已修复。", 5),
+            _user("另外，帮我新增用户注册功能", 6),
+            _assistant("好的，开始实现注册...", 7),
+            _tool_use("Edit", {"file_path": "register.py", "new_str": "new"}, line=8),
+            _tool_result(content="ok", line=9),
+        ]
+        result = segment_session(_session(entries))
+        self.assertGreaterEqual(len(result.tasks), 2)
+        self.assertEqual([t.title for t in result.tasks[:2]], ["任务 1", "任务 2"])
+        self.assertNotIn("role", result.tasks[0].title)
+        self.assertNotIn("content", result.tasks[0].title)
+
     def test_continuation_does_not_split(self):
         """A 'still failing' continuation message must not create a new task."""
         entries = [

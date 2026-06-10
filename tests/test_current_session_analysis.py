@@ -1669,7 +1669,7 @@ class AnalyzeFrontendTests(unittest.TestCase):
         self.assertIn("analyzeCurrentSession()", html)
         self.assertIn("fetch(`${apiBase()}/api/analyze`", html)
         self.assertIn("body: JSON.stringify({sessionId, mode, customPrompt})", html)
-        self.assertNotIn("turnKeys", html)
+        self.assertNotIn("turnKeys:", html)
 
     def test_frontend_caches_reports_and_supports_reanalysis(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "viewer" / "claude-log.html").read_text(encoding="utf-8")

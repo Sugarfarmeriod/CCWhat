@@ -407,6 +407,7 @@ class _Segmenter:
         # Renumber task IDs to be consecutive from task-001
         for i, seg in enumerate(segments, 1):
             seg.task_id = f"task-{i:03d}"
+            seg.title = f"任务 {i}"
 
         # Build summary
         summary = {

@@ -39,12 +39,33 @@ const MOCK_SESSION = {
   subagents: [],
 };
 
+const MOCK_TASK_SEGMENTS = {
+  ok: true,
+  sessionId: 'test-session-001',
+  tasks: [
+    {
+      taskId: 'task-1',
+      title: 'Fix the login bug',
+      taskType: 'bugfix',
+      status: 'unevaluated',
+      startEventId: 'main:1',
+      endEventId: 'main:2',
+      evidence: { commands: [], filesRead: [], filesChanged: [], errors: [] },
+      boundaryReasons: [],
+      fileWeights: {},
+    },
+  ],
+  summary: { taskCount: 1 },
+  elapsedMs: 5,
+};
+
 // ---------------------------------------------------------------------------
 // DOM setup
 // ---------------------------------------------------------------------------
 
-function makeDOM(sessionData) {
+function makeDOM(sessionData, taskSegmentData) {
   const session = sessionData || MOCK_SESSION;
+  const taskSegments = taskSegmentData || MOCK_TASK_SEGMENTS;
   const dom = new JSDOM(html, {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
@@ -60,8 +81,9 @@ function makeDOM(sessionData) {
         this._scrolledIntoView = true;
       };
       window.requestAnimationFrame = (cb) => { cb(0); return 0; };
+      window.__taskSegmentRequests = [];
       // Mock fetch: /api/projects returns one project, /api/session/:id returns session
-      window.fetch = (url) => {
+      window.fetch = (url, opts) => {
         const u = String(url);
         if (u.includes('/api/projects')) {
           return Promise.resolve({
@@ -74,11 +96,20 @@ function makeDOM(sessionData) {
         if (u.includes('/api/session/')) {
           return Promise.resolve({ ok: true, json: () => Promise.resolve(session) });
         }
+        if (u.includes('/api/task-segments')) {
+          window.__taskSegmentRequests.push(opts ? JSON.parse(opts.body || '{}') : {});
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(taskSegments) });
+        }
         return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
       };
     },
   });
   return dom;
+}
+
+async function flushAsync() {
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setImmediate(r));
 }
 
 async function loadTestSession(dom) {
@@ -103,7 +134,7 @@ async function loadTestSession(dom) {
   // Call loadSession and wait for it to complete
   await win.loadSession();
   // Wait for microtasks
-  await new Promise(r => setImmediate(r));
+  await flushAsync();
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +308,69 @@ async function test_show_nav_hint() {
 }
 
 // ---------------------------------------------------------------------------
+// Test 7: clicking Tasks auto-runs segmentation for the loaded session
+// ---------------------------------------------------------------------------
+
+async function test_tasks_page_auto_segments_loaded_session() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  win.navigateToPage('tasks');
+  await flushAsync();
+
+  assert.strictEqual(win.__taskSegmentRequests.length, 1, 'Tasks page should request segmentation once');
+  assert.deepStrictEqual(win.__taskSegmentRequests[0], { sessionId: 'test-session-001' });
+  assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'tasks');
+  assert.ok(doc.getElementById('taskSegContent').textContent.includes('Fix the login bug'));
+  console.log('  ✓ Tasks page auto-runs segmentation for the loaded session');
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: Session -> Tasks -> Session restores the log viewer
+// ---------------------------------------------------------------------------
+
+async function test_session_tasks_session_roundtrip_keeps_logs_visible() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  win.navigateToPage('tasks');
+  await flushAsync();
+  win.navigateToPage('sessions');
+  await flushAsync();
+
+  assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'sessions');
+  assert.ok(doc.getElementById('entryList').textContent.includes('Fix the login bug'));
+  assert.ok(doc.getElementById('detailPanel').textContent.trim().length > 0);
+  console.log('  ✓ Session -> Tasks -> Session keeps log viewer visible');
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: missing/legacy page ids cannot blank the workbench
+// ---------------------------------------------------------------------------
+
+async function test_missing_page_falls_back_to_session() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  win.navigateToPage('evidence');
+  assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'sessions');
+
+  win.navigateToPage('does-not-exist');
+  assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'sessions');
+  assert.ok(doc.getElementById('entryList').textContent.includes('Fix the login bug'));
+  console.log('  ✓ missing and legacy page ids fall back to Session');
+}
+
+// ---------------------------------------------------------------------------
 // Run all tests
 // ---------------------------------------------------------------------------
 
@@ -287,6 +381,9 @@ const tests = [
   test_focusEntryInNav_child_entry,
   test_make_nav_btn_disabled_for_unknown_event,
   test_show_nav_hint,
+  test_tasks_page_auto_segments_loaded_session,
+  test_session_tasks_session_roundtrip_keeps_logs_visible,
+  test_missing_page_falls_back_to_session,
 ];
 
 async function main() {

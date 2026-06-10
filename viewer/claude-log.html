@@ -786,43 +786,13 @@ body {
   <!-- Left Nav -->
   <nav class="left-nav">
     <div class="nav-section">
-      <div class="nav-section-title">Workbench</div>
-      <div class="nav-item active" data-page="tasks" onclick="navigateToPage('tasks')">
+      <div class="nav-section-title">Workspace</div>
+      <div class="nav-item active" data-page="sessions" onclick="navigateToPage('sessions')">
+        <span class="nav-item-icon">▤</span> Session
+      </div>
+      <div class="nav-item" data-page="tasks" onclick="navigateToPage('tasks')">
         <span class="nav-item-icon">✓</span> Tasks
         <span class="nav-badge" id="taskNavBadge" style="display:none">0</span>
-      </div>
-      <div class="nav-item" data-page="overview" onclick="navigateToPage('overview')">
-        <span class="nav-item-icon">📊</span> Overview
-      </div>
-      <div class="nav-item" data-page="timeline" onclick="navigateToPage('timeline')">
-        <span class="nav-item-icon">⏱</span> Timeline
-      </div>
-      <div class="nav-item" data-page="sessions" onclick="navigateToPage('sessions')">
-        <span class="nav-item-icon">💬</span> Sessions
-      </div>
-      <div class="nav-item" data-page="raw-events" onclick="navigateToPage('raw-events')">
-        <span class="nav-item-icon">📄</span> Raw Events
-      </div>
-      <div class="nav-item" data-page="reqresp" onclick="navigateToPage('reqresp')">
-        <span class="nav-item-icon">⇌</span> Req / Resp
-      </div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-section-title">Analysis</div>
-      <div class="nav-item" data-page="differential" onclick="navigateToPage('differential')">
-        <span class="nav-item-icon">⇄</span> Diff
-      </div>
-      <div class="nav-item" data-page="diagnostics" onclick="navigateToPage('diagnostics')">
-        <span class="nav-item-icon">🩺</span> Diagnostics
-      </div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-section-title">Tools</div>
-      <div class="nav-item" data-page="export" onclick="navigateToPage('export')">
-        <span class="nav-item-icon">📦</span> Export
-      </div>
-      <div class="nav-item" data-page="settings" onclick="navigateToPage('settings')">
-        <span class="nav-item-icon">⚙</span> Settings
       </div>
     </div>
   </nav>
@@ -833,8 +803,8 @@ body {
     <!-- Pages -->
     <div style="flex:1;overflow:hidden">
 
-      <!-- Tasks Page (默认) -->
-      <div class="page active" data-page="tasks">
+      <!-- Tasks Page -->
+      <div class="page" data-page="tasks">
         <div class="page-pad" id="tasksPage">
           <div class="page-title">Task Segmentation</div>
           <div id="taskSegContent">
@@ -863,16 +833,8 @@ body {
         </div>
       </div>
 
-      <!-- Sessions Page -->
-      <div class="page" data-page="sessions">
-        <div class="page-pad" id="sessionsPage">
-          <div class="page-title">Sessions</div>
-          <div id="sessionsContent"><div class="placeholder">选择 project 查看 sessions</div></div>
-        </div>
-      </div>
-
-      <!-- Raw Events Page -->
-      <div class="page" data-page="raw-events">
+      <!-- Session Page (default, migrated from the previous raw log viewer) -->
+      <div class="page active" data-page="sessions">
         <div class="page-pad" id="rawEventsPage" style="padding:0;display:flex;flex-direction:column">
           <div class="ev-toolbar" style="padding:4px 10px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-surface)">
             <span class="badge" id="countBadge"></span>
@@ -886,6 +848,7 @@ body {
               <label class="type-check" data-type="queue-operation"><input type="checkbox">queue</label>
               <label class="type-check checked-other" data-type="other"><input type="checkbox" checked>other</label>
             </div>
+            <button class="btn" id="sessionAnalyzeBtn" onclick="analyzeCurrentSession()" disabled style="margin-left:auto">报告分析</button>
           </div>
           <div style="flex:1;display:flex;overflow:hidden">
             <div class="list-panel" style="width:360px">
@@ -1096,7 +1059,7 @@ function toggleTheme() {
 
 // ── Workbench State & Page Navigation ─────────────────────────────────────
 const workbenchState = {
-  activeView: 'tasks',
+  activeView: 'sessions',
   activeTask: null,
   activeNavTarget: null,
   activeScope: 'session',
@@ -1156,24 +1119,33 @@ function rebuildCanonicalNavIndex() {
   }
 }
 
+function canonicalPageId(pageId) {
+  if (pageId === 'raw-events' || pageId === 'session' || pageId === 'evidence') return 'sessions';
+  return pageId || 'sessions';
+}
+
 function navigateToPage(pageId) {
-  workbenchState.activeView = pageId;
+  let normalizedPageId = canonicalPageId(pageId);
+  let page = document.querySelector(`.page[data-page="${normalizedPageId}"], .page-flex[data-page="${normalizedPageId}"]`);
+  if (!page) {
+    normalizedPageId = 'sessions';
+    page = document.querySelector('.page[data-page="sessions"], .page-flex[data-page="sessions"]');
+  }
+  workbenchState.activeView = normalizedPageId;
   document.querySelectorAll('.page, .page-flex').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const page = document.querySelector(`[data-page="${pageId}"]`);
   if (page) page.classList.add('active');
-  const navItem = document.querySelector(`.nav-item[data-page="${pageId}"]`);
+  const navItem = document.querySelector(`.nav-item[data-page="${normalizedPageId}"]`);
   if (navItem) navItem.classList.add('active');
   // Auto-render page content
-  renderPage(pageId);
+  renderPage(normalizedPageId);
 }
 
 function renderPage(pageId) {
-  switch (pageId) {
+  switch (canonicalPageId(pageId)) {
     case 'overview': renderOverviewPage(); break;
     case 'timeline': renderTimelinePage(); break;
-    case 'raw-events': break; // already rendered by loadSession
-    case 'sessions': renderSessionsPage(); break;
+    case 'sessions': renderSessionPage(); break;
     case 'tasks': renderTasksPage(); break;
     case 'reqresp': renderReqRespPage(); break;
     case 'differential': renderDifferentialPage(); break;
@@ -1278,37 +1250,40 @@ function renderTimelinePage() {
   el.innerHTML = html + '</div>';
 }
 
-function renderSessionsPage() {
-  const el = document.getElementById('sessionsContent');
-  if (!el) return;
-  const projects = allProjects;
-  if (!projects.length) {
-    el.innerHTML = '<div class="placeholder">无可用项目，请先连接 Viewer Server</div>';
+function renderSessionPage() {
+  const entryList = document.getElementById('entryList');
+  const detailPanel = document.getElementById('detailPanel');
+  if (!entryList || !detailPanel) return;
+  const sid = document.getElementById('sessionSel').value;
+  if (!sid) {
+    entryList.innerHTML = '<div class="placeholder">选择 project 和 session 后加载</div>';
+    detailPanel.innerHTML = '<div class="empty-detail">选择一个 session 查看本地日志</div>';
     return;
   }
-  let html = '';
-  for (const p of projects) {
-    const sessions = p.sessions || [];
-    html += `<div class="section"><div class="sec-hdr"><span class="sec-title">${esc(p.projectDir)}</span><span class="sec-toggle">${sessions.length} sessions</span></div>
-      <div class="sec-body">`;
-    for (const s of sessions) {
-      const id = typeof s === 'string' ? s : s.id;
-      const label = fmtSessionLabel(s);
-      html += `<div style="padding:4px 0;cursor:pointer;font-size:12px;display:flex;gap:6px;align-items:center"
-        onclick="document.getElementById('sessionSel').value='${escRaw(id)}';loadSession();navigateToPage('overview')">
-        <span style="color:var(--text-secondary);font-family:var(--font-mono);font-size:10px">${esc(id.slice(0, 12))}</span>
-        <span style="color:var(--text-primary)">${esc(label)}</span>
-      </div>`;
-    }
-    html += `</div></div>`;
+  if (!allEntries.length) {
+    entryList.innerHTML = '<div class="placeholder">当前 session 没有可展示的本地日志 entry</div>';
+    detailPanel.innerHTML = '<div class="empty-detail">没有可展示的日志详情</div>';
+    return;
   }
-  el.innerHTML = html;
+  renderList();
+  if (selectedIdx < 0) {
+    detailPanel.innerHTML = '<div class="empty-detail">← 点击左侧列表项查看原始日志</div>';
+  }
 }
 
 function renderTasksPage() {
   const el = document.getElementById('taskSegContent');
   if (!el) return;
   const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || sessionId !== currentLoadedSessionId) {
+    el.innerHTML = `<div class="placeholder">先在顶部选择 project 和 session，再进行任务切分<br>
+      <button class="btn" style="margin-top:8px" disabled>任务切分</button></div>`;
+    return;
+  }
+  if (taskSegmentsInFlight) {
+    el.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
+    return;
+  }
   const cached = taskSegmentReports[sessionId];
   if (cached && cached.tasks && cached.tasks.length) {
     // Check search filter
@@ -1325,8 +1300,8 @@ function renderTasksPage() {
       renderTaskSegments(cached, sessionId);
     }
   } else {
-    el.innerHTML = `<div class="placeholder">选择一个 session 后点击「任务切分」生成任务列表<br>
-      <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">任务切分</button></div>`;
+    el.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分当前 Session 的任务…</div>`;
+    runTaskSegmentationForCurrentSession({ navigate: false });
   }
 }
 
@@ -1485,7 +1460,7 @@ function renderSettingsPage() {
 
 // Auto-switch to a page when a specific action completes
 function navigateOnLoad(pageId) {
-  if (document.querySelector(`[data-page="${pageId}"]`)) {
+  if (document.querySelector(`.page[data-page="${pageId}"], .page-flex[data-page="${pageId}"]`)) {
     navigateToPage(pageId);
   }
 }
@@ -1837,15 +1812,15 @@ function showCachedTaskSegments() {
 }
 
 // 2.3-2.4: run with loading/success/error, preserve cache on failure
-async function runTaskSegmentationForCurrentSession() {
+async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId || taskSegmentsInFlight) return;
   const previous = taskSegmentReports[sessionId] || null;
   taskSegmentsInFlight = true;
   updateTaskSegmentsButton();
-  navigateToPage('tasks');
+  if (navigate && workbenchState.activeView !== 'tasks') navigateToPage('tasks');
   const panel = document.getElementById('taskSegContent');
-  panel.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
+  if (panel) panel.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
   try {
     const data = await requestTaskSegments(sessionId);
     taskSegmentReports[sessionId] = data;
@@ -1857,7 +1832,7 @@ async function runTaskSegmentationForCurrentSession() {
     const currentSession = document.getElementById('sessionSel').value;
     if (currentSession !== sessionId) return;
     const restoreBtn = previous ? `<div style="margin-top:8px"><button class="btn" onclick="showCachedTaskSegments()">查看上次结果</button></div>` : '';
-    panel.innerHTML = `<div class="task-seg-error">切分失败：${esc(e.message)}${restoreBtn}</div>`;
+    if (panel) panel.innerHTML = `<div class="task-seg-error">切分失败：${esc(e.message)}${restoreBtn}<div style="margin-top:8px"><button class="btn" onclick="runTaskSegmentationForCurrentSession()">重试</button></div></div>`;
   } finally {
     taskSegmentsInFlight = false;
     updateTaskSegmentsButton();
@@ -2302,13 +2277,12 @@ async function init() {
     } else if (curProject) {
       onProjectChange(curSession);
     }
-    renderPage('overview');
-    renderPage('sessions');
+    renderPage(workbenchState.activeView);
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">连接失败: ${esc(e.message)}</div>`;
     document.getElementById('agentBadge').textContent = '?';
-    renderPage('overview');
+    renderPage('sessions');
   }
 }
 
@@ -2538,12 +2512,8 @@ async function loadSession() {
     workbenchState.sessionData = data;
     rebuildCanonicalNavIndex();
 
-    // Auto-refresh pages & navigate to raw-events to show entries
-    if (workbenchState.activeView === 'tasks' && (!taskSegmentReports[sessionId]?.tasks?.length)) {
-      navigateToPage('raw-events');
-    }
-    renderPage('overview');
-    renderPage('timeline');
+    // Refresh the current page without changing the user's active module.
+    renderPage(workbenchState.activeView);
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
@@ -2552,10 +2522,11 @@ async function loadSession() {
 
 function resetAnalysisState() {
   analysisInFlight = false;
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  if (analyzeBtn) {
-    analyzeBtn.disabled = true;
-    analyzeBtn.textContent = '分析当前 Session';
+  for (const analyzeBtn of [document.getElementById('analyzeBtn'), document.getElementById('sessionAnalyzeBtn')]) {
+    if (analyzeBtn) {
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = analyzeBtn.id === 'sessionAnalyzeBtn' ? '报告分析' : '分析当前 Session';
+    }
   }
   selectedTaskSegmentId = null;
   currentLoadedSessionId = null;
@@ -2587,17 +2558,32 @@ function absoluteReportUrl(reportUrl) {
   }
 }
 
-function updateAnalyzeButton() {
-  const analyzeBtn = document.getElementById('analyzeBtn');
-  if (!analyzeBtn) return;
-  const sessionId = currentAnalysisSessionId();
-  if (!sessionId) {
-    analyzeBtn.disabled = true;
-    analyzeBtn.textContent = '分析当前 Session';
-    return;
+function ensureSessionAnalysisPanel() {
+  navigateToPage('sessions');
+  const detailPanel = document.getElementById('detailPanel');
+  if (!detailPanel) return null;
+  let panel = document.getElementById('evidenceContent');
+  if (!panel || !detailPanel.contains(panel)) {
+    detailPanel.innerHTML = '<div id="evidenceContent"></div>';
+    panel = document.getElementById('evidenceContent');
   }
-  analyzeBtn.disabled = analysisInFlight;
-  analyzeBtn.textContent = analysisInFlight ? '分析中…' : '分析当前 Session';
+  return panel;
+}
+
+function updateAnalyzeButton() {
+  const sessionId = currentAnalysisSessionId();
+  const loaded = sessionId && sessionId === currentLoadedSessionId;
+  for (const analyzeBtn of [document.getElementById('analyzeBtn'), document.getElementById('sessionAnalyzeBtn')]) {
+    if (!analyzeBtn) continue;
+    const idleText = analyzeBtn.id === 'sessionAnalyzeBtn' ? '报告分析' : '分析当前 Session';
+    if (!loaded) {
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = idleText;
+      continue;
+    }
+    analyzeBtn.disabled = analysisInFlight;
+    analyzeBtn.textContent = analysisInFlight ? '分析中…' : idleText;
+  }
 }
 
 function fmtMsShort(ms) {
@@ -2611,7 +2597,8 @@ function renderTimingSummary(timing) {
 }
 
 function renderAnalysisStatus(message, isError=false, cachedReport=null, timing=null) {
-  const panel = document.getElementById('evidenceContent');
+  const panel = ensureSessionAnalysisPanel();
+  if (!panel) return;
   const action = cachedReport
     ? `<div style="margin-top:10px"><button class="btn" onclick="showCachedAnalysisReport()">查看上一次报告</button></div>`
     : '';
@@ -2619,7 +2606,8 @@ function renderAnalysisStatus(message, isError=false, cachedReport=null, timing=
 }
 
 function renderAnalysisReport(cachedReport) {
-  const panel = document.getElementById('evidenceContent');
+  const panel = ensureSessionAnalysisPanel();
+  if (!panel) return;
   const wrap = document.createElement('div');
   const isHtmlReport = cachedReport.reportType === 'html' && cachedReport.reportUrl;
   wrap.className = isHtmlReport ? 'analysis-report html-report' : 'analysis-report';
@@ -2690,7 +2678,6 @@ function renderAnalysisReport(cachedReport) {
 function showCachedAnalysisReport(key) {
   const cached = key ? analysisReports[key] : null;
   if (cached) {
-    navigateToPage('evidence');
     renderAnalysisReport(cached);
   } else {
     analyzeCurrentSession();
@@ -2732,7 +2719,7 @@ async function requestSessionAnalysis(sessionId, mode, customPrompt) {
 async function runAnalysisForCurrentSession(mode, customPrompt, {preserveKey=null} = {}) {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId || analysisInFlight) return;
-  navigateToPage('evidence');
+  navigateToPage('sessions');
   const cacheKey = analysisCacheKey(sessionId, mode, customPrompt);
   const previous = preserveKey ? analysisReports[preserveKey] || null : null;
   analysisInFlight = true;
@@ -2760,11 +2747,15 @@ async function runAnalysisForCurrentSession(mode, customPrompt, {preserveKey=nul
 
 function analyzeCurrentSession() {
   if (analysisInFlight) return;
+  const sessionId = currentAnalysisSessionId();
+  if (!sessionId || sessionId !== currentLoadedSessionId) return;
   openModeModal();
 }
 
 function reanalyzeCurrentSession() {
   if (analysisInFlight) return;
+  const sessionId = currentAnalysisSessionId();
+  if (!sessionId || sessionId !== currentLoadedSessionId) return;
   openModeModal();
 }
 
