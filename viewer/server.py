@@ -301,7 +301,7 @@ def _make_handler(
             total_started = time.monotonic()
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
-            if path != "/api/analyze":
+            if path not in ("/api/analyze", "/api/task-segments"):
                 self._send_json({"ok": False, "error": "not found"}, 404)
                 return
             payload = self._read_json_body()
@@ -318,6 +318,53 @@ def _make_handler(
             session = self._get_session_data(session_id)
             if session is None:
                 self._send_json({"ok": False, "error": "session not found"}, 404)
+                return
+
+            # ── /api/task-segments ─────────────────────────────────────────
+            if path == "/api/task-segments":
+                from ccwhat.task_segments import segment_session
+                started = time.monotonic()
+                result = segment_session(session)
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+                tasks_json = [
+                    {
+                        "taskId": t.task_id,
+                        "title": t.title,
+                        "taskType": t.task_type,
+                        "status": t.status,
+                        "startEventId": t.start_event_id,
+                        "endEventId": t.end_event_id,
+                        "isAmbiguous": t.is_ambiguous,
+                        "finalClaim": t.final_claim,
+                        "boundaryReasons": t.boundary_reasons,
+                        "evidence": {
+                            "filesRead": t.evidence.files_read,
+                            "filesChanged": t.evidence.files_changed,
+                            "commands": t.evidence.commands,
+                            "testCommands": t.evidence.test_commands,
+                            "errors": t.evidence.errors,
+                            "skills": t.evidence.skills,
+                            "subagentIds": t.evidence.subagent_ids,
+                            "finalClaims": t.evidence.final_claims,
+                            "todosUser": t.evidence.todos_user,
+                        },
+                        "fileWeights": t.file_weights,
+                    }
+                    for t in result.tasks
+                ]
+                self._send_json({
+                    "ok": True,
+                    "sessionId": result.session_id,
+                    "summary": result.summary,
+                    "tasks": tasks_json,
+                    "isAmbiguous": result.is_ambiguous,
+                    "elapsedMs": elapsed_ms,
+                    "debugBoundaries": [
+                        {"eventId": b.event_id, "score": b.score,
+                         "shouldSplit": b.should_split, "reasons": b.reasons}
+                        for b in result.debug_boundaries
+                    ],
+                })
                 return
 
             if mode in ("yuanxi", "generic"):
@@ -371,36 +418,8 @@ def _make_handler(
                     "experimental": analyzer_spec.experimental if analyzer_spec else False,
                 })
             else:
-                # Legacy markdown report via ccwhat.analyzer (no mode specified)
-                from ccwhat.analyzer import (
-                    AnalysisError,
-                    build_analysis_prompt,
-                    run_mc_analysis,
-                )
-                report_session = normalize_session_for_report(session)
-                prompt, truncated = build_analysis_prompt(session)
-                effective_agent = _analyzer_agent or self._adapter_agent() or report_session.primary_agent_type or "claude"
-                try:
-                    report, elapsed_ms = run_mc_analysis(
-                        prompt,
-                        cmd=analyzer_cmd,
-                        agent=effective_agent,
-                        timeout=_analyzer_timeout,
-                    )
-                except AnalysisError as exc:
-                    self._send_json({"ok": False, "error": exc.message, "code": exc.code}, 500)
-                    return
-                from ccwhat.analyzers.registry import get as _get_analyzer_spec
-                analyzer_spec = _get_analyzer_spec(effective_agent)
-                self._send_json({
-                    "ok": True,
-                    "report": report,
-                    "elapsedMs": elapsed_ms,
-                    "truncated": truncated,
-                    "analyzerAgent": effective_agent,
-                    "analyzerOutputMode": analyzer_spec.output_mode if analyzer_spec else "stdout",
-                    "experimental": analyzer_spec.experimental if analyzer_spec else False,
-                })
+                self._send_json({"ok": False, "error": "mode is required (yuanxi or generic)", "code": "invalid_mode"}, 400)
+                return
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)

@@ -28,5 +28,5 @@ where = ["."]
 include = ["ccwhat*", "viewer*"]
 
 [tool.setuptools.package-data]
-ccwhat = ["assets/*.md", "assets/session-report/*.md", "assets/session-report/*.html", "assets/session-report/vendor/*"]
+ccwhat = ["assets/*.md", "assets/*.json", "assets/session-report/*.md", "assets/session-report/*.html", "assets/session-report/vendor/*"]
 viewer = ["*.html"]

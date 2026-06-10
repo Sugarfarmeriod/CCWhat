@@ -440,6 +440,96 @@ body {
   .analysis-link-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; letter-spacing: -0.01em; }
   .analysis-link-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 14px; }
   .analysis-link-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  /* ── Task segmentation panel ── */
+  .task-seg-header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+  }
+  .task-seg-title { font-size: 14px; font-weight: 700; color: var(--text-primary); flex: 1 1 auto; }
+  .task-seg-meta { font-size: 11px; color: var(--text-secondary); display: flex; gap: 8px; flex-wrap: wrap; }
+  .task-seg-meta span { background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 7px; }
+  .task-seg-actions { display: flex; gap: 6px; margin-left: auto; }
+  .task-seg-cards { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .task-card {
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 10px 12px; cursor: pointer; background: var(--bg-elevated);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .task-card:hover { border-color: var(--accent); }
+  .task-card.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated)); }
+  .task-card-hdr { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; flex-wrap: wrap; }
+  .task-card-id { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); white-space: nowrap; }
+  .task-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary);
+    flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task-card-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+  .task-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 500;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .task-badge-type-bugfix  { background: rgba(255,59,48,0.1);   color: var(--danger);   border-color: rgba(255,59,48,0.2); }
+  .task-badge-type-feature { background: rgba(0,113,227,0.1);   color: var(--accent);   border-color: rgba(0,113,227,0.2); }
+  .task-badge-type-refactor{ background: rgba(175,82,222,0.1);  color: #7a2fa0;         border-color: rgba(175,82,222,0.2); }
+  .task-badge-type-test    { background: rgba(48,209,88,0.1);   color: #1c8c3c;         border-color: rgba(48,209,88,0.2); }
+  .task-badge-type-doc     { background: rgba(255,159,10,0.1);  color: #b36a00;         border-color: rgba(255,159,10,0.2); }
+  .task-badge-type-review  { background: rgba(100,100,255,0.1); color: #3030c0;         border-color: rgba(100,100,255,0.2); }
+  .task-badge-type-unknown { background: var(--bg-surface);     color: var(--text-tertiary); border-color: var(--border); }
+  .task-badge-ambiguous    { background: rgba(255,159,10,0.12); color: var(--warning);  border-color: rgba(255,159,10,0.3); }
+  .task-badge-final-claim  { background: rgba(48,209,88,0.1);   color: var(--success);  border-color: rgba(48,209,88,0.2); }
+  .task-badge-unevaluated  { background: var(--bg-surface);     color: var(--text-tertiary); border-color: var(--border); }
+  .task-card-counts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .task-count-chip { font-size: 10px; color: var(--text-secondary); display: flex; align-items: center; gap: 2px; }
+  .task-count-chip.has-errors { color: var(--danger); }
+  .task-detail { padding: 0; }
+  .task-detail-section { margin-bottom: 10px; }
+  .task-detail-label { font-size: 10px; font-weight: 600; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+  .task-detail-row { font-size: 12px; color: var(--text-primary); margin-bottom: 3px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .task-detail-key { color: var(--text-secondary); white-space: nowrap; min-width: 90px; }
+  .task-detail-val { font-family: var(--font-mono); font-size: 11px; word-break: break-all;
+    background: var(--bg-surface); border-radius: 3px; padding: 0 4px; }
+  .evidence-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .evidence-chip {
+    font-size: 11px; font-family: var(--font-mono); padding: 2px 7px;
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-primary); word-break: break-all;
+    max-width: 100%; overflow-wrap: break-word;
+  }
+  .evidence-chip.err { background: rgba(255,59,48,0.07); border-color: rgba(255,59,48,0.2); color: var(--danger); }
+  .evidence-chip.test-cmd { background: rgba(48,209,88,0.07); border-color: rgba(48,209,88,0.2); color: #1c8c3c; }
+  .evidence-empty { font-size: 11px; color: var(--text-tertiary); font-style: italic; }
+  .file-weight-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .file-weight-name { font-size: 11px; font-family: var(--font-mono); color: var(--text-primary);
+    flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-weight-bar { height: 5px; border-radius: 3px; background: var(--accent); flex-shrink: 0; }
+  .file-weight-val { font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
+  .boundary-reason-row { font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary);
+    padding: 2px 0; word-break: break-all; }
+  .boundary-reason-row.split { color: var(--success); }
+  .boundary-reason-row.nosplit { color: var(--text-tertiary); }
+  .debug-boundary-row { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;
+    padding: 5px 8px; background: var(--bg-surface); border-radius: var(--radius-sm);
+    border: 1px solid var(--border); }
+  .debug-boundary-hdr { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }
+  .debug-ev-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); }
+  .debug-score { font-weight: 600; font-size: 11px; }
+  .debug-score.split { color: var(--success); }
+  .debug-score.nosplit { color: var(--text-tertiary); }
+  .task-seg-empty { text-align: center; padding: 32px 0; color: var(--text-tertiary); font-size: 13px; }
+  .task-seg-error { border: 1px solid rgba(255,59,48,0.3); border-radius: var(--radius-md);
+    background: rgba(255,59,48,0.05); padding: 12px 14px; color: var(--danger); font-size: 13px; }
+  .nav-btn {
+    font-size: 11px; padding: 3px 8px; border-radius: var(--radius-sm);
+    background: var(--bg-surface); border: 1px solid var(--border);
+    color: var(--text-secondary); cursor: pointer;
+  }
+  .nav-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+  .nav-btn:disabled { opacity: 0.4; cursor: default; }
+  @keyframes nav-flash-anim {
+    0%   { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+    100% { background: transparent; }
+  }
+  .nav-flash { animation: nav-flash-anim 1.2s ease-out forwards; }
   /* ── Mode selection modal ── */
   .mode-overlay {
     display: none; position: fixed; inset: 0;
@@ -626,6 +716,8 @@ body {
     <button class="btn" onclick="init()">刷新</button>
     <button class="btn" id="analyzeBtn" onclick="analyzeCurrentSession()" disabled
             title="生成当前 session 的 HTML 分析报告">分析当前 Session</button>
+    <button class="btn" id="taskSegmentsBtn" onclick="onTaskSegmentsBtnClick()" disabled
+            title="对当前 session 执行规则切分，生成任务列表">任务切分</button>
     <button class="btn" id="exportBtn" onclick="openExportModal()" disabled
             style="background:var(--accent);color:#fff;border-color:transparent" title="导出当前 session 的日志和请求响应">导出</button>
     <div class="nav-links">
@@ -948,6 +1040,11 @@ const groupCollapsed = {};
 const analysisReports = {};  // key: analysisCacheKey(sessionId, mode, customPrompt)
 let analysisInFlight = false;
 let selectedMode = 'yuanxi';
+// Task segmentation state (memory only — never written to localStorage)
+const taskSegmentReports = {};   // key: sessionId
+let taskSegmentsInFlight = false;
+let selectedTaskSegmentId = null;
+let currentLoadedSessionId = null;   // set only after session loads successfully
 
 function promptFingerprint(text) {
   let h = 0;
@@ -1028,6 +1125,404 @@ function syntaxHighlightJson(obj) {
       return `<span class="json-punct">${esc(match)}</span>`;
     }
   );
+}
+
+// ── Task Segmentation ──────────────────────────────────────────────────────
+
+function updateTaskSegmentsButton() {
+  const btn = document.getElementById('taskSegmentsBtn');
+  if (!btn) return;
+  const sessionId = document.getElementById('sessionSel').value;
+  // Only enable after the session has loaded successfully
+  if (!sessionId || sessionId !== currentLoadedSessionId) {
+    btn.disabled = true; btn.textContent = '任务切分'; return;
+  }
+  btn.disabled = taskSegmentsInFlight;
+  if (taskSegmentsInFlight) { btn.textContent = '切分中…'; return; }
+  btn.textContent = taskSegmentReports[sessionId] ? '查看任务切分' : '任务切分';
+}
+
+function onTaskSegmentsBtnClick() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || taskSegmentsInFlight) return;
+  if (taskSegmentReports[sessionId]) { showCachedTaskSegments(); return; }
+  runTaskSegmentationForCurrentSession();
+}
+
+// 2.1-2.2: API request — body contains only {sessionId}
+async function requestTaskSegments(sessionId) {
+  const resp = await fetch(`${apiBase()}/api/task-segments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+// 2.3: show cached result
+function showCachedTaskSegments() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId) return;
+  const cached = taskSegmentReports[sessionId];
+  if (cached) { renderTaskSegments(cached, sessionId); } else { runTaskSegmentationForCurrentSession(); }
+  updateTaskSegmentsButton();
+}
+
+// 2.3-2.4: run with loading/success/error, preserve cache on failure
+async function runTaskSegmentationForCurrentSession() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || taskSegmentsInFlight) return;
+  const previous = taskSegmentReports[sessionId] || null;
+  taskSegmentsInFlight = true;
+  updateTaskSegmentsButton();
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
+  try {
+    const data = await requestTaskSegments(sessionId);
+    taskSegmentReports[sessionId] = data;           // always persist to cache
+    const currentSession = document.getElementById('sessionSel').value;
+    if (currentSession !== sessionId) return;       // stale guard: user switched session
+    selectedTaskSegmentId = data.tasks && data.tasks.length ? data.tasks[0].taskId : null;
+    renderTaskSegments(data, sessionId);
+  } catch (e) {
+    const currentSession = document.getElementById('sessionSel').value;
+    if (currentSession !== sessionId) return;       // stale guard: don't pollute new session
+    const restoreBtn = previous ? `<div style="margin-top:8px"><button class="btn" onclick="showCachedTaskSegments()">查看上次结果</button></div>` : '';
+    panel.innerHTML = `<div class="task-seg-error">切分失败：${esc(e.message)}${restoreBtn}</div>`;
+  } finally {
+    taskSegmentsInFlight = false;
+    updateTaskSegmentsButton();
+  }
+}
+
+// 3.1-3.4, 4.1-4.5, 6.1: main render
+function renderTaskSegments(data, sessionId) {
+  const panel = document.getElementById('detailPanel');
+  const tasks = data.tasks || [];
+  const summary = data.summary || {};
+  const elapsedMs = data.elapsedMs || 0;
+  const isAmbiguous = data.isAmbiguous || false;
+
+  // 3.1: header
+  const ambiguousBadge = isAmbiguous
+    ? `<span class="task-badge task-badge-ambiguous">⚠ ambiguous</span>` : '';
+  const flipsTxt = summary.topicFlips > 0 ? `<span>topic flips: ${summary.topicFlips}</span>` : '';
+  const elapsedTxt = elapsedMs ? `<span>${(elapsedMs/1000).toFixed(1)}s</span>` : '';
+  let header = `
+    <div class="task-seg-header">
+      <div class="task-seg-title">任务切分 — ${tasks.length} 个任务${isAmbiguous ? ' ⚠' : ''}</div>
+      <div class="task-seg-meta">${ambiguousBadge}${flipsTxt}${elapsedTxt}</div>
+      <div class="task-seg-actions">
+        <button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button>
+      </div>
+    </div>`;
+
+  // 3.2: empty state
+  if (tasks.length === 0) {
+    panel.innerHTML = header + `<div class="task-seg-empty">未识别到任务片段<br><span style="font-size:11px">可能是 session 过短，或规则阈值需调整</span></div>`;
+    return;
+  }
+
+  // 3.3-3.4: task cards
+  const selId = selectedTaskSegmentId || tasks[0].taskId;
+  const cards = tasks.map(t => {
+    const ev = t.evidence || {};
+    const isSelected = t.taskId === selId;
+    const typeCls = `task-badge-type-${t.taskType || 'unknown'}`;
+    const badges = [
+      `<span class="task-badge ${typeCls}">${esc(t.taskType || 'unknown')}</span>`,
+      `<span class="task-badge task-badge-unevaluated">${esc(t.status)}</span>`,
+      t.isAmbiguous ? `<span class="task-badge task-badge-ambiguous">ambiguous</span>` : '',
+      t.finalClaim ? `<span class="task-badge task-badge-final-claim">✓ claim</span>` : '',
+    ].filter(Boolean).join('');
+    const counts = [
+      ev.filesChanged?.length ? `<span class="task-count-chip">✎ ${ev.filesChanged.length}</span>` : '',
+      ev.filesRead?.length ? `<span class="task-count-chip">◎ ${ev.filesRead.length}</span>` : '',
+      ev.commands?.length ? `<span class="task-count-chip">$ ${ev.commands.length}</span>` : '',
+      ev.errors?.length ? `<span class="task-count-chip has-errors">⚠ ${ev.errors.length}</span>` : '',
+      ev.subagentIds?.length ? `<span class="task-count-chip">⚙ ${ev.subagentIds.length}</span>` : '',
+    ].filter(Boolean).join('');
+    return `
+      <div class="task-card${isSelected ? ' selected' : ''}" data-task-id="${esc(t.taskId)}" data-session-id="${esc(sessionId)}">
+        <div class="task-card-hdr">
+          <span class="task-card-id">${esc(t.taskId)}</span>
+          <span class="task-card-title">${esc(t.title || '(无标题)')}</span>
+          <div class="task-card-badges">${badges}</div>
+        </div>
+        <div class="task-card-counts">${counts || '<span class="task-count-chip" style="opacity:.4">无 evidence</span>'}</div>
+      </div>`;
+  }).join('');
+
+  // 4.1-4.5: selected task detail
+  const selTask = tasks.find(t => t.taskId === selId) || tasks[0];
+  const detailHtml = selTask ? renderTaskDetail(selTask, data.debugBoundaries) : '';
+
+  panel.innerHTML = `<div class="analysis-report" style="max-width:100%">
+    ${header}
+    <div class="task-seg-cards" id="taskSegCards">${cards}</div>
+    <div id="taskDetailContainer">${detailHtml}</div>
+  </div>`;
+
+  // Delegated click on task cards — no inline onclick, no fragile DOM query
+  const cardsEl = document.getElementById('taskSegCards');
+  if (cardsEl) {
+    cardsEl.addEventListener('click', e => {
+      const card = e.target.closest('[data-task-id]');
+      if (!card) return;
+      selectTaskSegment(card.dataset.taskId, card.dataset.sessionId);
+    }, { once: true });
+  }
+}
+
+function selectTaskSegment(taskId, sessionId) {
+  const cached = taskSegmentReports[sessionId];
+  if (!cached) return;
+  // task 1.4: guard against invalid task id
+  const task = (cached.tasks || []).find(t => t.taskId === taskId);
+  if (!task) return;
+  selectedTaskSegmentId = taskId;
+  // State-driven re-render — selection class and detail are both derived from selectedTaskSegmentId
+  renderTaskSegments(cached, sessionId);
+}
+
+// 2.3: extract a short summary from an error string
+function errorSummary(text, maxLen = 160) {
+  if (!text) return '(空)';
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+  const keywords = ['Error', 'error', 'FAILED', 'failed', 'Traceback', 'Exception', 'Permission denied', 'AssertionError'];
+  const hit = lines.find(l => keywords.some(k => l.includes(k))) || lines[0] || text;
+  return hit.length > maxLen ? hit.slice(0, maxLen) + '…' : hit;
+}
+
+function renderTaskDetail(task, debugBoundaries) {
+  const ev = task.evidence || {};
+  const fw = task.fileWeights || {};
+  const brs = task.boundaryReasons || [];
+  const dbs = debugBoundaries || [];
+
+  // 4.1: overview (finalClaim moved to its own section below)
+  const overviewRows = [
+    ['起始事件', task.startEventId, true],
+    ['结束事件', task.endEventId, true],
+    ['类型', task.taskType],
+    ['状态', task.status],
+  ].filter(Boolean);
+  const overviewHtml = overviewRows.map(([k, v, mono]) =>
+    `<div class="task-detail-row"><span class="task-detail-key">${esc(k)}</span>
+     <span class="${mono ? 'task-detail-val' : ''}">${esc(String(v || '—'))}</span></div>`
+  ).join('');
+
+  // 5.2: navigate buttons
+  const startNav = makeNavBtn('定位开始事件', task.startEventId);
+  const endNav = makeNavBtn('定位结束事件', task.endEventId);
+
+  // 2.1-2.2: finalClaim section — explicitly labeled as agent self-report
+  const finalClaimHtml = (() => {
+    if (!task.finalClaim) return `<div class="task-detail-section">
+      <div class="task-detail-label">Agent 最终声明</div>
+      <span class="evidence-empty">无</span></div>`;
+    const summary = task.finalClaim.length > 120
+      ? task.finalClaim.slice(0, 120) + '…' : task.finalClaim;
+    const needsExpand = task.finalClaim.length > 120;
+    return `<div class="task-detail-section">
+      <div class="task-detail-label">Agent 最终声明</div>
+      <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px">这是 Agent 自述，不代表任务成功</div>
+      <div class="evidence-chip" style="display:block;white-space:pre-wrap">${esc(summary)}</div>
+      ${needsExpand ? `<details style="margin-top:4px"><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer">▸ 展开全文</summary>
+        <div class="evidence-chip" style="display:block;white-space:pre-wrap;margin-top:4px">${esc(task.finalClaim)}</div></details>` : ''}
+    </div>`;
+  })();
+
+  // 4.2: evidence (errors get special summary+collapse treatment per task 2.3-2.4)
+  const normalEvSections = [
+    ['已修改文件', ev.filesChanged, 'chip'],
+    ['已读取文件', ev.filesRead, 'chip'],
+    ['命令', ev.commands, 'chip'],
+    ['测试命令', ev.testCommands, 'chip-test'],
+    ['用户目标 Todo', ev.todosUser, 'chip'],
+    ['Subagent', ev.subagentIds, 'chip'],
+  ].map(([label, items, style]) => {
+    if (!items || items.length === 0) return `<div class="task-detail-section">
+      <div class="task-detail-label">${esc(label)}</div>
+      <span class="evidence-empty">无</span></div>`;
+    const chips = items.map(s => {
+      const cls = style === 'chip-test' ? 'evidence-chip test-cmd' : 'evidence-chip';
+      return `<span class="${cls}">${esc(s)}</span>`;
+    }).join('');
+    return `<div class="task-detail-section">
+      <div class="task-detail-label">${esc(label)} (${items.length})</div>
+      <div class="evidence-chips">${chips}</div></div>`;
+  }).join('');
+
+  // 2.4: errors — summary list + collapsible full text
+  const errorsHtml = (() => {
+    const errors = ev.errors || [];
+    if (errors.length === 0) return `<div class="task-detail-section">
+      <div class="task-detail-label">错误 (0)</div>
+      <span class="evidence-empty">无</span></div>`;
+    const rows = errors.map((e, i) => {
+      const summ = errorSummary(e);
+      const needsExpand = String(e).trim().length > summ.length + 3;
+      return `<div style="margin-bottom:5px">
+        <span class="evidence-chip err" style="display:block">${esc(summ)}</span>
+        ${needsExpand ? `<details><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;padding-left:4px">▸ 展开原文</summary>
+          <pre style="font-size:10px;white-space:pre-wrap;overflow:auto;max-height:200px;margin:4px 0">${esc(String(e))}</pre></details>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="task-detail-section">
+      <div class="task-detail-label">错误 (${errors.length})</div>
+      ${rows}</div>`;
+  })();
+
+  const evSections = normalEvSections + errorsHtml;
+
+  // 4.4: file weights sorted desc
+  const fwEntries = Object.entries(fw).sort((a, b) => b[1] - a[1]);
+  const maxW = fwEntries.length ? fwEntries[0][1] : 1;
+  const fwHtml = fwEntries.length === 0 ? '<span class="evidence-empty">无</span>' :
+    fwEntries.map(([f, w]) => `
+      <div class="file-weight-row">
+        <span class="file-weight-name" title="${esc(f)}">${esc(f)}</span>
+        <div class="file-weight-bar" style="width:${Math.max(4, Math.round(w/maxW*60))}px"></div>
+        <span class="file-weight-val">${w.toFixed(1)}</span>
+      </div>`).join('');
+
+  // 4.3: boundary reasons
+  const brHtml = brs.length === 0 ? '<span class="evidence-empty">无（第一个任务或无边界信号）</span>' :
+    brs.map(r => `<div class="boundary-reason-row split">${esc(r)}</div>`).join('');
+
+  // 6.1: debug boundaries
+  const dbHtml = dbs.length === 0 ? '<span class="evidence-empty">无</span>' :
+    dbs.map(b => {
+      const cls = b.shouldSplit ? 'split' : 'nosplit';
+      const reasons = (b.reasons || []).map(r => `<div class="boundary-reason-row ${cls}">${esc(r)}</div>`).join('');
+      return `<div class="debug-boundary-row">
+        <div class="debug-boundary-hdr">
+          <span class="debug-ev-id">${esc(b.eventId)}</span>
+          <span class="debug-score ${cls}">score: ${(b.score||0).toFixed(2)}</span>
+          <span class="task-badge ${b.shouldSplit ? 'task-badge-final-claim' : 'task-badge-unevaluated'}">${b.shouldSplit ? '切分' : '不切'}</span>
+        </div>
+        ${reasons}
+      </div>`;
+    }).join('');
+
+  // 4.5: raw JSON collapsed
+  const rawJson = escRaw(JSON.stringify(task, null, 2));
+
+  return `<div class="task-detail">
+    <div class="task-detail-section">
+      <div class="task-detail-label">概览</div>
+      ${overviewHtml}
+      <div style="display:flex;gap:6px;margin-top:6px">${startNav}${endNav}</div>
+    </div>
+    ${finalClaimHtml}
+    ${evSections}
+    <div class="task-detail-section">
+      <div class="task-detail-label">文件权重</div>
+      ${fwHtml}
+    </div>
+    <div class="task-detail-section">
+      <div class="task-detail-label">边界原因</div>
+      ${brHtml}
+    </div>
+    <details style="margin-top:8px">
+      <summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;user-select:none">▸ 调试边界 (${dbs.length})</summary>
+      <div style="margin-top:6px">${dbHtml}</div>
+    </details>
+    <details style="margin-top:6px">
+      <summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;user-select:none">▸ 原始 JSON</summary>
+      <pre style="font-size:10px;margin-top:4px;overflow:auto;max-height:320px">${rawJson}</pre>
+    </details>
+  </div>`;
+}
+
+// 5.1: map event id to allEntries index
+function findEntryByEventId(eventId) {
+  if (!eventId) return -1;
+  const parts = String(eventId).split(':');
+  if (parts.length < 2) return -1;
+  const lineNo = parseInt(parts[parts.length - 1], 10);
+  if (isNaN(lineNo)) return -1;
+  const isMain = parts[0] === 'main';
+  const agentId = isMain ? null : parts.slice(0, parts.length - 1).join(':').replace(/^agent-/, '');
+  for (let i = 0; i < allEntries.length; i++) {
+    const e = allEntries[i];
+    if (e._fileLine !== lineNo) continue;
+    if (isMain && e._gid === 'main') return i;
+    if (!isMain && e._gid && e._gid.includes(agentId)) return i;
+  }
+  return -1;
+}
+
+// 5.2: build nav button
+function makeNavBtn(label, eventId) {
+  const idx = findEntryByEventId(eventId);
+  if (idx < 0) {
+    return `<button class="nav-btn" disabled title="找不到事件 ${esc(eventId || '—')}">${esc(label)}</button>`;
+  }
+  return `<button class="nav-btn" onclick="navigateToEventId('${escRaw(eventId)}')">${esc(label)}</button>`;
+}
+
+// 4.1: focus an entry in the left nav without replacing the right task detail
+function focusEntryInNav(idx) {
+  const e = allEntries[idx];
+  if (!e) return;
+
+  const hidden = isEntryHiddenByFilter(idx);
+
+  // Always expand group and turn
+  let needRender = false;
+  if (groupCollapsed[e._gid]) { groupCollapsed[e._gid] = false; needRender = true; }
+  if (e._turnKey && turnCollapsed[e._turnKey]) { turnCollapsed[e._turnKey] = false; needRender = true; }
+  if (needRender || hidden) renderList();
+
+  // 4.3: scroll to entry or turn header using data-idx / data-tkey
+  requestAnimationFrame(() => {
+    const list = document.getElementById('entryList');
+    if (!list) return;
+
+    if (!hidden) {
+      // Scroll to the specific entry element
+      const entryEl = list.querySelector(`[data-idx="${idx}"]`);
+      if (entryEl) {
+        entryEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        // Briefly flash highlight
+        entryEl.classList.add('nav-flash');
+        setTimeout(() => entryEl.classList.remove('nav-flash'), 1200);
+      }
+    } else {
+      // 4.4: entry hidden by filter — scroll to its turn header instead
+      const tk = e._turnKey;
+      const turnHdrEl = tk ? list.querySelector(`.turn-hdr[data-tkey="${CSS.escape(tk)}"]`) : null;
+      if (turnHdrEl) {
+        turnHdrEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        turnHdrEl.classList.add('nav-flash');
+        setTimeout(() => turnHdrEl.classList.remove('nav-flash'), 1200);
+      }
+      // Show filter hint in task detail panel
+      const container = document.getElementById('taskDetailContainer');
+      if (container) {
+        let hint = container.querySelector('.nav-filter-hint');
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.className = 'nav-filter-hint';
+          hint.style.cssText = 'font-size:11px;color:var(--warning);background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.25);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:6px';
+          container.insertBefore(hint, container.firstChild);
+        }
+        hint.innerHTML = `⚠ 目标事件被当前筛选隐藏，已定位到所属 turn。
+          <button style="margin-left:auto;font-size:10px;color:var(--accent);background:none;border:none;cursor:pointer" onclick="this.parentElement.remove()">关闭</button>`;
+      }
+    }
+  });
+}
+
+// 4.2: navigate to event, focusing LEFT nav (not replacing task detail)
+function navigateToEventId(eventId) {
+  const idx = findEntryByEventId(eventId);
+  if (idx < 0) return;
+  focusEntryInNav(idx);
 }
 
 // ── Init: load projects ──────────────────────────────────────────────────
@@ -1251,7 +1746,9 @@ async function loadSession() {
     // Enable export button
     const exportBtn = document.getElementById('exportBtn');
     if (exportBtn) exportBtn.disabled = false;
+    currentLoadedSessionId = sessionId;   // mark session as fully loaded
     updateAnalyzeButton();
+    updateTaskSegmentsButton();
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
@@ -1265,6 +1762,9 @@ function resetAnalysisState() {
     analyzeBtn.disabled = true;
     analyzeBtn.textContent = '分析当前 Session';
   }
+  selectedTaskSegmentId = null;
+  currentLoadedSessionId = null;
+  updateTaskSegmentsButton();
 }
 
 function currentAnalysisSessionId() {
@@ -1517,6 +2017,12 @@ function entryMatchesFilter(e) {
   return true;
 }
 
+// 3.4: returns true if the entry at allEntries[idx] is currently hidden by filters
+function isEntryHiddenByFilter(idx) {
+  const e = allEntries[idx];
+  return e ? !entryMatchesFilter(e) : true;
+}
+
 // Split group entries into turns: each turn starts at a real user-text entry.
 // Also tags each entry with _turnKey for auto-expand on selectEntry.
 function buildTurns(entries, gid) {
@@ -1534,9 +2040,11 @@ function buildTurns(entries, gid) {
       current = { root: e, children: [], _turnIdx: turnIdx++ };
       const tk = `${gid}:${current._turnIdx}`;
       e._turnKey = tk;
+      e._turnRootIdx = e._idx;   // 3.1: stable turn root index
       turns.push(current);
     } else if (current) {
       e._turnKey = `${gid}:${current._turnIdx}`;
+      e._turnRootIdx = current.root ? current.root._idx : e._idx;  // 3.1
       current.children.push(e);
     } else {
       // Preamble before first user message
@@ -1545,6 +2053,7 @@ function buildTurns(entries, gid) {
         turns.push(current);
       }
       e._turnKey = `${gid}:${current._turnIdx}`;
+      e._turnRootIdx = e._idx;
       current.children.push(e);
     }
   }
@@ -1669,8 +2178,9 @@ function renderList() {
     grpBody.className = 'tree-group-body' + (isGroupCollapsed ? ' hidden' : '');
     grpBody.dataset.gid = group.id;
 
-    // Build turns from the filtered entries (keep file order)
-    const turns = buildTurns(entries, group.id);
+    // 3.1-3.2: Build turns from FULL group entries so turn boundaries are stable
+    // regardless of current type/search filter. Filter only affects display.
+    const turns = buildTurns(group.entries, group.id);
 
     turns.forEach((turn, turnIdx) => {
       const turnKey = `${group.id}:${turnIdx}`;
@@ -1694,6 +2204,7 @@ function renderList() {
 
       const turnHdr = document.createElement('div');
       turnHdr.className = 'turn-hdr' + (rootEntry._idx === selectedIdx ? ' active' : '');
+      turnHdr.dataset.tkey = turnKey;    // 4.3: stable identifier for scrollIntoView
       turnHdr.innerHTML =
         (hasChildren
           ? `<span class="turn-arrow ${!isTurnCollapsed ? 'open' : ''}">▶</span>`
