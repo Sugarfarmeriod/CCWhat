@@ -1045,6 +1045,7 @@ const taskSegmentReports = {};   // key: sessionId
 let taskSegmentsInFlight = false;
 let selectedTaskSegmentId = null;
 let currentLoadedSessionId = null;   // set only after session loads successfully
+const eventIdToEntryIdx = new Map(); // eventId string → allEntries index
 
 function promptFingerprint(text) {
   let h = 0;
@@ -1441,17 +1442,25 @@ function renderTaskDetail(task, debugBoundaries) {
 // 5.1: map event id to allEntries index
 function findEntryByEventId(eventId) {
   if (!eventId) return -1;
-  const parts = String(eventId).split(':');
-  if (parts.length < 2) return -1;
-  const lineNo = parseInt(parts[parts.length - 1], 10);
-  if (isNaN(lineNo)) return -1;
-  const isMain = parts[0] === 'main';
-  const agentId = isMain ? null : parts.slice(0, parts.length - 1).join(':').replace(/^agent-/, '');
-  for (let i = 0; i < allEntries.length; i++) {
-    const e = allEntries[i];
-    if (e._fileLine !== lineNo) continue;
-    if (isMain && e._gid === 'main') return i;
-    if (!isMain && e._gid && e._gid.includes(agentId)) return i;
+  const key = String(eventId);
+
+  // Primary: O(1) map lookup
+  if (eventIdToEntryIdx.has(key)) return eventIdToEntryIdx.get(key);
+
+  // Fallback: parse-based scan for formats the map didn't capture
+  const parts = key.split(':');
+  if (parts.length >= 2) {
+    const lineNo = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(lineNo) && lineNo > 0) {
+      const isMain = parts[0] === 'main';
+      const agentRaw = isMain ? null : parts.slice(0, parts.length - 1).join(':').replace(/^agent-/, '');
+      for (let i = 0; i < allEntries.length; i++) {
+        const e = allEntries[i];
+        if (e._fileLine !== lineNo) continue;
+        if (isMain && e._gid === 'main') return i;
+        if (!isMain && agentRaw && e._gid && e._gid === `sa-${agentRaw}`) return i;
+      }
+    }
   }
   return -1;
 }
@@ -1484,13 +1493,19 @@ function focusEntryInNav(idx) {
     if (!list) return;
 
     if (!hidden) {
-      // Scroll to the specific entry element
-      const entryEl = list.querySelector(`[data-idx="${idx}"]`);
-      if (entryEl) {
-        entryEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        // Briefly flash highlight
-        entryEl.classList.add('nav-flash');
-        setTimeout(() => entryEl.classList.remove('nav-flash'), 1200);
+      // 1st: find entry-item or turn-hdr by data-idx (both now have it)
+      let targetEl = list.querySelector(`[data-idx="${idx}"]`);
+      // 2nd fallback: find by turn-hdr data-tkey
+      if (!targetEl && e._turnKey) {
+        targetEl = list.querySelector(`.turn-hdr[data-tkey="${CSS.escape(e._turnKey)}"]`);
+      }
+      if (targetEl) {
+        targetEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        targetEl.classList.add('nav-flash');
+        setTimeout(() => targetEl.classList.remove('nav-flash'), 1200);
+      } else {
+        // 3rd fallback: cannot locate — show hint in task detail
+        _showNavHint('无法在左侧列表中定位该事件（可能已被过滤或不在当前视图中）');
       }
     } else {
       // 4.4: entry hidden by filter — scroll to its turn header instead
@@ -1501,21 +1516,24 @@ function focusEntryInNav(idx) {
         turnHdrEl.classList.add('nav-flash');
         setTimeout(() => turnHdrEl.classList.remove('nav-flash'), 1200);
       }
-      // Show filter hint in task detail panel
-      const container = document.getElementById('taskDetailContainer');
-      if (container) {
-        let hint = container.querySelector('.nav-filter-hint');
-        if (!hint) {
-          hint = document.createElement('div');
-          hint.className = 'nav-filter-hint';
-          hint.style.cssText = 'font-size:11px;color:var(--warning);background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.25);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:6px';
-          container.insertBefore(hint, container.firstChild);
-        }
-        hint.innerHTML = `⚠ 目标事件被当前筛选隐藏，已定位到所属 turn。
-          <button style="margin-left:auto;font-size:10px;color:var(--accent);background:none;border:none;cursor:pointer" onclick="this.parentElement.remove()">关闭</button>`;
-      }
+      // Show filter hint via shared helper
+      _showNavHint('目标事件被当前筛选隐藏，已定位到所属 turn。请清除筛选条件后再试。');
     }
   });
+}
+
+// Show a dismissable nav hint in the task detail panel
+function _showNavHint(msg) {
+  const container = document.getElementById('taskDetailContainer');
+  if (!container) return;
+  let hint = container.querySelector('.nav-filter-hint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.className = 'nav-filter-hint';
+    hint.style.cssText = 'font-size:11px;color:var(--warning);background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.25);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:6px';
+    container.insertBefore(hint, container.firstChild);
+  }
+  hint.innerHTML = `⚠ ${esc(msg)} <button style="margin-left:auto;font-size:10px;color:var(--accent);background:none;border:none;cursor:pointer" onclick="this.parentElement.remove()">关闭</button>`;
 }
 
 // 4.2: navigate to event, focusing LEFT nav (not replacing task detail)
@@ -1615,6 +1633,8 @@ function eventsToEntries(events) {
   for (const ev of events || []) {
     const role = ev.role;
     const kind = ev.kind;
+    // _eventId preserves the normalized event id for eventIdToEntryIdx mapping
+    const _eventId = ev.id || ev.eventId || null;
 
     if (role === 'user' && kind === 'message') {
       entries.push({
@@ -1678,6 +1698,10 @@ function eventsToEntries(events) {
         message: { content: [{ type: 'text', text: formatEventContent(ev.content) }] },
       });
     }
+    // Tag the last pushed entry with _eventId for eventIdToEntryIdx
+    if (_eventId && entries.length > 0) {
+      entries[entries.length - 1]._eventId = _eventId;
+    }
   }
   return entries;
 }
@@ -1737,6 +1761,24 @@ async function loadSession() {
         saGroup.entries.push(tagged);
       }
       groups.push(saGroup);
+    }
+
+    // Build eventIdToEntryIdx map for reliable event navigation
+    eventIdToEntryIdx.clear();
+    for (const e of allEntries) {
+      const idx = e._idx;
+      // task segmentation event id formats: main:<_fileLine>, agent-<id>:<_fileLine>
+      if (e._gid === 'main' && e._fileLine) {
+        eventIdToEntryIdx.set(`main:${e._fileLine}`, idx);
+      } else if (e._gid && e._gid !== 'main' && e._fileLine) {
+        const agentId = e._gid.replace(/^sa-/, '');
+        eventIdToEntryIdx.set(`agent-${agentId}:${e._fileLine}`, idx);
+      }
+      // Normalized event id from Codex/OpenCode via eventsToEntries
+      if (e._eventId) eventIdToEntryIdx.set(e._eventId, idx);
+      // Claude session entry identifiers
+      if (e.uuid) eventIdToEntryIdx.set(e.uuid, idx);
+      if (e.message?.id) eventIdToEntryIdx.set(e.message.id, idx);
     }
 
     selectedIdx = -1;
@@ -2205,6 +2247,7 @@ function renderList() {
       const turnHdr = document.createElement('div');
       turnHdr.className = 'turn-hdr' + (rootEntry._idx === selectedIdx ? ' active' : '');
       turnHdr.dataset.tkey = turnKey;    // 4.3: stable identifier for scrollIntoView
+      turnHdr.dataset.idx = rootEntry._idx;  // Fix: turn roots need data-idx for focusEntryInNav
       turnHdr.innerHTML =
         (hasChildren
           ? `<span class="turn-arrow ${!isTurnCollapsed ? 'open' : ''}">▶</span>`

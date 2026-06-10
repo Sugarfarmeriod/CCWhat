@@ -44,5 +44,12 @@
 - [x] 6.2 验证点击 task-001 之外的 task card 后，选中态和 task detail 均切换到对应 task
 - [x] 6.3 验证 final claim 默认显示摘要，全文可展开，且文案不暗示任务成功
 - [x] 6.4 验证 errors 默认显示短摘要，长日志折叠，不撑开页面
-- [x] 6.5 验证“定位开始事件/定位结束事件”会展开左侧 group/turn、滚动到目标 entry 或 turn header，并保持 task detail 可见
+- [x] 6.5 验证”定位开始事件/定位结束事件”会展开左侧 group/turn、滚动到目标 entry 或 turn header，并保持 task detail 可见
+  - turn root 定位：turnHdr 现有 data-idx，[data-idx] 查询能命中，scrollIntoView 被调用 ✓（jsdom test 3/4）
+  - child entry 定位：entry-item 有 data-idx，scrollIntoView 被调用 ✓（jsdom test 4）
+  - 找不到时：_showNavHint 展示提示，不静默失败 ✓
+  - task detail 不被原始日志替换 ✓（navigateToEventId 改调 focusEntryInNav）
+  - Codex/OpenCode：session[“events”] 现已由 _normalize_from_events 支持，事件 ID 注册到 eventIdToEntryIdx ✓
 - [x] 6.6 在启用 type filter/search filter 的情况下验证目标被隐藏时的提示行为
+  - 目标被 filter 隐藏：isEntryHiddenByFilter → scrollTo turnHdr + _showNavHint ✓（jsdom test 6）
+  - hint 包含提示文案并可关闭 ✓

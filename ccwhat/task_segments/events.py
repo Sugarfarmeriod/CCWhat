@@ -246,6 +246,76 @@ def normalize_subagent_entries(subagents: list[dict]) -> list[NormalizedEvent]:
 
 
 # ---------------------------------------------------------------------------
+# Codex / OpenCode support: convert adapter-normalized events
+# ---------------------------------------------------------------------------
+
+_KIND_TO_EVENT_TYPE: dict[str, str] = {
+    "message": "",          # resolved per role below
+    "tool_call": "tool_call",
+    "tool_result": "tool_result",
+    "reasoning": "assistant_text",
+    "metadata": "assistant_text",
+    "step": "assistant_text",
+    "unknown": "assistant_text",
+}
+
+
+def _normalize_from_events(
+    events: list[dict[str, Any]],
+    session_id: str,
+) -> list[NormalizedEvent]:
+    """Convert adapter normalized events (Codex/OpenCode) to NormalizedEvent list."""
+    result: list[NormalizedEvent] = []
+    turn_index = 0
+    for idx, ev in enumerate(events):
+        if not isinstance(ev, dict):
+            continue
+        role = str(ev.get("role") or "")
+        kind = str(ev.get("kind") or "message")
+        event_id = str(ev.get("eventId") or ev.get("id") or f"ev:{idx}")
+        timestamp = ev.get("timestamp")
+        content_raw = ev.get("content") or ev.get("summary") or ""
+        tool_name = ev.get("toolName")
+        tool_call_id = ev.get("toolCallId")
+        agent_id_field = ev.get("agentId") or "main"
+
+        if role == "user" and kind == "message":
+            turn_index += 1
+            event_type = "user_message"
+        elif role == "assistant" and kind == "message":
+            event_type = "assistant_text"
+        elif kind == "tool_call":
+            event_type = "tool_call"
+        elif kind == "tool_result":
+            event_type = "tool_result"
+        else:
+            event_type = "assistant_text"
+
+        text = content_raw if isinstance(content_raw, str) else ""
+        files: list[str] = []
+        command: str | None = None
+        if isinstance(content_raw, dict):
+            files = _extract_files_from_input(content_raw)
+            command = content_raw.get("command")
+
+        result.append(NormalizedEvent(
+            event_id=event_id,
+            source="main",
+            agent_id=str(agent_id_field),
+            turn_index=turn_index,
+            event_type=event_type,
+            text=text,
+            tool_name=tool_name,
+            tool_use_id=tool_call_id,
+            files=files,
+            command=command,
+            timestamp=timestamp,
+            raw_ref={"eventId": event_id},
+        ))
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -266,6 +336,13 @@ def normalize_session_events(session: dict) -> list[NormalizedEvent]:
     session_id = session.get("sessionId", "")
     main_entries = session.get("main") or session.get("entries", [])
     subagents = session.get("subagents", [])
+
+    # Codex/OpenCode: session["events"] is a normalized event list from the adapter.
+    # When main_entries is empty but events exist, convert normalized events to
+    # NormalizedEvent objects so the segmenter can work cross-agent.
+    if not main_entries and session.get("events"):
+        main_events = _normalize_from_events(session["events"], session_id)
+        return main_events  # normalized events don't have subagents structure
 
     main_events = normalize_main_entries(main_entries, session_id)
 
