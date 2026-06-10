@@ -2152,14 +2152,6 @@ function renderTabRaw(task, debugBoundaries) {
   html += `<pre style="font-size:10px;overflow:auto;max-height:500px;background:var(--bg-surface);border-radius:4px;padding:8px">${escRaw(JSON.stringify(task, null, 2))}</pre>`;
   return html;
 }
-      <div style="margin-top:6px">${dbHtml}</div>
-    </details>
-    <details style="margin-top:6px">
-      <summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;user-select:none">▸ 原始 JSON</summary>
-      <pre style="font-size:10px;margin-top:4px;overflow:auto;max-height:320px">${rawJson}</pre>
-    </details>
-  </div>`;
-}
 
 // 5.1: map event id to allEntries index
 function findEntryByEventId(eventId) {
