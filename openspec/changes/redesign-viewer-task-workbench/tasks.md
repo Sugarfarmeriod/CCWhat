@@ -71,9 +71,9 @@
 
 ## 9. 手动验收
 
-- [x] 9.1 启动本地 viewer server，打开至少一个 Claude Code session，验证默认进入 `Tasks`
-- [x] 9.2 打开至少一个 Codex 或 OpenCode session，验证 task start/end 能通过 normalized event id 定位到 Raw Events
-- [x] 9.3 验证 `Tasks`、`Overview`、`Raw Events`、`Diff`、`Diagnostics`、`Export` 之间切换不丢失当前 session 和 active task
-- [x] 9.4 验证 Task Detail 中的 Evidence、Turns、Files & Diff、Commands、Raw 都能展示真实数据或明确空状态
-- [x] 9.5 验证长 command、error、diff、JSON、req/resp 内容不会撑坏布局
-- [x] 9.6 对照 OpenDesign 原型确认布局方向一致，但以真实数据可用性为准
+- [ ] 9.1 启动本地 viewer server，打开至少一个 Claude Code session，验证默认进入 `Tasks`
+- [ ] 9.2 打开至少一个 Codex 或 OpenCode session，验证 task start/end 能通过 normalized event id 定位到 Raw Events
+- [ ] 9.3 验证 `Tasks`、`Overview`、`Raw Events`、`Diff`、`Diagnostics`、`Export` 之间切换不丢失当前 session 和 active task
+- [ ] 9.4 验证 Task Detail 中的 Overview、Evidence、Turns、Files & Diff、Commands、Raw 都能展示真实数据或明确空状态
+- [ ] 9.5 验证长 command、error、diff、JSON、req/resp 内容不会撑坏布局
+- [ ] 9.6 对照 OpenDesign 原型确认布局方向一致，但以真实数据可用性为准
