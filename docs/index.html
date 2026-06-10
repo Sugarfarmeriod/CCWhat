@@ -1,0 +1,1527 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCWhat — Agent Session Workbench</title>
+<style>
+:root {
+  --bg:      oklch(98% 0.003 250);
+  --surface: oklch(100% 0 0);
+  --fg:      oklch(22% 0.015 250);
+  --muted:   oklch(50% 0.015 250);
+  --border:  oklch(90% 0.006 250);
+  --accent:  oklch(55% 0.18 255);
+  --accent-dim: oklch(55% 0.18 255 / 0.12);
+  --success: oklch(55% 0.15 145);
+  --success-dim: oklch(55% 0.15 145 / 0.12);
+  --warning: oklch(65% 0.15 85);
+  --warning-dim: oklch(65% 0.15 85 / 0.12);
+  --danger: oklch(55% 0.2 30);
+  --danger-dim: oklch(55% 0.2 30 / 0.12);
+  --info: oklch(58% 0.12 255);
+  --nav-width: 216px;
+  --context-h: 48px;
+  --radius: 6px;
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-md: 0 2px 8px oklch(0% 0 0 / 0.06);
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font: 13.5px/1.5 var(--font-body);
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#app { display: flex; height: 100%; width: 100%; }
+
+nav#sidebar {
+  width: var(--nav-width);
+  min-width: var(--nav-width);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+.nav-brand {
+  padding: 8px 16px 12px;
+  font: 600 15px/1.3 var(--font-display);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+}
+.nav-brand svg { flex-shrink: 0; }
+.nav-section { padding: 4px 8px; }
+.nav-label {
+  font: 10px/1.4 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 8px 4px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: all 0.1s;
+  user-select: none;
+}
+.nav-item:hover { background: oklch(0% 0 0 / 0.04); color: var(--fg); }
+.nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 500;
+}
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
+.nav-item.active svg { opacity: 1; }
+.nav-spacer { flex: 1; }
+
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+#context-bar {
+  height: var(--context-h);
+  min-height: var(--context-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  font-size: 13px;
+}
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: 12px/1.4 var(--font-body);
+  color: var(--fg);
+  white-space: nowrap;
+}
+.context-chip .label { color: var(--muted); }
+.context-chip .value { font-weight: 500; }
+.context-spacer { flex: 1; }
+.context-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 180px;
+}
+.context-search input {
+  border: none;
+  background: transparent;
+  font: 12px/1.4 var(--font-body);
+  color: var(--fg);
+  outline: none;
+  width: 100%;
+}
+.context-search input::placeholder { color: var(--muted); }
+.context-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: 12px/1.4 var(--font-body);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.context-btn:hover { background: var(--bg); color: var(--fg); }
+.context-btn svg { width: 14px; height: 14px; }
+
+#content { flex: 1; overflow-y: auto; padding: 0; }
+.view { display: none; padding: 20px 24px; height: 100%; }
+.view.active { display: block; }
+.view-title {
+  font: 600 17px/1.4 var(--font-display);
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.stat-card .stat-value {
+  font: 600 20px/1.3 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.stat-card .stat-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font: 11px/1.4 var(--font-mono);
+  font-weight: 500;
+}
+.status-pill.completed { background: var(--success-dim); color: var(--success); }
+.status-pill.failed { background: var(--danger-dim); color: var(--danger); }
+.status-pill.unevaluated { background: oklch(0% 0 0 / 0.04); color: var(--muted); }
+.status-pill.ambiguous { background: var(--warning-dim); color: oklch(50% 0.15 85); }
+
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font: 10.5px/1.4 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.type-pill.feature { background: oklch(58% 0.12 255 / 0.1); color: oklch(45% 0.14 255); }
+.type-pill.bugfix { background: var(--danger-dim); color: var(--danger); }
+.type-pill.setup { background: oklch(0% 0 0 / 0.04); color: var(--muted); }
+.type-pill.question { background: var(--warning-dim); color: oklch(50% 0.15 85); }
+
+#view-tasks .tasks-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: calc(100% - 40px);
+  min-height: 0;
+}
+#view-tasks .task-list-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#view-tasks .task-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+#view-tasks .task-list-header h3 {
+  font: 500 14px/1.4 var(--font-display);
+}
+.task-count-badge {
+  font: 11px/1.4 var(--font-mono);
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+#view-tasks .task-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.task-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.task-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+.task-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.task-card-header .task-id {
+  font: 11px/1 var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
+}
+.task-card-header .task-title {
+  font: 13px/1.4 var(--font-body);
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.task-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.task-card-meta .meta-item {
+  font: 10.5px/1.4 var(--font-mono);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.task-card-confidence {
+  font: 10.5px/1.4 var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.task-card-confidence.high { color: var(--success); background: var(--success-dim); }
+.task-card-confidence.medium { color: oklch(50% 0.15 85); background: var(--warning-dim); }
+.task-card-confidence.low { color: var(--danger); background: var(--danger-dim); }
+.task-card-boundary {
+  font: 10.5px/1.4 var(--font-body);
+  color: var(--muted);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#view-tasks .task-detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.task-detail-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.task-detail-header .task-detail-title {
+  font: 500 15px/1.4 var(--font-display);
+}
+.task-detail-header .task-detail-id {
+  font: 11px/1 var(--font-mono);
+  color: var(--muted);
+}
+.task-detail-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding-left: 8px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.task-detail-tabs .tab {
+  padding: 8px 12px;
+  font: 12px/1.3 var(--font-body);
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.1s;
+  white-space: nowrap;
+  user-select: none;
+}
+.task-detail-tabs .tab:hover { color: var(--fg); }
+.task-detail-tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.task-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.task-detail-body .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-section { margin-bottom: 16px; }
+.detail-section:last-child { margin-bottom: 0; }
+.detail-section h4 {
+  font: 500 12px/1.4 var(--font-body);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.detail-section .detail-value {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.detail-grid .detail-cell {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+.detail-grid .detail-cell .cell-label {
+  font: 10px/1.4 var(--font-mono);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.detail-grid .detail-cell .cell-value {
+  font-size: 13px;
+  margin-top: 2px;
+}
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.evidence-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.evidence-item .ev-type {
+  font: 10px/1 var(--font-mono);
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.evidence-item .ev-type.user-request { background: var(--accent-dim); color: var(--accent); }
+.evidence-item .ev-type.tool-call { background: oklch(0% 0 0 / 0.05); color: var(--muted); }
+.evidence-item .ev-type.file-read,
+.evidence-item .ev-type.file-write { background: oklch(58% 0.12 175 / 0.1); color: oklch(45% 0.14 175); }
+.evidence-item .ev-type.command { background: oklch(0% 0 0 / 0.05); color: oklch(40% 0 0); }
+.evidence-item .ev-type.test { background: var(--success-dim); color: var(--success); }
+.evidence-item .ev-type.error { background: var(--danger-dim); color: var(--danger); }
+.evidence-item .ev-desc { flex: 1; }
+.evidence-item .ev-turn {
+  font: 10px/1 var(--font-mono);
+  color: var(--muted);
+}
+
+#view-overview .overview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+#view-overview .session-badge {
+  font: 13px/1.4 var(--font-mono);
+  color: var(--muted);
+}
+#view-overview .overview-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.overview-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.overview-card h4 {
+  font: 500 12px/1.4 var(--font-body);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.timeline-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.timeline-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 9px/1 var(--font-mono);
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  transition: opacity 0.1s;
+  min-width: 0;
+  overflow: hidden;
+}
+.timeline-segment:hover { opacity: 0.85; }
+
+.task-map {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.task-map-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-map-row .map-indicator {
+  width: 3px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.task-map-row .map-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.task-map-row .map-title { font-size: 12px; }
+.task-map-row .map-meta {
+  font: 10px/1 var(--font-mono);
+  color: var(--muted);
+}
+
+#view-events .events-scroll {
+  height: calc(100% - 40px);
+  overflow-y: auto;
+}
+.event-turn {
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.event-turn-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+}
+.event-turn-header:hover { background: oklch(0% 0 0 / 0.02); }
+.event-turn-header .turn-num {
+  font: 11px/1 var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
+  min-width: 38px;
+}
+.event-turn-header .turn-role {
+  font: 10px/1 var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.event-turn-header .turn-role.user { background: var(--accent-dim); color: var(--accent); }
+.event-turn-header .turn-role.assistant { background: oklch(0% 0 0 / 0.04); color: var(--muted); }
+.event-turn-header .turn-role.tool { background: oklch(58% 0.12 175 / 0.1); color: oklch(45% 0.14 175); }
+.event-turn-header .turn-summary {
+  flex: 1;
+  font-size: 12px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.event-turn-header .expand-icon {
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.event-turn-body {
+  display: none;
+  padding: 8px 12px 12px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  font: 12px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+  max-height: 400px;
+  overflow-y: auto;
+}
+.event-turn.expanded .event-turn-body { display: block; }
+.event-turn.expanded .expand-icon { transform: rotate(90deg); }
+
+#view-diff .diff-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 12px;
+  height: calc(100% - 40px);
+  min-height: 0;
+}
+.diff-file-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.diff-file-list-header {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font: 500 12px/1.4 var(--font-body);
+}
+.diff-file-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+.diff-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.diff-file-item:hover { background: var(--bg); }
+.diff-file-item .file-path { font: 12px/1.4 var(--font-mono); color: var(--fg); }
+.diff-file-item .file-changes {
+  font: 10px/1 var(--font-mono);
+  display: flex;
+  gap: 4px;
+}
+.diff-file-item .file-changes .additions { color: var(--success); }
+.diff-file-item .file-changes .deletions { color: var(--danger); }
+
+.diff-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.diff-preview-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font: 12px/1.4 var(--font-mono);
+  color: var(--muted);
+}
+.diff-preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  font: 12px/1.6 var(--font-mono);
+}
+.diff-line {
+  display: flex;
+  padding: 0 12px;
+  white-space: pre;
+}
+.diff-line .diff-ln { width: 40px; color: var(--muted); text-align: right; padding-right: 12px; user-select: none; }
+.diff-line.add { background: oklch(55% 0.15 145 / 0.06); }
+.diff-line.add .diff-sign { color: var(--success); }
+.diff-line.del { background: oklch(55% 0.2 30 / 0.06); }
+.diff-line.del .diff-sign { color: var(--danger); }
+.diff-line.context { background: transparent; }
+.diff-line.context .diff-sign { color: var(--muted); }
+
+#view-diag .diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.diag-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.diag-item .diag-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.diag-item .diag-severity {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.diag-item .diag-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.diag-item .diag-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 11px;
+}
+.diag-item .diag-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  margin-left: 11px;
+}
+.diag-item .diag-meta span {
+  font: 10px/1 var(--font-mono);
+  color: var(--muted);
+}
+
+#view-export .export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+.export-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.export-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.export-card .export-title {
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.export-card .export-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.export-card .export-format {
+  font: 10px/1 var(--font-mono);
+  color: var(--accent);
+}
+
+.stub-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60%;
+  color: var(--muted);
+  gap: 8px;
+}
+.stub-view .stub-icon { opacity: 0.3; }
+.stub-view .stub-title { font-size: 15px; font-weight: 500; }
+.stub-view .stub-desc { font-size: 12px; }
+.stub-view .stub-desc code {
+  font-family: var(--font-mono);
+  background: oklch(0% 0 0 / 0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app">
+  <nav id="sidebar">
+    <div class="nav-brand">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <rect x="1" y="1" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M6 7h8M6 10h6M6 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="14" cy="14" r="2.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="1"/>
+      </svg>
+      CCWhat
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">工作台</div>
+      <div class="nav-item active" data-view="tasks">
+        <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Tasks
+      </div>
+      <div class="nav-item" data-view="overview">
+        <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M1.5 8h13M8 1.5v13" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+        Overview
+      </div>
+      <div class="nav-item" data-view="sessions">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 3.5V8l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Sessions
+      </div>
+      <div class="nav-item" data-view="timeline">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M1.5 8h13M4.5 3.5v9M11.5 5v6M8 2v12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Timeline
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">数据</div>
+      <div class="nav-item" data-view="events">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Raw Events
+      </div>
+      <div class="nav-item" data-view="reqresp">
+        <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="5.5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="2.5" width="5.5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M4.25 10v3.5M11.75 10v3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 12.5h-2M8 12.5h2" stroke="currentColor" stroke-width="1.3"/></svg>
+        Req / Resp
+      </div>
+      <div class="nav-item" data-view="diff">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M10.5 1.5v4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 1.5H4a1 1 0 00-1 1v11a1 1 0 001 1h8a1 1 0 001-1V5l-2-3.5z" stroke="currentColor" stroke-width="1.3"/><path d="M6 9h4M8 7v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Diff
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">分析</div>
+      <div class="nav-item" data-view="diagnostics">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.5V8l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Diagnostics
+      </div>
+      <div class="nav-item" data-view="export">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M8 1.5v9M4.5 7L8 10.5 11.5 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.5 11v2a1.5 1.5 0 001.5 1.5h10a1.5 1.5 0 001.5-1.5v-2" stroke="currentColor" stroke-width="1.5"/></svg>
+        Export
+      </div>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-section">
+      <div class="nav-item" data-view="settings">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v2M8 12.5v2M13.5 8h-2M4.5 8h-2M11.95 4.05l-1.41 1.41M5.46 10.54l-1.41 1.41M11.95 11.95l-1.41-1.41M5.46 5.46L4.05 4.05" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Settings
+      </div>
+    </div>
+  </nav>
+
+  <div id="main">
+    <header id="context-bar">
+      <div class="context-chip">
+        <span class="label">Agent</span>
+        <span class="value" id="ctx-agent">Claude Code 3.5 Sonnet</span>
+      </div>
+      <div class="context-chip">
+        <span class="label">Project</span>
+        <span class="value" id="ctx-project">next-auth-system</span>
+      </div>
+      <div class="context-chip">
+        <span class="label">Session</span>
+        <span class="value" id="ctx-session">SES-2026-06-10-0042</span>
+      </div>
+      <div class="context-spacer"></div>
+      <div class="context-search">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.3"/><path d="M8.5 8.5L11 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <input type="text" placeholder="搜索 tasks、events、files…">
+      </div>
+      <button class="context-btn">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M1.5 7h11M7 1.5v11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Refresh
+      </button>
+    </header>
+
+    <main id="content">
+      <div class="view" id="view-overview">
+        <div class="overview-header">
+          <span class="view-title">Overview</span>
+          <span class="session-badge" id="ov-session-badge"></span>
+        </div>
+        <div class="stat-grid" id="ov-stats"></div>
+        <div class="overview-layout">
+          <div class="overview-card">
+            <h4>Task Timeline</h4>
+            <div id="ov-timeline"></div>
+          </div>
+          <div class="overview-card">
+            <h4>Task Map</h4>
+            <div id="ov-taskmap"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view active" id="view-tasks">
+        <span class="view-title">Tasks</span>
+        <div class="tasks-layout">
+          <div class="task-list-panel">
+            <div class="task-list-header">
+              <h3>Task List</h3>
+              <span class="task-count-badge" id="tl-count"></span>
+            </div>
+            <div class="task-list-scroll" id="tl-list"></div>
+          </div>
+          <div class="task-detail-panel" id="td-panel">
+            <div class="task-detail-header">
+              <div class="task-detail-id" id="td-id"></div>
+              <div class="task-detail-title" id="td-title"></div>
+            </div>
+            <div class="task-detail-tabs" id="td-tabs"></div>
+            <div class="task-detail-body" id="td-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" id="view-sessions">
+        <span class="view-title">Sessions</span>
+        <div class="stub-view">
+          <div class="stub-title">Session 列表</div>
+          <div class="stub-desc">按项目、Agent、时间范围筛选的历史 Session 列表。开发中。</div>
+        </div>
+      </div>
+
+      <div class="view" id="view-timeline">
+        <span class="view-title">Timeline</span>
+        <div class="stub-view">
+          <div class="stub-title">全局时间线</div>
+          <div class="stub-desc">跨 Session 的 Task 时间轴视图。开发中。</div>
+        </div>
+      </div>
+
+      <div class="view" id="view-events">
+        <span class="view-title">Raw Events</span>
+        <div class="events-scroll" id="ev-list"></div>
+      </div>
+
+      <div class="view" id="view-reqresp">
+        <span class="view-title">Req / Resp</span>
+        <div class="stub-view">
+          <div class="stub-title">请求响应查看器</div>
+          <div class="stub-desc"><code>POST /v1/messages</code> 请求与流式响应原文对比。开发中。</div>
+        </div>
+      </div>
+
+      <div class="view" id="view-diff">
+        <span class="view-title">Diff</span>
+        <div class="diff-layout">
+          <div class="diff-file-list">
+            <div class="diff-file-list-header">Files Changed</div>
+            <div class="diff-file-list-scroll" id="df-filelist"></div>
+          </div>
+          <div class="diff-preview">
+            <div class="diff-preview-header" id="df-header">Select a file to view diff</div>
+            <div class="diff-preview-body" id="df-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" id="view-diagnostics">
+        <span class="view-title">Diagnostics</span>
+        <div class="diag-list" id="dg-list"></div>
+      </div>
+
+      <div class="view" id="view-export">
+        <span class="view-title">Export</span>
+        <div class="export-grid" id="ex-grid"></div>
+      </div>
+
+      <div class="view" id="view-settings">
+        <span class="view-title">Settings</span>
+        <div class="stub-view">
+          <div class="stub-title">设置</div>
+          <div class="stub-desc">工作台首选项、API 连接配置、显示设置。开发中。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const SAMPLE = {
+  session: {
+    id: 'SES-2026-06-10-0042',
+    agent: 'Claude Code 3.5 Sonnet',
+    project: 'next-auth-system',
+    startTime: '2026-06-10T09:15:00',
+    endTime: '2026-06-10T11:48:00',
+    totalTurns: 47,
+    totalToolCalls: 312,
+    totalFilesChanged: 18,
+    totalCommands: 29,
+    totalTests: 42,
+    failedTests: 3,
+    taskCount: 7
+  },
+  tasks: [
+    {
+      id: 'T-001', title: '初始化项目结构与依赖配置', type: 'setup', status: 'completed',
+      turnRange: 'T1\u2013T5', filesChanged: 6, commands: 4, tests: { passed: 0, failed: 0 },
+      errors: 0, confidence: 0.97,
+      boundaryReason: '用户首次请求 \u2014\u2014 初始化项目结构和开发依赖',
+      goal: '使用 Next.js 14 App Router 初始化项目，配置 TypeScript、Tailwind CSS、Prisma 和认证所需依赖',
+      statusText: '已完成', confidenceText: '高',
+      turns: [
+        { turn: 1, role: 'user', summary: '用户请求初始化一个新的 Next.js 认证项目' },
+        { turn: 2, role: 'tool', summary: 'npx create-next-app@latest --typescript --tailwind --app' },
+        { turn: 3, role: 'tool', summary: 'npm install prisma @prisma/client next-auth bcryptjs @types/bcryptjs' },
+        { turn: 4, role: 'assistant', summary: '配置 tailwind.config.ts 和 tsconfig.json path aliases' },
+        { turn: 5, role: 'tool', summary: 'npx prisma init && 定义初始 User 模型' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '初始化 Next.js 项目，配置 Prisma + next-auth', turn: 'T1' },
+        { type: 'tool-call', desc: 'create-next-app 成功创建项目结构', turn: 'T2' },
+        { type: 'command', desc: 'npm install \u2014 安装 6 个依赖包', turn: 'T3' },
+        { type: 'file-write', desc: 'prisma/schema.prisma \u2014 初始 User 模型', turn: 'T5' }
+      ]
+    },
+    {
+      id: 'T-002', title: '添加 User 与 Session 数据模型', type: 'feature', status: 'completed',
+      turnRange: 'T6\u2013T11', filesChanged: 3, commands: 2, tests: { passed: 0, failed: 0 },
+      errors: 0, confidence: 0.94,
+      boundaryReason: '独立数据建模任务 \u2014\u2014 与前序初始化有明确语义边界',
+      goal: '在 Prisma schema 中定义完整的 User、Session、Account 和 VerificationToken 模型',
+      statusText: '已完成', confidenceText: '高',
+      turns: [
+        { turn: 6, role: 'user', summary: '用户要求添加完整的用户和 session 数据模型' },
+        { turn: 7, role: 'assistant', summary: '分析 next-auth adapter 需要的模型结构' },
+        { turn: 8, role: 'tool', summary: '更新 prisma/schema.prisma \u2014 4 个模型完整定义' },
+        { turn: 9, role: 'tool', summary: 'npx prisma format && npx prisma validate' },
+        { turn: 10, role: 'tool', summary: 'npx prisma migrate dev --name init-auth-models' },
+        { turn: 11, role: 'assistant', summary: '验证迁移成功，生成 Prisma Client' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '添加完整的 User 和 Session 模型', turn: 'T6' },
+        { type: 'file-write', desc: 'prisma/schema.prisma \u2014 4 个模型', turn: 'T8' },
+        { type: 'command', desc: 'prisma migrate dev \u2014 创建 migration', turn: 'T10' }
+      ]
+    },
+    {
+      id: 'T-003', title: '实现注册 /api/auth/signup 路由', type: 'feature', status: 'completed',
+      turnRange: 'T12\u2013T19', filesChanged: 4, commands: 1, tests: { passed: 5, failed: 0 },
+      errors: 0, confidence: 0.96,
+      boundaryReason: '新增 API 端点 \u2014\u2014 独立路由与逻辑',
+      goal: '实现 POST /api/auth/signup 路由，包含输入验证、密码哈希、用户创建和错误处理',
+      statusText: '已完成', confidenceText: '高',
+      turns: [
+        { turn: 12, role: 'user', summary: '用户请求注册 API 路由' },
+        { turn: 13, role: 'assistant', summary: '设计 signup 路由接口定义与验证逻辑' },
+        { turn: 14, role: 'tool', summary: '创建 app/api/auth/signup/route.ts' },
+        { turn: 15, role: 'tool', summary: '安装 zod 并添加输入验证 schema' },
+        { turn: 16, role: 'tool', summary: '实现 password hashing (bcryptjs)' },
+        { turn: 17, role: 'tool', summary: '添加错误处理 middleware' },
+        { turn: 18, role: 'tool', summary: '编写 API 测试 (vitest)' },
+        { turn: 19, role: 'assistant', summary: '测试通过 \u2014 5/5 用例全部通过' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '实现用户注册 API', turn: 'T12' },
+        { type: 'file-write', desc: 'app/api/auth/signup/route.ts \u2014 完整实现', turn: 'T14' },
+        { type: 'file-write', desc: 'signup.test.ts \u2014 5 个测试用例', turn: 'T18' },
+        { type: 'test', desc: '5/5 测试通过 \u2014 注册流程验证', turn: 'T19' }
+      ]
+    },
+    {
+      id: 'T-004', title: '集成 JWT 认证中间件', type: 'feature', status: 'failed',
+      turnRange: 'T20\u2013T26', filesChanged: 3, commands: 3, tests: { passed: 2, failed: 3 },
+      errors: 2, confidence: 0.31,
+      boundaryReason: 'JWT 配置为独立语义单元 \u2014\u2014 与 signup 路由解耦',
+      goal: '实现基于 JWT 的认证中间件，保护 API 路由',
+      statusText: '失败', confidenceText: '低',
+      turns: [
+        { turn: 20, role: 'user', summary: '添加 JWT 认证中间件保护 /api/* 路由' },
+        { turn: 21, role: 'tool', summary: '创建 middleware.ts \u2014 JWT 验证逻辑' },
+        { turn: 22, role: 'tool', summary: 'npm install jsonwebtoken @types/jsonwebtoken' },
+        { turn: 23, role: 'tool', summary: '配置环境变量 JWT_SECRET' },
+        { turn: 24, role: 'assistant', summary: '实现 token 签发与验证中间件' },
+        { turn: 25, role: 'tool', summary: '测试中间件 \u2014 2 通过 / 3 失败' },
+        { turn: 26, role: 'tool', summary: '运行测试 \u2014 依赖兼容性错误：jsonwebtoken ESM 冲突' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '添加 JWT 中间件保护 API 路由', turn: 'T20' },
+        { type: 'tool-call', desc: 'npm install jsonwebtoken \u2014 ESM/CJS 兼容性问题', turn: 'T22' },
+        { type: 'error', desc: 'Dynamic require of "jsonwebtoken" failed (ESM module graph)', turn: 'T26' },
+        { type: 'test', desc: '3/5 测试失败 \u2014 JWT 验证逻辑错误', turn: 'T25' }
+      ]
+    },
+    {
+      id: 'T-005', title: '修复 JWT 库兼容性问题', type: 'bugfix', status: 'completed',
+      turnRange: 'T27\u2013T33', filesChanged: 2, commands: 2, tests: { passed: 5, failed: 0 },
+      errors: 0, confidence: 0.89,
+      boundaryReason: '追踪 T-004 失败根因 \u2014\u2014 替代实现方案',
+      goal: '将 jsonwebtoken 替换为 jose 库，解决 ESM/CJS 兼容性使 JWT 中间件正常运行',
+      statusText: '已完成', confidenceText: '中',
+      turns: [
+        { turn: 27, role: 'assistant', summary: '分析失败原因：jsonwebtoken 与 Next.js ESM 不兼容' },
+        { turn: 28, role: 'user', summary: '用户同意使用 jose 替代 jsonwebtoken' },
+        { turn: 29, role: 'tool', summary: 'npm uninstall jsonwebtoken && npm install jose' },
+        { turn: 30, role: 'tool', summary: '重写 middleware.ts \u2014 使用 jose API' },
+        { turn: 31, role: 'tool', summary: '更新 signup route \u2014 签发 jose token' },
+        { turn: 32, role: 'tool', summary: '运行测试 \u2014 5/5 通过' },
+        { turn: 33, role: 'assistant', summary: 'JWT 中间件正常运行，兼容性修复完成' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '同意切换到 jose 库修复兼容性', turn: 'T28' },
+        { type: 'tool-call', desc: 'npm 替换依赖包', turn: 'T29' },
+        { type: 'file-write', desc: 'middleware.ts \u2014 jose 重写', turn: 'T30' },
+        { type: 'test', desc: '5/5 测试通过 \u2014 兼容性修复验证', turn: 'T32' }
+      ]
+    },
+    {
+      id: 'T-006', title: '密码重置流程设计讨论', type: 'question', status: 'ambiguous',
+      turnRange: 'T34\u2013T40', filesChanged: 4, commands: 1, tests: { passed: 0, failed: 0 },
+      errors: 0, confidence: 0.48,
+      boundaryReason: '独立 feature \u2014\u2014 密码重置是完整用户故事',
+      goal: '实现密码重置流程，包含 token 生成、邮件发送和密码更新端到端流程',
+      statusText: '不明确', confidenceText: '中',
+      turns: [
+        { turn: 34, role: 'user', summary: '请求添加"忘记密码"功能' },
+        { turn: 35, role: 'assistant', summary: '设计密码重置流程：请求 \u2192 token \u2192 邮件 \u2192 重置' },
+        { turn: 36, role: 'tool', summary: '创建 app/api/auth/forgot-password/route.ts' },
+        { turn: 37, role: 'tool', summary: '创建 app/api/auth/reset-password/route.ts' },
+        { turn: 38, role: 'assistant', summary: '实现 reset token 生成逻辑（接 T-005 jose）' },
+        { turn: 39, role: 'user', summary: '用户未明确说明邮件发送方式' },
+        { turn: 40, role: 'assistant', summary: '等待用户确认邮件服务方案 \u2014\u2014 暂未继续' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '添加"忘记密码"功能', turn: 'T34' },
+        { type: 'file-write', desc: '两个 API 路由骨架 \u2014 邮件服务待定', turn: 'T36' },
+        { type: 'user-request', desc: '用户未回复详细信息，任务处于等待状态', turn: 'T39' }
+      ]
+    },
+    {
+      id: 'T-007', title: '配置邮件发送服务', type: 'setup', status: 'unevaluated',
+      turnRange: 'T41\u2013T47', filesChanged: 1, commands: 1, tests: { passed: 0, failed: 0 },
+      errors: 0, confidence: 0.72,
+      boundaryReason: '邮件服务是独立基础设施配置 \u2014\u2014 与 T-006 密码重置流程紧密相关',
+      goal: '集成邮件发送服务（Resend / SendGrid），配置模板和发送逻辑',
+      statusText: '未评估', confidenceText: '中',
+      turns: [
+        { turn: 41, role: 'user', summary: '建议使用 Resend 发送密码重置邮件' },
+        { turn: 42, role: 'tool', summary: 'npm install resend' },
+        { turn: 43, role: 'assistant', summary: '创建 lib/email.ts 邮件发送工具函数' },
+        { turn: 44, role: 'tool', summary: '配置环境变量 RESEND_API_KEY' },
+        { turn: 45, role: 'user', summary: '用户需要确认发件人域名配置' },
+        { turn: 46, role: 'assistant', summary: '添加 DNS 配置说明到 README' },
+        { turn: 47, role: 'tool', summary: '创建重置密码邮件模板' }
+      ],
+      evidence: [
+        { type: 'user-request', desc: '建议使用 Resend', turn: 'T41' },
+        { type: 'tool-call', desc: '安装 resend 并配置 API key', turn: 'T42' },
+        { type: 'file-write', desc: 'lib/email.ts + 邮件模板', turn: 'T43' }
+      ]
+    }
+  ],
+  events: [
+    { turn: 1, role: 'user', summary: '初始化 Next.js 项目，配置 Prisma + next-auth 认证',
+      detail: '用户：帮我创建一个新的 Next.js 14 项目，使用 App Router。我需要集成 Prisma ORM 和 next-auth 做认证。项目名叫 next-auth-system。先做初始化就好。' },
+    { turn: 2, role: 'tool', summary: 'npx create-next-app@latest --typescript --tailwind --app',
+      detail: 'Tool: npx create-next-app@latest --typescript --tailwind --app next-auth-system\n\u2713 项目创建完成\n\u2713 TypeScript 已配置\n\u2713 Tailwind CSS 已配置\n\u2713 App Router 已启用' },
+    { turn: 3, role: 'tool', summary: '安装依赖: prisma @prisma/client next-auth bcryptjs',
+      detail: 'Tool: npm install prisma @prisma/client next-auth bcryptjs @types/bcryptjs\n+ prisma@5.12.0\n+ @prisma/client@5.12.0\n+ next-auth@4.24.7\n+ bcryptjs@2.4.3\n+ @types/bcryptjs@2.4.6\n\u2713 依赖安装完成' },
+    { turn: 4, role: 'assistant', summary: '配置 tailwind.config.ts 和 tsconfig.json',
+      detail: 'Assistant: 更新 tailwind.config.ts \u2014 添加内容路径和自定义主题。...' },
+    { turn: 5, role: 'tool', summary: 'npx prisma init && 定义 User 模型',
+      detail: 'Tool: npx prisma init --datasource-provider postgresql\n\u2713 Prisma 初始化完成\n\u2192 创建 prisma/schema.prisma\n\u2192 创建 .env (DATABASE_URL)\n\nTool: 编辑 prisma/schema.prisma \u2014 添加 User 模型' },
+    { turn: 6, role: 'user', summary: '添加完整的 User, Session, Account 数据模型',
+      detail: '用户：现在添加完整的 next-auth 需要的模型。我需要 User、Session、Account 和 VerificationToken 这四个模型，按照 Prisma Adapter 的规范来。' },
+    { turn: 20, role: 'user', summary: '添加 JWT 认证中间件保护 API',
+      detail: '用户：现在给我加上 JWT 中间件，保护 /api/* 路由需要认证才能访问。token 里存 userId 和 role。' },
+    { turn: 26, role: 'tool', summary: 'JWT 测试失败 \u2014 ESM 兼容性问题',
+      detail: 'Tool: 运行测试\n\u274C FAIL tests/middleware.test.ts\n  \u25CF JWT middleware \u203A should reject request without token\n    Error: Dynamic require of "jsonwebtoken" failed\n    \n  \u25CF JWT middleware \u203A should reject expired token\n    Error: Dynamic require of "jsonwebtoken" failed\n    \n  \u25CF JWT middleware \u203A should accept valid token\n    Error: Dynamic require of "jsonwebtoken" failed\n\n\u26A0 jsonwebtoken 模块依赖 Node.js CJS 运行时，与 Next.js ESM 模块图不兼容' },
+    { turn: 27, role: 'assistant', summary: '建议切换到 jose 库替代 jsonwebtoken',
+      detail: 'Assistant: jsonwebtoken 使用 CJS require()，但 Next.js App Router 运行在 ESM 模式下。建议切换到 jose 库，它原生支持 ESM 且 API 兼容。' },
+    { turn: 28, role: 'user', summary: '同意使用 jose 替代 jsonwebtoken',
+      detail: '用户：好的，换成 jose 吧。直接重构 middleware 和 signup 里的 token 部分。' },
+    { turn: 34, role: 'user', summary: '请求添加"忘记密码"功能',
+      detail: '用户：再加一个忘记密码的功能。流程大概是：用户输入邮箱 \u2192 发送重置链接 \u2192 点击链接跳转到重置页面 \u2192 输入新密码提交。我需要完整的 API 路由。' },
+    { turn: 47, role: 'tool', summary: '创建重置密码邮件模板 (Resend)',
+      detail: 'Tool: 创建 emails/reset-password.tsx\n\u2713 React Email 模板创建完成\n\u2192 HTML 版本已生成\n\u2192 Text 备选版本已生成' }
+  ],
+  diffFiles: [
+    { path: 'prisma/schema.prisma', additions: 48, deletions: 3, content: [
+      { type: 'context', line: '// This is your Prisma schema file', ln: 1 },
+      { type: 'context', line: '', ln: 2 },
+      { type: 'del', line: '-model User {', ln: 3 },
+      { type: 'del', line: '-  id    String @id @default(cuid())', ln: 4 },
+      { type: 'del', line: '-  email String @unique', ln: 5 },
+      { type: 'add', line: '+model User {', ln: 3 },
+      { type: 'add', line: '+  id             String    @id @default(cuid())', ln: 4 },
+      { type: 'add', line: '+  name           String?', ln: 5 },
+      { type: 'add', line: '+  email          String    @unique', ln: 6 },
+      { type: 'add', line: '+  emailVerified  DateTime?', ln: 7 },
+      { type: 'add', line: '+  image          String?', ln: 8 },
+      { type: 'add', line: '+  passwordHash   String?', ln: 9 },
+      { type: 'add', line: '+  role           String    @default("user")', ln: 10 },
+      { type: 'add', line: '+  accounts       Account[]', ln: 11 },
+      { type: 'add', line: '+  sessions       Session[]', ln: 12 },
+      { type: 'add', line: '+  createdAt      DateTime  @default(now())', ln: 13 },
+      { type: 'add', line: '+  updatedAt      DateTime  @updatedAt', ln: 14 },
+      { type: 'context', line: ' }', ln: 15 },
+      { type: 'context', line: '', ln: 16 },
+      { type: 'add', line: '+model Session {', ln: 17 },
+      { type: 'add', line: '+  id           String   @id @default(cuid())', ln: 18 },
+      { type: 'add', line: '+  sessionToken String   @unique', ln: 19 },
+      { type: 'add', line: '+  userId       String', ln: 20 },
+      { type: 'add', line: '+  expires      DateTime', ln: 21 },
+      { type: 'add', line: '+  user         User     @relation(fields: [userId], references: [id])', ln: 22 },
+      { type: 'add', line: '+  createdAt    DateTime @default(now())', ln: 23 },
+      { type: 'context', line: ' }', ln: 24 }
+    ]},
+    { path: 'app/api/auth/signup/route.ts', additions: 67, deletions: 0, content: [
+      { type: 'add', line: "+import { NextRequest, NextResponse } from 'next/server'", ln: 1 },
+      { type: 'add', line: "+import { z } from 'zod'", ln: 2 },
+      { type: 'add', line: "+import { hash } from 'bcryptjs'", ln: 3 },
+      { type: 'add', line: "+import { prisma } from '@/lib/prisma'", ln: 4 },
+      { type: 'context', line: '', ln: 5 },
+      { type: 'add', line: '+const signupSchema = z.object({', ln: 6 },
+      { type: 'add', line: "+  name: z.string().min(1).max(50),", ln: 7 },
+      { type: 'add', line: "+  email: z.string().email(),", ln: 8 },
+      { type: 'add', line: "+  password: z.string().min(8).max(128),", ln: 9 },
+      { type: 'add', line: '+})', ln: 10 },
+      { type: 'context', line: '', ln: 11 },
+      { type: 'add', line: '+export async function POST(req: NextRequest) {', ln: 12 },
+      { type: 'add', line: '+  try {', ln: 13 },
+      { type: 'add', line: "+    const body = await req.json()", ln: 14 },
+      { type: 'add', line: "+    const data = signupSchema.parse(body)", ln: 15 },
+      { type: 'add', line: '+    const existing = await prisma.user.findUnique({ where: { email: data.email } })', ln: 16 },
+      { type: 'add', line: "+    if (existing) return NextResponse.json({ error: 'Email already registered' }, { status: 409 })", ln: 17 },
+      { type: 'add', line: "+    const passwordHash = await hash(data.password, 12)", ln: 18 },
+      { type: 'add', line: '+    const user = await prisma.user.create({', ln: 19 },
+      { type: 'add', line: '+      data: { name: data.name, email: data.email, passwordHash }', ln: 20 },
+      { type: 'add', line: '+    })', ln: 21 },
+      { type: 'add', line: "+    return NextResponse.json({ id: user.id, name: user.name, email: user.email }, { status: 201 })", ln: 22 },
+      { type: 'add', line: '+  } catch (err) {', ln: 23 },
+      { type: 'add', line: '+    if (err instanceof z.ZodError) {', ln: 24 },
+      { type: 'add', line: "+      return NextResponse.json({ error: 'Validation failed', details: err.errors }, { status: 400 })", ln: 25 },
+      { type: 'add', line: '+    }', ln: 26 },
+      { type: 'add', line: "+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })", ln: 27 },
+      { type: 'add', line: '+  }', ln: 28 },
+      { type: 'add', line: '+}', ln: 29 }
+    ]},
+    { path: 'middleware.ts', additions: 38, deletions: 32, content: [
+      { type: 'del', line: "-import jwt from 'jsonwebtoken'", ln: 1 },
+      { type: 'add', line: "+import { jwtVerify, SignJWT } from 'jose'", ln: 1 },
+      { type: 'context', line: '', ln: 2 },
+      { type: 'del', line: '-const secret = process.env.JWT_SECRET!', ln: 3 },
+      { type: 'add', line: "+const secret = new TextEncoder().encode(process.env.JWT_SECRET!)", ln: 3 },
+      { type: 'context', line: '', ln: 4 },
+      { type: 'del', line: '-export function verifyToken(token: string) {', ln: 5 },
+      { type: 'del', line: '-  return jwt.verify(token, secret)', ln: 6 },
+      { type: 'del', line: '-}', ln: 7 },
+      { type: 'add', line: '+export async function verifyToken(token: string) {', ln: 5 },
+      { type: 'add', line: '+  const { payload } = await jwtVerify(token, secret)', ln: 6 },
+      { type: 'add', line: '+  return payload', ln: 7 },
+      { type: 'add', line: '+}', ln: 8 }
+    ]},
+    { path: 'lib/email.ts', additions: 34, deletions: 0, content: [
+      { type: 'add', line: "+import { Resend } from 'resend'", ln: 1 },
+      { type: 'add', line: '+', ln: 2 },
+      { type: 'add', line: '+const resend = new Resend(process.env.RESEND_API_KEY!)', ln: 3 },
+      { type: 'add', line: '+const FROM = 'noreply@auth.next-auth-system.dev'', ln: 4 },
+      { type: 'context', line: '', ln: 5 },
+      { type: 'add', line: '+export async function sendPasswordReset(email, token) {', ln: 6 },
+      { type: 'add', line: "+  const resetUrl = `https://app.next-auth-system.dev/reset-password?token=${token}`", ln: 7 },
+      { type: 'add', line: '+  await resend.emails.send({', ln: 8 },
+      { type: 'add', line: '+    from: FROM,', ln: 9 },
+      { type: 'add', line: '+    to: email,', ln: 10 },
+      { type: 'add', line: "+    subject: 'Reset your password',", ln: 11 },
+      { type: 'add', line: '+    html: `<p>Click <a href="${resetUrl}">here</a> to reset your password.</p>`', ln: 12 },
+      { type: 'add', line: '+  })', ln: 13 },
+      { type: 'add', line: '+}', ln: 14 }
+    ]},
+    { path: 'app/api/auth/forgot-password/route.ts', additions: 28, deletions: 0, content: [
+      { type: 'add', line: "+import { NextRequest, NextResponse } from 'next/server'", ln: 1 },
+      { type: 'add', line: "+import { prisma } from '@/lib/prisma'", ln: 2 },
+      { type: 'add', line: "+import { SignJWT } from 'jose'", ln: 3 },
+      { type: 'add', line: "+import { sendPasswordReset } from '@/lib/email'", ln: 4 },
+      { type: 'context', line: '', ln: 5 },
+      { type: 'add', line: '+const RESET_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)', ln: 6 },
+      { type: 'add', line: '+const RESET_EXPIRES = '1h'', ln: 7 },
+      { type: 'context', line: '', ln: 8 },
+      { type: 'add', line: '+export async function POST(req: NextRequest) {', ln: 9 },
+      { type: 'add', line: "+  const { email } = await req.json()", ln: 10 },
+      { type: 'add', line: "+  const user = await prisma.user.findUnique({ where: { email } })", ln: 11 },
+      { type: 'add', line: "+  if (!user) return NextResponse.json({ ok: true })", ln: 12 },
+      { type: 'add', line: '+  const token = await new SignJWT({ sub: user.id, purpose: 'reset' })', ln: 13 },
+      { type: 'add', line: '+    .setProtectedHeader({ alg: 'HS256' })', ln: 14 },
+      { type: 'add', line: '+    .setExpirationTime(RESET_EXPIRES)', ln: 15 },
+      { type: 'add', line: '+    .sign(RESET_SECRET)', ln: 16 },
+      { type: 'add', line: '+  await sendPasswordReset(email, token)', ln: 17 },
+      { type: 'add', line: "+  return NextResponse.json({ ok: true })", ln: 18 },
+      { type: 'add', line: '+}', ln: 19 }
+    ]}
+  ],
+  diagnostics: [
+    { severity: 'error', title: 'T-004 失败 \u2014 JWT 集成失败', desc: 'jsonwebtoken 与 Next.js ESM 模块图不兼容，导致 3/5 测试失败。已在 T-005 中修复。', task: 'T-004', detail: 'ESM/CJS 冲突' },
+    { severity: 'warning', title: 'T-006 边界不明确 \u2014 密码重置流程', desc: '用户未明确说明邮件发送方式和重置页面 UI 设计，任务状态为 ambiguous。建议在用户确认需求后继续。', task: 'T-006', detail: '需求未明确' },
+    { severity: 'info', title: '重复工具调用 \u2014 npm install 执行 6 次', desc: '在 47 轮对话中 npm install 执行了 6 次，建议在项目初始化时批量处理依赖安装。', task: '\u2014', detail: '6 次重复' },
+    { severity: 'warning', title: 'T-004 \u2192 T-005 衔接延迟', desc: '从失败到修复间隔了 6 轮对话（T26\u2192T33），建议 Agent 在首次失败时立即提供备选方案。', task: 'T-004', detail: '响应延迟' },
+    { severity: 'error', title: 'Agent 声明与证据不一致 \u2014 T-006', desc: 'Agent 声明"密码重置流程已完成"，但实际缺少邮件发送的 DNS 配置和重置页面 UI，用户需求未完全满足。', task: 'T-006', detail: '声明不一致' },
+    { severity: 'info', title: '测试覆盖缺口 \u2014 3 个任务无测试', desc: 'T-001（初始化）、T-002（数据模型）、T-006（密码重置）均未包含测试用例。建议补全。', task: 'T-001', detail: '无测试' },
+    { severity: 'warning', title: '低置信度任务 (0.31)', desc: 'T-004 置信度 0.31，属于低置信度边界，建议人工审查 JWT 中间件实现是否正确。', task: 'T-004', detail: '置信度 0.31' }
+  ]
+};
+
+let currentView = 'tasks';
+let selectedTaskId = 'T-001';
+let selectedTaskTab = 'overview';
+let selectedDiffFile = 'prisma/schema.prisma';
+
+document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
+  el.addEventListener('click', function() { switchView(this.dataset.view); });
+});
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.nav-item[data-view]').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+  document.querySelectorAll('.view').forEach(function(el) { el.classList.remove('active'); });
+  var target = document.getElementById('view-' + view);
+  if (target) target.classList.add('active');
+  if (view === 'tasks') { renderTasks(); }
+  if (view === 'overview') { renderOverview(); }
+  if (view === 'events') { renderEvents(); }
+  if (view === 'diff') { renderDiff(); }
+  if (view === 'diagnostics') { renderDiagnostics(); }
+  if (view === 'export') { renderExport(); }
+}
+
+function renderTasks() {
+  var list = document.getElementById('tl-list');
+  document.getElementById('tl-count').textContent = SAMPLE.tasks.length + ' tasks';
+  list.innerHTML = SAMPLE.tasks.map(function(t) {
+    var confClass = t.confidence >= 0.8 ? 'high' : t.confidence >= 0.4 ? 'medium' : 'low';
+    var sel = t.id === selectedTaskId ? ' selected' : '';
+    return '<div class="task-card' + sel + '" data-task="' + t.id + '">' +
+      '<div class="task-card-header">' +
+        '<span class="task-id">' + t.id + '</span>' +
+        '<span class="task-title">' + t.title + '</span>' +
+      '</div>' +
+      '<div class="task-card-meta">' +
+        '<span class="type-pill ' + t.type + '">' + t.type + '</span>' +
+        '<span class="status-pill ' + t.status + '">' + t.status + '</span>' +
+        '<span class="meta-item">Turns ' + t.turnRange + '</span>' +
+        '<span class="meta-item">\uD83D\uDCC4 ' + t.filesChanged + '</span>' +
+        '<span class="meta-item">\u2328 ' + t.commands + '</span>' +
+        (t.tests.passed > 0 ? '<span class="meta-item" style="color:var(--success)">\u2713 ' + t.tests.passed + '</span>' : '') +
+        (t.tests.failed > 0 ? '<span class="meta-item" style="color:var(--danger)">\u2717 ' + t.tests.failed + '</span>' : '') +
+        (t.errors > 0 ? '<span class="meta-item" style="color:var(--danger)">\u26A0 ' + t.errors + '</span>' : '') +
+        '<span class="task-card-confidence ' + confClass + '">' + Math.round(t.confidence * 100) + '%</span>' +
+      '</div>' +
+      '<div class="task-card-boundary">' + t.boundaryReason + '</div>' +
+    '</div>';
+  }).join('');
+  list.querySelectorAll('.task-card').forEach(function(el) {
+    el.addEventListener('click', function() {
+      selectedTaskId = el.dataset.task;
+      selectedTaskTab = 'overview';
+      renderTasks();
+    });
+  });
+  renderTaskDetail();
+}
+
+function renderTaskDetail() {
+  var t = SAMPLE.tasks.find(function(t) { return t.id === selectedTaskId; });
+  if (!t) {
+    document.getElementById('td-body').innerHTML = '<div class="empty-state">选择一个 Task 查看详情</div>';
+    return;
+  }
+  document.getElementById('td-id').textContent = t.id + ' \u00B7 ' + t.turnRange;
+  document.getElementById('td-title').textContent = t.title;
+
+  var tabs = ['overview', 'evidence', 'turns', 'files'];
+  var tabLabels = { overview: 'Overview', evidence: 'Evidence', turns: 'Turns', files: 'Files / Diff' };
+  document.getElementById('td-tabs').innerHTML = tabs.map(function(tab) {
+    return '<div class="tab' + (tab === selectedTaskTab ? ' active' : '') + '" data-tab="' + tab + '">' + tabLabels[tab] + '</div>';
+  }).join('');
+  document.getElementById('td-tabs').querySelectorAll('.tab').forEach(function(el) {
+    el.addEventListener('click', function() {
+      selectedTaskTab = el.dataset.tab;
+      renderTaskDetail();
+    });
+  });
+
+  var body = document.getElementById('td-body');
+  if (selectedTaskTab === 'overview') {
+    body.innerHTML =
+      '<div class="detail-section"><h4>任务目标</h4><div class="detail-value">' + t.goal + '</div></div>' +
+      '<div class="detail-grid">' +
+        '<div class="detail-cell"><div class="cell-label">Status</div><div class="cell-value"><span class="status-pill ' + t.status + '">' + t.statusText + '</span></div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Confidence</div><div class="cell-value"><span class="task-card-confidence ' + (t.confidence >= 0.8 ? 'high' : t.confidence >= 0.4 ? 'medium' : 'low') + '">' + Math.round(t.confidence * 100) + '% \u2014 ' + t.confidenceText + '</span></div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Turn Range</div><div class="cell-value" style="font-family:var(--font-mono)">' + t.turnRange + '</div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Type</div><div class="cell-value"><span class="type-pill ' + t.type + '">' + t.type + '</span></div></div>' +
+      '</div>' +
+      '<div class="detail-section" style="margin-top:12px"><h4>Boundary Reason</h4><div class="detail-value" style="font-size:12px;color:var(--muted)">' + t.boundaryReason + '</div></div>' +
+      '<div class="detail-grid" style="margin-top:8px">' +
+        '<div class="detail-cell"><div class="cell-label">Files Changed</div><div class="cell-value" style="font-size:16px;font-weight:600;font-family:var(--font-mono)">' + t.filesChanged + '</div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Commands</div><div class="cell-value" style="font-size:16px;font-weight:600;font-family:var(--font-mono)">' + t.commands + '</div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Tests</div><div class="cell-value">' +
+          (t.tests.passed > 0 ? '<span style="color:var(--success);font-weight:600">' + t.tests.passed + ' passed</span>' : '') +
+          (t.tests.failed > 0 ? '<span style="color:var(--danger);font-weight:600"> / ' + t.tests.failed + ' failed</span>' : '') +
+          (t.tests.passed === 0 && t.tests.failed === 0 ? '<span style="color:var(--muted)">\u2014</span>' : '') +
+        '</div></div>' +
+        '<div class="detail-cell"><div class="cell-label">Errors</div><div class="cell-value" style="font-size:16px;font-weight:600;font-family:var(--font-mono);color:' + (t.errors > 0 ? 'var(--danger)' : 'var(--muted)') + '">' + (t.errors || '\u2014') + '</div></div>' +
+      '</div>';
+  } else if (selectedTaskTab === 'evidence') {
+    body.innerHTML =
+      '<div class="detail-section"><h4>Evidence (' + t.evidence.length + ' items)</h4><div class="evidence-list">' +
+      t.evidence.map(function(e) {
+        return '<div class="evidence-item"><span class="ev-type ' + e.type + '">' + e.type.replace('-', ' ') + '</span><span class="ev-desc">' + e.desc + '</span><span class="ev-turn">' + e.turn + '</span></div>';
+      }).join('') +
+      '</div></div>' +
+      '<div class="detail-section" style="margin-top:12px"><h4>Raw Evidence Debug</h4>' +
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font:11px/1.6 var(--font-mono);max-height:160px;overflow-y:auto;color:var(--muted)">' +
+      JSON.stringify(t.evidence, null, 2) + '</div></div>';
+  } else if (selectedTaskTab === 'turns') {
+    body.innerHTML =
+      '<div class="detail-section"><h4>Turns (' + t.turns.length + ')</h4><div class="evidence-list">' +
+      t.turns.map(function(turn) {
+        var roleColor = turn.role === 'user' ? 'background:var(--accent-dim);color:var(--accent)' : turn.role === 'tool' ? 'background:oklch(58% 0.12 175 / 0.1);color:oklch(45% 0.14 175)' : 'background:oklch(0% 0 0 / 0.04);color:var(--muted)';
+        return '<div class="evidence-item"><span class="turn-role" style="font:10px/1 var(--font-mono);padding:2px 5px;border-radius:3px;text-transform:uppercase;letter-spacing:0.04em;' + roleColor + '">T' + turn.turn + '</span>' +
+          '<span style="font:10px/1 var(--font-mono);color:var(--muted);min-width:32px">' + turn.role + '</span>' +
+          '<span class="ev-desc">' + turn.summary + '</span></div>';
+      }).join('') +
+      '</div></div>';
+  } else if (selectedTaskTab === 'files') {
+    body.innerHTML =
+      '<div class="detail-section"><h4>Files Changed</h4><div style="display:flex;flex-direction:column;gap:4px">' +
+      SAMPLE.diffFiles.map(function(f) {
+        return '<div class="evidence-item" style="cursor:pointer"><span style="color:var(--success);font-weight:600;font:11px/1 var(--font-mono)">+' + f.additions + '</span><span style="font:12px/1.4 var(--font-mono)">' + f.path + '</span></div>';
+      }).join('') +
+      '</div></div>' +
+      '<div class="detail-section" style="margin-top:12px"><h4>Patch Summary (' + t.id + ')</h4>' +
+      '<div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;font:11px/1.6 var(--font-mono);max-height:200px;overflow-y:auto;color:var(--muted)">' +
+      (function() {
+        var signupFile = SAMPLE.diffFiles.find(function(f) { return f.path.indexOf('signup') !== -1; });
+        if (!signupFile) return 'No patch data for this task';
+        return signupFile.content.filter(function(l) { return l.type !== 'context'; }).slice(0, 15).map(function(l) {
+          return l.type === 'add' ? '<span style="color:var(--success)">+ ' + l.line.slice(1) + '</span>' : '<span style="color:var(--danger)">- ' + l.line.slice(1) + '</span>';
+        }).join('\n');
+      })() +
+      '</div></div>';
+  }
+}
+
+function renderOverview() {
+  var s = SAMPLE.session;
+  document.getElementById('ov-session-badge').textContent = s.id + ' \u00B7 ' + s.project;
+  document.getElementById('ov-stats').innerHTML =
+    '<div class="stat-card"><div class="stat-value">' + s.taskCount + '</div><div class="stat-label">Tasks</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + s.totalTurns + '</div><div class="stat-label">Turns</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + s.totalToolCalls + '</div><div class="stat-label">Tool Calls</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + s.totalFilesChanged + '</div><div class="stat-label">Files Changed</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + s.totalCommands + '</div><div class="stat-label">Commands</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + s.totalTests + '</div><div class="stat-label">Tests</div></div>' +
+    '<div class="stat-card"><div class="stat-value" style="color:var(--danger)">' + s.failedTests + '</div><div class="stat-label">Failed Tests</div></div>' +
+    '<div class="stat-card"><div class="stat-value" style="color:var(--warning)">' + SAMPLE.tasks.filter(function(t) { return t.confidence < 0.5; }).length + '</div><div class="stat-label">Low Confidence</div></div>';
+  var statusColors = { completed: 'var(--success)', failed: 'var(--danger)', ambiguous: 'var(--warning)', unevaluated: 'var(--muted)' };
+  var tasks = SAMPLE.tasks;
+  document.getElementById('ov-timeline').innerHTML =
+    '<div class="timeline-bar">' + tasks.map(function(t) {
+      return '<div class="timeline-segment" style="flex:1;background:' + (statusColors[t.status] || 'var(--muted)') + '" title="' + t.id + ': ' + t.title + '">' + t.id + '</div>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;gap:12px;margin-top:6px;font:10px/1 var(--font-mono);color:var(--muted)">' +
+    tasks.map(function(t) { return '<span>' + t.id + ' <span style="color:' + (statusColors[t.status] || 'var(--muted)') + '">\u25CF</span> ' + t.turnRange + '</span>'; }).join('') + '</div>';
+  document.getElementById('ov-taskmap').innerHTML = tasks.map(function(t) {
+    return '<div class="task-map-row"><div class="map-indicator" style="background:' + (statusColors[t.status] || 'var(--muted)') + '"></div>' +
+      '<div class="map-info"><span class="map-title"><strong>' + t.id + '</strong> ' + t.title + '</span>' +
+      '<span class="map-meta"><span class="type-pill ' + t.type + '">' + t.type + '</span> ' + Math.round(t.confidence * 100) + '%</span></div></div>';
+  }).join('');
+}
+
+function renderEvents() {
+  document.getElementById('ev-list').innerHTML = SAMPLE.events.map(function(e) {
+    return '<div class="event-turn" data-turn="' + e.turn + '">' +
+      '<div class="event-turn-header">' +
+        '<span class="turn-num">T' + e.turn + '</span>' +
+        '<span class="turn-role ' + e.role + '">' + e.role + '</span>' +
+        '<span class="turn-summary">' + e.summary + '</span>' +
+        '<span class="expand-icon">\u25B6</span>' +
+      '</div>' +
+      '<div class="event-turn-body">' + e.detail + '</div>' +
+    '</div>';
+  }).join('');
+  document.querySelectorAll('.event-turn-header').forEach(function(el) {
+    el.addEventListener('click', function() { el.parentElement.classList.toggle('expanded'); });
+  });
+}
+
+function renderDiff() {
+  var fileList = document.getElementById('df-filelist');
+  fileList.innerHTML = SAMPLE.diffFiles.map(function(f) {
+    var sel = f.path === selectedDiffFile ? ' style="background:var(--accent-dim)"' : '';
+    return '<div class="diff-file-item" data-path="' + f.path + '"' + sel + '>' +
+      '<span class="file-path">' + f.path + '</span>' +
+      '<span class="file-changes"><span class="additions">+' + f.additions + '</span><span class="deletions">-' + f.deletions + '</span></span></div>';
+  }).join('');
+  fileList.querySelectorAll('.diff-file-item').forEach(function(el) {
+    el.addEventListener('click', function() { selectedDiffFile = el.dataset.path; renderDiff(); });
+  });
+  var file = SAMPLE.diffFiles.find(function(f) { return f.path === selectedDiffFile; });
+  if (!file) { document.getElementById('df-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Select a file</div>'; return; }
+  document.getElementById('df-header').textContent = file.path + ' (+' + file.additions + ' / -' + file.deletions + ')';
+  document.getElementById('df-body').innerHTML = file.content.map(function(l) {
+    if (l.type === 'add') return '<div class="diff-line add"><span class="diff-ln">' + l.ln + '</span><span class="diff-sign">+</span>' + l.line.slice(1) + '</div>';
+    if (l.type === 'del') return '<div class="diff-line del"><span class="diff-ln">' + l.ln + '</span><span class="diff-sign">-</span>' + l.line.slice(1) + '</div>';
+    return '<div class="diff-line context"><span class="diff-ln">' + l.ln + '</span><span class="diff-sign"> </span>' + l.line + '</div>';
+  }).join('');
+}
+
+function renderDiagnostics() {
+  var sevColors = { error: 'var(--danger)', warning: 'var(--warning)', info: 'var(--accent)' };
+  var sevIcons = { error: '\u25CF', warning: '\u25C6', info: '\u25A0' };
+  document.getElementById('dg-list').innerHTML = SAMPLE.diagnostics.map(function(d) {
+    return '<div class="diag-item">' +
+      '<div class="diag-header">' +
+        '<div class="diag-severity" style="background:' + (sevColors[d.severity] || 'var(--muted)') + '"></div>' +
+        '<span style="color:' + (sevColors[d.severity] || 'var(--muted)') + ';font:11px/1 var(--font-mono);font-weight:600">' + (sevIcons[d.severity] || '') + '</span>' +
+        '<span class="diag-title">' + d.title + '</span>' +
+      '</div>' +
+      '<div class="diag-desc">' + d.desc + '</div>' +
+      '<div class="diag-meta"><span>Task: ' + d.task + '</span><span>' + d.detail + '</span></div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderExport() {
+  var exports = [
+    { title: 'Session', desc: '完整 Session 数据，包含全部 turns 和元信息', format: 'JSON / YAML' },
+    { title: 'Task Trace', desc: 'Task 拆分结果，包含边界分析和置信度', format: 'JSON' },
+    { title: 'Raw Logs', desc: '原始 Agent 对话日志，含 tool calls', format: 'JSONL / TXT' },
+    { title: 'Req / Resp', desc: 'API 请求与流式响应原文', format: 'JSON / HAR' },
+    { title: 'Diff', desc: '文件改动和 patch 摘要', format: 'Patch / Diff' },
+    { title: 'Dataset', desc: '清洗后用于评测的数据集格式', format: 'JSONL / CSV' }
+  ];
+  document.getElementById('ex-grid').innerHTML = exports.map(function(e) {
+    return '<div class="export-card"><div class="export-title">' + e.title + '</div><div class="export-desc">' + e.desc + '</div><div class="export-format">' + e.format + '</div></div>';
+  }).join('');
+}
+
+renderOverview();
+renderTasks();
+renderEvents();
+renderDiff();
+renderDiagnostics();
+renderExport();
+</script>
+</body>
+</html>
