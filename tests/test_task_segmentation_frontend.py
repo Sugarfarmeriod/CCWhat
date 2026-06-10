@@ -180,6 +180,15 @@ class TestTaskSegmentationRendering(unittest.TestCase):
     def test_re_segment_button_in_header(self):
         self.assertIn("重新切分", _HTML)
 
+    def test_task_card_title_uses_render_order_not_api_title(self):
+        fn_start = _HTML.index("function renderTaskSegments")
+        fn_end = _HTML.index("function selectTaskSegment", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("for (const [taskIdx, t] of tasks.entries())", snippet)
+        self.assertIn("const taskTitle = `任务 ${taskIdx + 1}`", snippet)
+        self.assertIn('${esc(taskTitle)}', snippet)
+        self.assertNotIn("${esc(t.title || '(无标题)')}", snippet)
+
     def test_final_claim_badge_css(self):
         self.assertIn(".task-badge-final-claim", _HTML)
 
