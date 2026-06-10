@@ -1702,7 +1702,7 @@ class AnalyzeFrontendTests(unittest.TestCase):
         self.assertIn(".md-view table", html)
         self.assertIn(".md-view th", html)
         self.assertIn(".md-view blockquote", html)
-        self.assertIn("cdn.jsdelivr.net/npm/mermaid@10", html)
+        # cdn.jsdelivr mermaid removed in workbench redesign (no external CDN per design spec)
         self.assertIn('class="md-mermaid-wrap"', html)
         self.assertIn('class="md-mermaid"', html)
         self.assertIn("function renderMermaidBlocks", html)
