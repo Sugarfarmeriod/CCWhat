@@ -63,4 +63,4 @@
 - [x] 7.6 运行 `uv run python -m unittest`
 - [x] 7.7 运行 `node tests/test_task_segmentation_dom.js`
 - [x] 7.8 抽取 `viewer/claude-log.html` 内联脚本并执行 `node --check`
-- [ ] 7.9 commit 并 push 到远端 GitHub 仓库
+- [x] 7.9 commit 并 push 到远端 GitHub 仓库
