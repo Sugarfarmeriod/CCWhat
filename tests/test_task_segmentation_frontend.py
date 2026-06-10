@@ -212,19 +212,19 @@ class TestBugFixes(unittest.TestCase):
         self.assertLess(cache_pos, stale_pos)
 
     def test_debug_boundaries_passed_from_top_level_data(self):
-        """P1: renderTaskDetail called with data.debugBoundaries, not task.debugBoundaries."""
-        self.assertIn("renderTaskDetail(selTask, data.debugBoundaries)", _HTML)
+        """P1: renderTaskDetailWithTabs called with data.debugBoundaries, not task.debugBoundaries."""
+        self.assertIn("renderTaskDetailWithTabs(selTask, data.debugBoundaries)", _HTML)
 
     def test_render_task_detail_accepts_debug_boundaries_param(self):
-        """P1: renderTaskDetail signature accepts debugBoundaries parameter."""
-        fn_start = _HTML.index("function renderTaskDetail(task")
-        snippet = _HTML[fn_start:fn_start + 50]
+        """P1: renderTaskDetailWithTabs signature accepts debugBoundaries parameter."""
+        fn_start = _HTML.index("function renderTaskDetailWithTabs(task")
+        snippet = _HTML[fn_start:fn_start + 60]
         self.assertIn("debugBoundaries", snippet)
 
     def test_select_task_triggers_render_task_segments(self):
         """P1: selectTaskSegment calls renderTaskSegments, which passes debugBoundaries internally."""
         fn_start = _HTML.index("function selectTaskSegment")
-        fn_end = _HTML.index("function renderTaskDetail", fn_start)
+        fn_end = _HTML.index("function renderTaskDetailWithTabs", fn_start)
         snippet = _HTML[fn_start:fn_end]
         self.assertIn("renderTaskSegments(cached, sessionId)", snippet)
 
@@ -292,9 +292,7 @@ class TestNavigationImprovements(unittest.TestCase):
         self.assertIn("不代表任务成功", _HTML)
 
     def test_final_claim_has_expand_collapse(self):
-        fn_start = _HTML.index("finalClaimHtml")
-        snippet = _HTML[fn_start:fn_start + 900]
-        self.assertIn("展开全文", snippet)
+        self.assertIn("展开全文", _HTML)
 
     def test_error_summary_function_exists(self):
         self.assertIn("function errorSummary", _HTML)

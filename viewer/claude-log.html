@@ -736,7 +736,21 @@ body {
   .md-page { max-width: 860px; margin: 0 auto; padding: 20px 14px; }
   .page-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; letter-spacing: -0.01em; }
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  /* ── Task workbench dual-pane ── */
+  .task-workbench { display: flex; flex: 1; overflow: hidden; height: 100%; }
+  .task-list-pane { width: 360px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--bg-surface); }
+  .task-detail-pane { flex: 1; overflow-y: auto; padding: 14px; }
+  .task-tab-bar { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .task-tab {
+    padding: 5px 12px; font-size: 11px; font-weight: 500; color: var(--text-secondary);
+    cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.1s;
+    user-select: none; white-space: nowrap;
+  }
+  .task-tab:hover { color: var(--text-primary); }
+  .task-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .task-tab-body { display: none; }
+  .task-tab-body.active { display: block; }
+</style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body class="app-shell">
 
@@ -1101,6 +1115,11 @@ function rebuildCanonicalNavIndex() {
     if (!e) continue;
     if (e._fileLine && e._gid === 'main')
       canonicalNavIndex.set(`main:${e._fileLine}`, { page: 'raw-events', target: e._fileLine, entryIdx: i });
+    // agent-<agentId>:<_fileLine> for subagent entries
+    if (e._fileLine && e._gid && e._gid !== 'main') {
+      const agentId = e._gid.replace(/^sa-/, '');
+      canonicalNavIndex.set(`agent-${agentId}:${e._fileLine}`, { page: 'raw-events', target: e._fileLine, entryIdx: i });
+    }
     if (e._eventId)
       canonicalNavIndex.set(e._eventId, { page: 'raw-events', target: e._eventId, entryIdx: i });
     if (e.uuid)
@@ -1109,6 +1128,31 @@ function rebuildCanonicalNavIndex() {
       canonicalNavIndex.set(e.message.id, { page: 'raw-events', target: e.message.id, entryIdx: i });
     if (e._turnKey)
       canonicalNavIndex.set(e._turnKey, { page: 'raw-events', target: e._turnKey, entryIdx: i });
+    // tool_use_id from assistant tool_use blocks
+    if (e.message?.content && Array.isArray(e.message.content)) {
+      for (const block of e.message.content) {
+        if (block.type === 'tool_use' && block.id) {
+          canonicalNavIndex.set(block.id, { page: 'raw-events', target: block.id, entryIdx: i });
+        }
+      }
+    }
+    // tool_use_id from user tool_result blocks
+    if (e.type === 'user' && e.message?.content && Array.isArray(e.message.content)) {
+      for (const block of e.message.content) {
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          canonicalNavIndex.set(block.tool_use_id, { page: 'raw-events', target: block.tool_use_id, entryIdx: i });
+        }
+      }
+    }
+  }
+  // Register task boundary targets
+  const sid = document.getElementById('sessionSel').value;
+  const taskData = sid ? taskSegmentReports[sid] : null;
+  if (taskData?.tasks) {
+    for (const t of taskData.tasks) {
+      if (t.startEventId) canonicalNavIndex.set(t.startEventId, { page: 'raw-events', target: t.startEventId });
+      if (t.endEventId) canonicalNavIndex.set(t.endEventId, { page: 'raw-events', target: t.endEventId });
+    }
   }
 }
 
@@ -1161,7 +1205,8 @@ function renderOverviewPage() {
   const tasks = taskData?.tasks || [];
   const userCount = allEntries.filter(e => e.type === 'user').length;
   const asstCount = allEntries.filter(e => e.type === 'assistant').length;
-  const turnCount = Object.keys(turnCollapsed).length;
+  const turnKeys = new Set(allEntries.map(e => e._turnKey).filter(Boolean));
+  const turnCount = turnKeys.size;
   const toolCalls = allEntries.filter(e => e.type === 'assistant' && e.message?.content?.some?.(c => c.type === 'tool_use')).length;
   const cmdCount = tasks.reduce((s, t) => s + (t.evidence?.commands?.length || 0), 0);
   const testCount = tasks.reduce((s, t) => s + (t.evidence?.testCommands?.length || 0), 0);
@@ -1819,9 +1864,8 @@ async function runTaskSegmentationForCurrentSession() {
   }
 }
 
-// 3.1-3.4, 4.1-4.5, 6.1: main render
+// 3.1-3.4, 4.1-4.5, 6.1: main render — dual-pane Task List + Task Detail
 function renderTaskSegments(data, sessionId) {
-  // Update nav badge
   const badge = document.getElementById('taskNavBadge');
   if (badge) {
     const n = (data.tasks || []).length;
@@ -1833,30 +1877,29 @@ function renderTaskSegments(data, sessionId) {
   const summary = data.summary || {};
   const elapsedMs = data.elapsedMs || 0;
   const isAmbiguous = data.isAmbiguous || false;
+  const selId = selectedTaskSegmentId || (tasks.length ? tasks[0].taskId : null);
 
-  // 3.1: header
   const ambiguousBadge = isAmbiguous
     ? `<span class="task-badge task-badge-ambiguous">⚠ ambiguous</span>` : '';
   const flipsTxt = summary.topicFlips > 0 ? `<span>topic flips: ${summary.topicFlips}</span>` : '';
   const elapsedTxt = elapsedMs ? `<span>${(elapsedMs/1000).toFixed(1)}s</span>` : '';
-  let header = `
-    <div class="task-seg-header">
-      <div class="task-seg-title">任务切分 — ${tasks.length} 个任务${isAmbiguous ? ' ⚠' : ''}</div>
-      <div class="task-seg-meta">${ambiguousBadge}${flipsTxt}${elapsedTxt}</div>
-      <div class="task-seg-actions">
-        <button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button>
-      </div>
-    </div>`;
 
-  // 3.2: empty state
   if (tasks.length === 0) {
-    panel.innerHTML = header + `<div class="task-seg-empty">未识别到任务片段<br><span style="font-size:11px">可能是 session 过短，或规则阈值需调整</span></div>`;
+    panel.innerHTML = `<div class="task-seg-header">
+      <div class="task-seg-title">任务切分 — 0 个任务</div>
+      <div class="task-seg-actions"><button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button></div>
+    </div><div class="task-seg-empty">未识别到任务片段<br><span style="font-size:11px">可能是 session 过短，或规则阈值需调整</span></div>`;
     return;
   }
 
-  // 3.3-3.4: task cards
-  const selId = selectedTaskSegmentId || tasks[0].taskId;
-  const cards = tasks.map(t => {
+  // Left pane: header + task cards
+  let leftHtml = `<div class="task-seg-header" style="padding:8px 10px;margin:0;border-bottom:1px solid var(--border)">
+    <div class="task-seg-title" style="font-size:13px">${tasks.length} 个任务 ${isAmbiguous ? '⚠' : ''}</div>
+    <div class="task-seg-meta" style="display:flex;gap:4px;flex-wrap:wrap">${ambiguousBadge}${flipsTxt}${elapsedTxt}</div>
+    <div style="margin-top:4px"><button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button></div>
+  </div>`;
+  leftHtml += '<div class="task-seg-cards" id="taskSegCards">';
+  for (const t of tasks) {
     const ev = t.evidence || {};
     const isSelected = t.taskId === selId;
     const typeCls = `task-badge-type-${t.taskType || 'unknown'}`;
@@ -1871,193 +1914,244 @@ function renderTaskSegments(data, sessionId) {
       ev.filesRead?.length ? `<span class="task-count-chip">◎ ${ev.filesRead.length}</span>` : '',
       ev.commands?.length ? `<span class="task-count-chip">$ ${ev.commands.length}</span>` : '',
       ev.errors?.length ? `<span class="task-count-chip has-errors">⚠ ${ev.errors.length}</span>` : '',
-      ev.subagentIds?.length ? `<span class="task-count-chip">⚙ ${ev.subagentIds.length}</span>` : '',
     ].filter(Boolean).join('');
-    return `
-      <div class="task-card${isSelected ? ' selected' : ''}" data-task-id="${esc(t.taskId)}" data-session-id="${esc(sessionId)}">
-        <div class="task-card-hdr">
-          <span class="task-card-id">${esc(t.taskId)}</span>
-          <span class="task-card-title">${esc(t.title || '(无标题)')}</span>
-          <div class="task-card-badges">${badges}</div>
-        </div>
-        <div class="task-card-counts">${counts || '<span class="task-count-chip" style="opacity:.4">无 evidence</span>'}</div>
-      </div>`;
-  }).join('');
+    leftHtml += `<div class="task-card${isSelected ? ' selected' : ''}" data-task-id="${esc(t.taskId)}" data-session-id="${esc(sessionId)}">
+      <div class="task-card-hdr">
+        <span class="task-card-id">${esc(t.taskId)}</span>
+        <span class="task-card-title">${esc(t.title || '(无标题)')}</span>
+        <div class="task-card-badges">${badges}</div>
+      </div>
+      <div class="task-card-counts">${counts || '<span class="task-count-chip" style="opacity:.4">无 evidence</span>'}</div>
+    </div>`;
+  }
+  leftHtml += '</div>';
 
-  // 4.1-4.5: selected task detail
+  // Right pane: selected task detail with tabs
   const selTask = tasks.find(t => t.taskId === selId) || tasks[0];
-  const detailHtml = selTask ? renderTaskDetail(selTask, data.debugBoundaries) : '';
+  const rightHtml = selTask ? renderTaskDetailWithTabs(selTask, data.debugBoundaries) : '';
 
-  panel.innerHTML = `<div class="analysis-report" style="max-width:100%">
-    ${header}
-    <div class="task-seg-cards" id="taskSegCards">${cards}</div>
-    <div id="taskDetailContainer">${detailHtml}</div>
+  panel.innerHTML = `<div class="task-workbench">
+    <div class="task-list-pane" id="taskListPane">${leftHtml}</div>
+    <div class="task-detail-pane" id="taskDetailPane">${rightHtml}</div>
   </div>`;
 
-  // Delegated click on task cards — no inline onclick, no fragile DOM query
+  // Delegated click on task cards
   const cardsEl = document.getElementById('taskSegCards');
   if (cardsEl) {
     cardsEl.addEventListener('click', e => {
       const card = e.target.closest('[data-task-id]');
       if (!card) return;
       selectTaskSegment(card.dataset.taskId, card.dataset.sessionId);
-    }, { once: true });
+    });
   }
 }
 
 function selectTaskSegment(taskId, sessionId) {
   const cached = taskSegmentReports[sessionId];
   if (!cached) return;
-  // task 1.4: guard against invalid task id
   const task = (cached.tasks || []).find(t => t.taskId === taskId);
   if (!task) return;
   selectedTaskSegmentId = taskId;
-  // State-driven re-render — selection class and detail are both derived from selectedTaskSegmentId
   renderTaskSegments(cached, sessionId);
 }
 
-// 2.3: extract a short summary from an error string
-function errorSummary(text, maxLen = 160) {
-  if (!text) return '(空)';
-  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
-  const keywords = ['Error', 'error', 'FAILED', 'failed', 'Traceback', 'Exception', 'Permission denied', 'AssertionError'];
-  const hit = lines.find(l => keywords.some(k => l.includes(k))) || lines[0] || text;
-  return hit.length > maxLen ? hit.slice(0, maxLen) + '…' : hit;
+// Tab state for Task Detail
+let activeTaskTab = 'overview';
+
+function switchTaskTab(tabId) {
+  activeTaskTab = tabId;
+  document.querySelectorAll('.task-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  document.querySelectorAll('.task-tab-body').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
 }
 
-function renderTaskDetail(task, debugBoundaries) {
+function renderTaskDetailWithTabs(task, debugBoundaries) {
   const ev = task.evidence || {};
   const fw = task.fileWeights || {};
   const brs = task.boundaryReasons || [];
-  const dbs = debugBoundaries || [];
 
-  // 4.1: overview (finalClaim moved to its own section below)
+  // Tab bar
+  const tabs = ['overview','evidence','turns','files','commands','raw'];
+  const tabLabels = { overview:'Overview', evidence:'Evidence', turns:'Turns', files:'Files & Diff', commands:'Commands', raw:'Raw' };
+  const tabBar = '<div class="task-tab-bar">' + tabs.map(t =>
+    `<div class="task-tab${t === activeTaskTab ? ' active' : ''}" data-tab="${t}" onclick="switchTaskTab('${t}')">${tabLabels[t]}</div>`
+  ).join('') + '</div>';
+
+  // Tab bodies
+  const bodies = {};
+  bodies.overview = renderTabOverview(task);
+  bodies.evidence = renderTabEvidence(task);
+  bodies.turns = renderTabTurns(task);
+  bodies.files = renderTabFiles(task);
+  bodies.commands = renderTabCommands(task);
+  bodies.raw = renderTabRaw(task, debugBoundaries);
+
+  const tabBodies = tabs.map(t =>
+    `<div class="task-tab-body${t === activeTaskTab ? ' active' : ''}" data-tab="${t}">${bodies[t]}</div>`
+  ).join('');
+
+  return `<div class="task-detail">${tabBar}${tabBodies}</div>`;
+}
+
+function renderTabOverview(task) {
   const overviewRows = [
     ['起始事件', task.startEventId, true],
     ['结束事件', task.endEventId, true],
     ['类型', task.taskType],
     ['状态', task.status],
-  ].filter(Boolean);
+  ];
   const overviewHtml = overviewRows.map(([k, v, mono]) =>
     `<div class="task-detail-row"><span class="task-detail-key">${esc(k)}</span>
      <span class="${mono ? 'task-detail-val' : ''}">${esc(String(v || '—'))}</span></div>`
   ).join('');
-
-  // 5.2: navigate buttons
   const startNav = makeNavBtn('定位开始事件', task.startEventId);
   const endNav = makeNavBtn('定位结束事件', task.endEventId);
+  const fwEntries = Object.entries(task.fileWeights || {}).sort((a, b) => b[1] - a[1]);
+  const maxW = fwEntries.length ? fwEntries[0][1] : 1;
+  const fwHtml = fwEntries.length === 0 ? '<span class="evidence-empty">无</span>' :
+    fwEntries.map(([f, w]) =>
+      `<div class="file-weight-row"><span class="file-weight-name" title="${esc(f)}">${esc(f)}</span>
+       <div class="file-weight-bar" style="width:${Math.max(4, Math.round(w/maxW*60))}px"></div>
+       <span class="file-weight-val">${w.toFixed(1)}</span></div>`
+    ).join('');
+  const brHtml = (task.boundaryReasons || []).length === 0 ? '<span class="evidence-empty">无（第一个任务或无边界信号）</span>' :
+    task.boundaryReasons.map(r => `<div class="boundary-reason-row split">${esc(r)}</div>`).join('');
 
-  // 2.1-2.2: finalClaim section — explicitly labeled as agent self-report
-  const finalClaimHtml = (() => {
-    if (!task.finalClaim) return `<div class="task-detail-section">
-      <div class="task-detail-label">Agent 最终声明</div>
-      <span class="evidence-empty">无</span></div>`;
-    const summary = task.finalClaim.length > 120
-      ? task.finalClaim.slice(0, 120) + '…' : task.finalClaim;
-    const needsExpand = task.finalClaim.length > 120;
-    return `<div class="task-detail-section">
+  let html = `<div class="task-detail-section"><div class="task-detail-label">概览</div>${overviewHtml}
+    <div style="display:flex;gap:6px;margin-top:6px">${startNav}${endNav}</div></div>`;
+  // Final claim
+  if (task.finalClaim) {
+    const summary = task.finalClaim.length > 120 ? task.finalClaim.slice(0, 120) + '…' : task.finalClaim;
+    html += `<div class="task-detail-section">
       <div class="task-detail-label">Agent 最终声明</div>
       <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px">这是 Agent 自述，不代表任务成功</div>
       <div class="evidence-chip" style="display:block;white-space:pre-wrap">${esc(summary)}</div>
-      ${needsExpand ? `<details style="margin-top:4px"><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer">▸ 展开全文</summary>
+      ${task.finalClaim.length > 120 ? `<details style="margin-top:4px"><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer">▸ 展开全文</summary>
         <div class="evidence-chip" style="display:block;white-space:pre-wrap;margin-top:4px">${esc(task.finalClaim)}</div></details>` : ''}
     </div>`;
-  })();
+  } else {
+    html += `<div class="task-detail-section"><div class="task-detail-label">Agent 最终声明</div><span class="evidence-empty">无</span></div>`;
+  }
+  html += `<div class="task-detail-section"><div class="task-detail-label">文件权重</div>${fwHtml}</div>`;
+  html += `<div class="task-detail-section"><div class="task-detail-label">边界原因</div>${brHtml}</div>`;
+  return html;
+}
 
-  // 4.2: evidence (errors get special summary+collapse treatment per task 2.3-2.4)
-  const normalEvSections = [
-    ['已修改文件', ev.filesChanged, 'chip'],
-    ['已读取文件', ev.filesRead, 'chip'],
-    ['命令', ev.commands, 'chip'],
-    ['测试命令', ev.testCommands, 'chip-test'],
-    ['用户目标 Todo', ev.todosUser, 'chip'],
-    ['Subagent', ev.subagentIds, 'chip'],
-  ].map(([label, items, style]) => {
-    if (!items || items.length === 0) return `<div class="task-detail-section">
-      <div class="task-detail-label">${esc(label)}</div>
-      <span class="evidence-empty">无</span></div>`;
-    const chips = items.map(s => {
-      const cls = style === 'chip-test' ? 'evidence-chip test-cmd' : 'evidence-chip';
-      return `<span class="${cls}">${esc(s)}</span>`;
-    }).join('');
-    return `<div class="task-detail-section">
-      <div class="task-detail-label">${esc(label)} (${items.length})</div>
-      <div class="evidence-chips">${chips}</div></div>`;
+function renderTabEvidence(task) {
+  const ev = task.evidence || {};
+  const sections = [
+    ['已修改文件', ev.filesChanged],
+    ['已读取文件', ev.filesRead],
+    ['用户目标 Todo', ev.todosUser],
+    ['Subagent', ev.subagentIds],
+  ].map(([label, items]) => {
+    if (!items || items.length === 0) return `<div class="task-detail-section"><div class="task-detail-label">${esc(label)}</div><span class="evidence-empty">无</span></div>`;
+    return `<div class="task-detail-section"><div class="task-detail-label">${esc(label)} (${items.length})</div>
+      <div class="evidence-chips">${items.map(s => `<span class="evidence-chip">${esc(s)}</span>`).join('')}</div></div>`;
   }).join('');
+  return sections || '<span class="evidence-empty">无 evidence 数据</span>';
+}
 
-  // 2.4: errors — summary list + collapsible full text
-  const errorsHtml = (() => {
-    const errors = ev.errors || [];
-    if (errors.length === 0) return `<div class="task-detail-section">
-      <div class="task-detail-label">错误 (0)</div>
-      <span class="evidence-empty">无</span></div>`;
-    const rows = errors.map((e, i) => {
+function renderTabTurns(task) {
+  let html = '<div class="task-detail-section"><div class="task-detail-label">Turn 范围</div>';
+  const startNav = makeNavBtn('定位开始事件', task.startEventId);
+  const endNav = makeNavBtn('定位结束事件', task.endEventId);
+  html += `<div class="task-detail-row"><span class="task-detail-key">开始事件</span><span class="task-detail-val">${esc(task.startEventId || '—')}</span>${startNav}</div>`;
+  html += `<div class="task-detail-row"><span class="task-detail-key">结束事件</span><span class="task-detail-val">${esc(task.endEventId || '—')}</span>${endNav}</div>`;
+
+  // Try to find all entries in this task's range
+  const startIdx = findEntryByEventId(task.startEventId);
+  const endIdx = findEntryByEventId(task.endEventId);
+  if (startIdx >= 0 && endIdx >= 0) {
+    const rangeEntries = allEntries.slice(startIdx, endIdx + 1);
+    const turnKeys = new Set();
+    for (const e of rangeEntries) if (e._turnKey) turnKeys.add(e._turnKey);
+    html += `<div class="task-detail-row" style="margin-top:6px"><span class="task-detail-key">关联 Turns</span><span>${turnKeys.size} turns, ${rangeEntries.length} entries</span>
+      <button class="nav-btn" onclick="navigateToEventId('${escRaw(task.startEventId)}')">定位首个 turn</button></div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderTabFiles(task) {
+  const ev = task.evidence || {};
+  const fw = task.fileWeights || {};
+  const filesChanged = ev.filesChanged || [];
+  const filesRead = ev.filesRead || [];
+  if (!filesChanged.length && !filesRead.length) {
+    return '<span class="evidence-empty">无文件变更数据</span>';
+  }
+  let html = '';
+  if (filesChanged.length) {
+    html += `<div class="task-detail-section"><div class="task-detail-label">已修改文件 (${filesChanged.length})</div>
+      <div class="evidence-chips">${filesChanged.map(f => `<span class="evidence-chip">${esc(f)}</span>`).join('')}</div></div>`;
+  }
+  if (filesRead.length) {
+    html += `<div class="task-detail-section"><div class="task-detail-label">已读取文件 (${filesRead.length})</div>
+      <div class="evidence-chips">${filesRead.map(f => `<span class="evidence-chip">${esc(f)}</span>`).join('')}</div></div>`;
+  }
+  const fwEntries = Object.entries(fw).sort((a, b) => b[1] - a[1]);
+  if (fwEntries.length) {
+    const maxW = fwEntries[0][1];
+    html += `<div class="task-detail-section"><div class="task-detail-label">文件权重</div>
+      ${fwEntries.map(([f, w]) => `<div class="file-weight-row"><span class="file-weight-name" title="${esc(f)}">${esc(f)}</span>
+        <div class="file-weight-bar" style="width:${Math.max(4, Math.round(w/maxW*60))}px"></div>
+        <span class="file-weight-val">${w.toFixed(1)}</span></div>`).join('')}</div>`;
+  }
+  return html;
+}
+
+function renderTabCommands(task) {
+  const ev = task.evidence || {};
+  const commands = ev.commands || [];
+  const testCommands = ev.testCommands || [];
+  const errors = ev.errors || [];
+
+  if (!commands.length && !testCommands.length && !errors.length) {
+    return '<span class="evidence-empty">无命令数据</span>';
+  }
+  let html = '';
+  if (commands.length) {
+    html += `<div class="task-detail-section"><div class="task-detail-label">命令 (${commands.length})</div>
+      <div class="evidence-chips">${commands.map(c => `<span class="evidence-chip">${esc(c)}</span>`).join('')}</div></div>`;
+  }
+  if (testCommands.length) {
+    html += `<div class="task-detail-section"><div class="task-detail-label">测试命令 (${testCommands.length})</div>
+      <div class="evidence-chips">${testCommands.map(c => `<span class="evidence-chip test-cmd">${esc(c)}</span>`).join('')}</div></div>`;
+  }
+  if (errors.length) {
+    html += `<div class="task-detail-section"><div class="task-detail-label">错误 (${errors.length})</div>`;
+    for (const e of errors) {
       const summ = errorSummary(e);
       const needsExpand = String(e).trim().length > summ.length + 3;
-      return `<div style="margin-bottom:5px">
-        <span class="evidence-chip err" style="display:block">${esc(summ)}</span>
+      html += `<div style="margin-bottom:5px"><span class="evidence-chip err" style="display:block">${esc(summ)}</span>
         ${needsExpand ? `<details><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;padding-left:4px">▸ 展开原文</summary>
           <pre style="font-size:10px;white-space:pre-wrap;overflow:auto;max-height:200px;margin:4px 0">${esc(String(e))}</pre></details>` : ''}
       </div>`;
-    }).join('');
-    return `<div class="task-detail-section">
-      <div class="task-detail-label">错误 (${errors.length})</div>
-      ${rows}</div>`;
-  })();
+    }
+    html += '</div>';
+  }
+  return html;
+}
 
-  const evSections = normalEvSections + errorsHtml;
-
-  // 4.4: file weights sorted desc
-  const fwEntries = Object.entries(fw).sort((a, b) => b[1] - a[1]);
-  const maxW = fwEntries.length ? fwEntries[0][1] : 1;
-  const fwHtml = fwEntries.length === 0 ? '<span class="evidence-empty">无</span>' :
-    fwEntries.map(([f, w]) => `
-      <div class="file-weight-row">
-        <span class="file-weight-name" title="${esc(f)}">${esc(f)}</span>
-        <div class="file-weight-bar" style="width:${Math.max(4, Math.round(w/maxW*60))}px"></div>
-        <span class="file-weight-val">${w.toFixed(1)}</span>
-      </div>`).join('');
-
-  // 4.3: boundary reasons
-  const brHtml = brs.length === 0 ? '<span class="evidence-empty">无（第一个任务或无边界信号）</span>' :
-    brs.map(r => `<div class="boundary-reason-row split">${esc(r)}</div>`).join('');
-
-  // 6.1: debug boundaries
-  const dbHtml = dbs.length === 0 ? '<span class="evidence-empty">无</span>' :
-    dbs.map(b => {
+function renderTabRaw(task, debugBoundaries) {
+  const dbs = debugBoundaries || [];
+  let html = '';
+  if (dbs.length) {
+    html += '<details style="margin-bottom:8px"><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;user-select:none">▸ 调试边界 (' + dbs.length + ')</summary><div style="margin-top:6px">';
+    for (const b of dbs) {
       const cls = b.shouldSplit ? 'split' : 'nosplit';
       const reasons = (b.reasons || []).map(r => `<div class="boundary-reason-row ${cls}">${esc(r)}</div>`).join('');
-      return `<div class="debug-boundary-row">
-        <div class="debug-boundary-hdr">
-          <span class="debug-ev-id">${esc(b.eventId)}</span>
-          <span class="debug-score ${cls}">score: ${(b.score||0).toFixed(2)}</span>
-          <span class="task-badge ${b.shouldSplit ? 'task-badge-final-claim' : 'task-badge-unevaluated'}">${b.shouldSplit ? '切分' : '不切'}</span>
-        </div>
-        ${reasons}
-      </div>`;
-    }).join('');
-
-  // 4.5: raw JSON collapsed
-  const rawJson = escRaw(JSON.stringify(task, null, 2));
-
-  return `<div class="task-detail">
-    <div class="task-detail-section">
-      <div class="task-detail-label">概览</div>
-      ${overviewHtml}
-      <div style="display:flex;gap:6px;margin-top:6px">${startNav}${endNav}</div>
-    </div>
-    ${finalClaimHtml}
-    ${evSections}
-    <div class="task-detail-section">
-      <div class="task-detail-label">文件权重</div>
-      ${fwHtml}
-    </div>
-    <div class="task-detail-section">
-      <div class="task-detail-label">边界原因</div>
-      ${brHtml}
-    </div>
-    <details style="margin-top:8px">
-      <summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer;user-select:none">▸ 调试边界 (${dbs.length})</summary>
+      html += `<div class="debug-boundary-row"><div class="debug-boundary-hdr">
+        <span class="debug-ev-id">${esc(b.eventId)}</span>
+        <span class="debug-score ${cls}">score: ${(b.score||0).toFixed(2)}</span>
+        <span class="task-badge ${b.shouldSplit ? 'task-badge-final-claim' : 'task-badge-unevaluated'}">${b.shouldSplit ? '切分' : '不切'}</span>
+      </div>${reasons}</div>`;
+    }
+    html += '</div></details>';
+  }
+  html += `<pre style="font-size:10px;overflow:auto;max-height:500px;background:var(--bg-surface);border-radius:4px;padding:8px">${escRaw(JSON.stringify(task, null, 2))}</pre>`;
+  return html;
+}
       <div style="margin-top:6px">${dbHtml}</div>
     </details>
     <details style="margin-top:6px">
@@ -2091,6 +2185,18 @@ function findEntryByEventId(eventId) {
     }
   }
   return -1;
+}
+
+function errorSummary(err, maxLen) {
+  const s = String(err || '').trim();
+  if (!s) return '';
+  const lines = s.split('\n').filter(Boolean);
+  let summary = lines[0] || s;
+  // Try to extract the actual error message from common patterns
+  const traceMatch = s.match(/(?:Error|Exception|FAILED)[^]*?(?:\n\s*(?:File |Traceback|$))/);
+  if (traceMatch) summary = traceMatch[0].trim();
+  if (maxLen > 0 && summary.length > maxLen) summary = summary.slice(0, maxLen) + '…';
+  return summary;
 }
 
 // 5.2: build nav button
@@ -2264,8 +2370,8 @@ function eventsToEntries(events) {
   for (const ev of events || []) {
     const role = ev.role;
     const kind = ev.kind;
-    // _eventId preserves the normalized event id for eventIdToEntryIdx mapping
     const _eventId = ev.id || ev.eventId || null;
+    let pushed = false;
 
     if (role === 'user' && kind === 'message') {
       entries.push({
@@ -2274,8 +2380,10 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         message: { content: [{ type: 'text', text: ev.content || '' }] },
       });
+      pushed = true;
     } else if (role === 'assistant' && kind === 'message') {
       const msg = { content: [{ type: 'text', text: ev.content || '' }] };
       if (ev.usage && (ev.usage.inputTokens || ev.usage.outputTokens)) {
@@ -2287,8 +2395,10 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         message: msg,
       });
+      pushed = true;
     } else if (role === 'assistant' && kind === 'tool_call') {
       entries.push({
         type: 'assistant',
@@ -2296,8 +2406,10 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         message: { content: [{ type: 'tool_use', name: ev.toolName, input: ev.content || {} }] },
       });
+      pushed = true;
     } else if (role === 'tool' && kind === 'tool_result') {
       entries.push({
         type: 'user',
@@ -2305,8 +2417,10 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         message: { content: [{ type: 'tool_result', tool_use_id: ev.toolCallId, content: ev.content || '' }] },
       });
+      pushed = true;
     } else if (kind === 'reasoning') {
       entries.push({
         type: 'assistant',
@@ -2314,8 +2428,10 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         message: { content: [{ type: 'text', text: ev.summary || ev.content || '(reasoning)' }] },
       });
+      pushed = true;
     } else if (kind === 'metadata' || kind === 'step' || kind === 'unknown') {
       let label = kind;
       if (ev.summary) label += ': ' + ev.summary;
@@ -2325,12 +2441,14 @@ function eventsToEntries(events) {
         uuid: ev.id,
         sessionId: ev.sessionId,
         _fileLine: 0,
+        _eventId,
         subtype: label,
         message: { content: [{ type: 'text', text: formatEventContent(ev.content) }] },
       });
+      pushed = true;
     }
-    // Tag the last pushed entry with _eventId for eventIdToEntryIdx
-    if (_eventId && entries.length > 0) {
+    // Fallback: if not pushed and _eventId exists, still try to tag last entry
+    if (!pushed && _eventId && entries.length > 0) {
       entries[entries.length - 1]._eventId = _eventId;
     }
   }
@@ -2630,6 +2748,7 @@ async function runAnalysisForCurrentSession(mode, customPrompt, {preserveKey=nul
   try {
     const cached = await requestSessionAnalysis(sessionId, mode, customPrompt);
     analysisReports[cacheKey] = cached;
+    analysisReports[sessionId] = cached; // also store under sessionId for cache-free lookup
     renderAnalysisReport(cached);
   } catch (e) {
     if (preserveKey && previous) {
