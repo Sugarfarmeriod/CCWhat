@@ -165,8 +165,11 @@ class TestTaskSegmentationNavigation(unittest.TestCase):
         self.assertIn("parts[0] === 'main'", _HTML)
 
     def test_agent_event_id_parsing(self):
-        # agent-<id>:<line> pattern handled
-        self.assertIn("agentId", _HTML.split("function findEntryByEventId")[1].split("function makeNavBtn")[0])
+        # agent-<id>:<line> pattern handled in fallback (map is primary)
+        fn_start = _HTML.index("function findEntryByEventId")
+        fn_end = _HTML.index("function makeNavBtn", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("agent-", snippet)   # agent prefix stripping present
 
     def test_disabled_nav_btn_on_not_found(self):
         # When idx < 0, button is disabled
