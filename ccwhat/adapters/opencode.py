@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -112,6 +113,7 @@ class OpenCodeAdapter(AgentAdapter):
     def __init__(self, projects_dir: Path | None = None) -> None:
         self._projects_dir = projects_dir
         self._conn: sqlite3.Connection | None = None
+        self._conn_lock = threading.RLock()
 
     @property
     def name(self) -> str:
@@ -149,7 +151,7 @@ class OpenCodeAdapter(AgentAdapter):
         if db_path is None:
             return None
         try:
-            conn = sqlite3.connect(str(db_path))
+            conn = sqlite3.connect(str(db_path), check_same_thread=False)
             conn.row_factory = sqlite3.Row
             self._conn = conn
             return conn
@@ -161,8 +163,9 @@ class OpenCodeAdapter(AgentAdapter):
         if conn is None:
             return []
         try:
-            cur = conn.execute(sql, params)
-            rows = cur.fetchall()
+            with self._conn_lock:
+                cur = conn.execute(sql, params)
+                rows = cur.fetchall()
             return [dict(row) for row in rows]
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             return []
