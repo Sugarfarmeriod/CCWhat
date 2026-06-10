@@ -12,9 +12,7 @@ from unittest import mock
 
 from ccwhat.analyzer import (
     AnalysisError,
-    build_analysis_prompt,
     run_mc_analysis,
-    serialize_session_for_analysis,
 )
 from ccwhat.session_report import normalize_session_for_report
 from ccwhat.session_report.pipeline import build_generic_html_report, build_html_session_report
@@ -47,44 +45,6 @@ def _make_projects(base: Path) -> Path:
 
 
 class AnalysisCoreTests(unittest.TestCase):
-    def test_build_prompt_replaces_placeholder_and_marks_truncation(self) -> None:
-        session = {
-            "sessionId": SID,
-            "projectDir": "project-c",
-            "main": [{"type": "user", "message": {"content": "x" * 50}}],
-            "subagents": [],
-        }
-
-        prompt, truncated = build_analysis_prompt(session, template="before {{content}} after", max_chars=180)
-
-        self.assertTrue(truncated)
-        self.assertIn("before", prompt)
-        self.assertIn("project-c", prompt)
-        self.assertIn("[TRUNCATED]", prompt)
-        self.assertNotIn("{{content}}", prompt)
-
-    def test_serialize_session_uses_unified_report_model(self) -> None:
-        content, truncated = serialize_session_for_analysis({
-            "sessionId": SID,
-            "projectDir": "project-c",
-            "agent": "claude",
-            "main": [{"type": "user", "message": {"content": "hello"}}],
-            "subagents": [{
-                "agentId": "one",
-                "meta": {"agentType": "general-purpose", "description": "helper"},
-                "entries": [{"type": "assistant", "message": {"content": "done"}}],
-            }],
-        })
-
-        self.assertFalse(truncated)
-        self.assertIn('"sessionId": "cccccccc-cccc-cccc-cccc-cccccccccccc"', content)
-        self.assertIn('"primaryAgentType": "claude"', content)
-        self.assertIn('"agents"', content)
-        self.assertIn('"agentType": "general-purpose"', content)
-        self.assertIn('"events"', content)
-        self.assertNotIn('"main":', content)
-        self.assertNotIn('"subagents":', content)
-
     def test_run_mc_analysis_maps_failures(self) -> None:
         with self.assertRaisesRegex(AnalysisError, "not found"):
             run_mc_analysis("prompt", runner=mock.Mock(side_effect=FileNotFoundError()))
@@ -344,59 +304,7 @@ class AnalyzeApiTests(unittest.TestCase):
         conn.close()
         return response.status, json.loads(body.decode("utf-8"))
 
-    def test_analyze_api_posts_current_session_only(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_name:
-            tmp = Path(tmp_name)
-            projects_dir = _make_projects(tmp)
-            server = HTTPServer(("127.0.0.1", 0), _make_handler(projects_dir, tmp / "raw"))
-            thread = threading.Thread(target=server.serve_forever)
-            thread.start()
-            try:
-                completed = subprocess.CompletedProcess(["claude", "-p", "-"], 0, stdout="Agent 交互分析报告", stderr="")
-                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
-                    status, payload = self._post_analyze(server, {"sessionId": SID, "turnKeys": ["main:0"]})
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
-                server.server_close()
-
-        self.assertEqual(status, 200, payload)
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["report"], "Agent 交互分析报告")
-        call = run.call_args
-        self.assertEqual(call.args[0][1:], ["-p", "-"])
-        self.assertTrue(call.args[0][0].endswith("claude"))
-        self.assertIn("hello", call.kwargs["input"])
-        self.assertIn("helper", call.kwargs["input"])
-
-    def test_analyze_api_uses_managed_viewer_analyzer_command(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_name:
-            tmp = Path(tmp_name)
-            projects_dir = _make_projects(tmp)
-            server = HTTPServer(
-                ("127.0.0.1", 0),
-                _make_handler(projects_dir, tmp / "raw", analyzer_cmd=("mc", "--code")),
-            )
-            thread = threading.Thread(target=server.serve_forever)
-            thread.start()
-            try:
-                completed = subprocess.CompletedProcess(["mc", "--code"], 0, stdout="report", stderr="")
-                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
-                    status, payload = self._post_analyze(server, {"sessionId": SID})
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
-                server.server_close()
-
-        self.assertEqual(status, 200, payload)
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["report"], "report")
-        call = run.call_args
-        self.assertEqual(call.args[0][-1], "--code")
-        self.assertTrue(call.args[0][0].endswith("mc"))
-        self.assertIn("hello", call.kwargs["input"])
-
-    def test_analyze_api_handles_missing_session_and_mc_error(self) -> None:
+    def test_analyze_api_handles_missing_session_and_missing_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_name:
             tmp = Path(tmp_name)
             projects_dir = _make_projects(tmp)
@@ -408,8 +316,7 @@ class AnalyzeApiTests(unittest.TestCase):
                     server,
                     {"sessionId": "dddddddd-dddd-dddd-dddd-dddddddddddd"},
                 )
-                with mock.patch("ccwhat.analyzer.subprocess.run", side_effect=FileNotFoundError()):
-                    error_status, error_payload = self._post_analyze(server, {"sessionId": SID})
+                no_mode_status, no_mode_payload = self._post_analyze(server, {"sessionId": SID})
             finally:
                 server.shutdown()
                 thread.join(timeout=5)
@@ -417,104 +324,8 @@ class AnalyzeApiTests(unittest.TestCase):
 
         self.assertEqual(missing_status, 404, missing_payload)
         self.assertFalse(missing_payload["ok"])
-        self.assertEqual(error_status, 500, error_payload)
-        self.assertEqual(error_payload["code"], "analyzer_not_found")
-
-    def test_legacy_analyze_api_uses_agent_aware_default_command(self) -> None:
-        class StubCodexAdapter:
-            name = "codex"
-
-            def list_projects(self):
-                return []
-
-            def load_session(self, session_id: str):
-                if session_id != SID:
-                    return None
-                return {
-                    "sessionId": SID,
-                    "projectDir": "/tmp/codex-project",
-                    "agent": "codex",
-                    "events": [{
-                        "id": "ev1",
-                        "agent": "codex",
-                        "sessionId": SID,
-                        "timestamp": "2026-05-29T03:00:00Z",
-                        "role": "user",
-                        "kind": "message",
-                        "content": "hello codex",
-                        "summary": "hello codex",
-                    }],
-                    "turns": [{
-                        "id": "turn1",
-                        "agent": "codex",
-                        "startedAt": "2026-05-29T03:00:00Z",
-                        "endedAt": "2026-05-29T03:00:01Z",
-                        "userSummary": "hello codex",
-                        "assistantSummary": "",
-                        "events": [{"id": "ev1"}],
-                        "usage": {},
-                    }],
-                }
-
-        with tempfile.TemporaryDirectory() as tmp_name:
-            tmp = Path(tmp_name)
-            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubCodexAdapter()))
-            thread = threading.Thread(target=server.serve_forever)
-            thread.start()
-            try:
-                codex_stdout = '{"type":"assistant","content":"report"}'
-                completed = subprocess.CompletedProcess(["codex", "exec", "--json", "--ephemeral", "--ignore-user-config", "-"], 0, stdout=codex_stdout, stderr="")
-                with mock.patch("ccwhat.analyzer.subprocess.run", return_value=completed) as run:
-                    status, payload = self._post_analyze(server, {"sessionId": SID})
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
-                server.server_close()
-
-        self.assertEqual(status, 200, payload)
-        self.assertTrue(payload["ok"])
-        self.assertEqual(payload["report"], "report")
-        self.assertEqual(run.call_args.args[0][1:], ["exec", "--json", "--ephemeral", "--ignore-user-config", "-"])
-        self.assertTrue(run.call_args.args[0][0].endswith("codex"))
-        self.assertIn("primaryAgentType", run.call_args.kwargs["input"])
-        self.assertIn("hello codex", run.call_args.kwargs["input"])
-
-    def test_legacy_analyze_api_fast_fails_for_unsupported_agent_protocol(self) -> None:
-        class StubOpenCodeAdapter:
-            name = "opencode"
-
-            def list_projects(self):
-                return []
-
-            def load_session(self, session_id: str):
-                if session_id != SID:
-                    return None
-                return {
-                    "sessionId": SID,
-                    "projectDir": "/tmp/opencode-project",
-                    "agent": "opencode",
-                    "events": [],
-                    "turns": [],
-                }
-
-        with tempfile.TemporaryDirectory() as tmp_name:
-            tmp = Path(tmp_name)
-            server = HTTPServer(("127.0.0.1", 0), _make_handler(tmp / "projects", tmp / "raw", adapter=StubOpenCodeAdapter()))
-            thread = threading.Thread(target=server.serve_forever)
-            thread.start()
-            try:
-                with mock.patch("ccwhat.analyzer.subprocess.run") as run:
-                    status, payload = self._post_analyze(server, {"sessionId": SID})
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
-                server.server_close()
-
-        self.assertEqual(status, 500, payload)
-        self.assertFalse(payload["ok"])
-        # OpenCode analyzer IS now supported via registry
-        self.assertEqual(payload["code"], "analyzer_failed")
-        run.assert_called_once()
+        self.assertEqual(no_mode_status, 400, no_mode_payload)
+        self.assertEqual(no_mode_payload["code"], "invalid_mode")
 
     def test_session_api_derives_events_without_claude_adapter_fallback(self) -> None:
         class StubCodexAdapter:

@@ -1,0 +1,128 @@
+{
+  "new_task_markers": {
+    "zh_phrases": [
+      "帮我", "帮忙", "新增", "新建", "添加", "实现", "开发", "写一个", "写个",
+      "修复", "修改", "改一下", "改成", "重构", "重新", "优化", "升级",
+      "另外", "还有", "此外", "接下来", "下一步", "再帮我", "换一个",
+      "新任务", "新需求", "新功能"
+    ],
+    "en_words": [
+      "implement", "add", "create", "build", "write", "make", "develop",
+      "fix", "repair", "refactor", "optimize", "upgrade", "migrate",
+      "review", "audit", "check",
+      "now", "next", "also", "additionally", "furthermore", "another"
+    ],
+    "score": 2.0
+  },
+  "boundary_markers": {
+    "zh_phrases": [
+      "另外", "还有一件事", "换个话题", "新的需求", "第二个", "第三个",
+      "重新开始", "另起一个", "不相关的"
+    ],
+    "en_words": [
+      "separately", "unrelated", "different", "new task", "new feature",
+      "by the way", "switching to"
+    ],
+    "score": 2.0
+  },
+  "continuation_markers": {
+    "zh_phrases": [
+      "继续", "刚才", "刚刚", "刚才说的", "上面", "上次",
+      "还是不行", "还是报错", "还是失败", "没通过", "没成功", "不对",
+      "报错了", "出错了", "又报错", "重新改", "再改",
+      "根据你的", "根据review", "按照你说的", "按你的意思",
+      "没有修复", "还有问题", "这个问题", "那个问题"
+    ],
+    "en_words": [
+      "still failing", "still broken", "same error", "not working", "failed again",
+      "according to", "based on your", "following your", "as you said",
+      "continuing", "keep going", "resume"
+    ],
+    "score": 2.0
+  },
+  "weak_question_markers": {
+    "zh_phrases": [
+      "为什么", "什么意思", "这样可以吗", "是什么", "怎么", "解释一下",
+      "能告诉我", "帮我看看", "帮我解释", "这是什么", "有什么区别"
+    ],
+    "en_words": [
+      "why", "what is", "what does", "explain", "can you explain",
+      "what's the difference", "how does", "is this correct"
+    ],
+    "score": -0.5
+  },
+  "task_types": {
+    "bugfix": {
+      "zh_phrases": ["修复", "修bug", "修一下", "报错", "出错", "崩溃", "失败", "异常", "fix"],
+      "en_words": ["fix", "bug", "error", "crash", "broken", "failing", "exception"]
+    },
+    "feature": {
+      "zh_phrases": ["新增", "添加", "实现", "开发", "新功能", "新特性"],
+      "en_words": ["add", "implement", "create", "feature", "new", "build"]
+    },
+    "refactor": {
+      "zh_phrases": ["重构", "重写", "优化", "改造", "清理", "整理"],
+      "en_words": ["refactor", "rewrite", "optimize", "clean", "restructure"]
+    },
+    "test": {
+      "zh_phrases": ["测试", "单测", "写测试", "加测试", "补测试"],
+      "en_words": ["test", "tests", "unittest", "pytest", "spec"]
+    },
+    "doc": {
+      "zh_phrases": ["文档", "注释", "readme", "说明"],
+      "en_words": ["doc", "docs", "documentation", "readme", "comment"]
+    },
+    "review": {
+      "zh_phrases": ["review", "代码审查", "看一下代码", "检查"],
+      "en_words": ["review", "check", "audit", "inspect"]
+    },
+    "explanation": {
+      "zh_phrases": ["解释", "说明", "介绍", "为什么", "怎么理解"],
+      "en_words": ["explain", "description", "why", "how", "understand"]
+    },
+    "planning": {
+      "zh_phrases": ["规划", "计划", "方案", "设计", "思路", "怎么做"],
+      "en_words": ["plan", "design", "strategy", "approach", "outline"]
+    }
+  },
+  "final_claim_markers": {
+    "zh_phrases": [
+      "已完成", "完成了", "修复了", "实现了", "好了", "可以了",
+      "总结", "现在可以", "已经实现", "已经修复", "测试通过"
+    ],
+    "en_words": [
+      "done", "completed", "fixed", "implemented", "finished",
+      "summary", "now you can", "all tests pass", "ready"
+    ]
+  },
+  "user_todo_markers": {
+    "patterns": ["- [ ]", "- [x]", "* [ ]", "1.", "2.", "3."],
+    "zh_phrases": ["需要", "要做", "待办", "TODO"],
+    "en_words": ["todo", "need to", "should", "must", "will"]
+  },
+  "thresholds": {
+    "split_score": 3.0,
+    "file_overlap_low": 0.25,
+    "module_overlap_low": 0.5,
+    "min_edit_weight_for_topic_change": 3.0
+  },
+  "file_weights": {
+    "edit_ops": ["Edit", "Write", "Patch", "MultiEdit", "str_replace_editor"],
+    "edit_weight": 3.0,
+    "read_ops": ["Read", "Grep", "Glob", "Find"],
+    "read_weight": 1.0,
+    "test_weight": 2.0,
+    "downgrade_patterns": {
+      "readme": 0.3,
+      "lock": 0.3,
+      "pyproject": 0.5,
+      "package.json": 0.5,
+      "setup.cfg": 0.5,
+      "docs/": 0.3,
+      "doc/": 0.3,
+      ".gitignore": 0.2,
+      "changelog": 0.2,
+      "license": 0.1
+    }
+  }
+}
