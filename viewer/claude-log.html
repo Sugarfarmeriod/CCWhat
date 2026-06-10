@@ -1874,9 +1874,10 @@ function renderTaskSegments(data, sessionId) {
     <div style="margin-top:4px"><button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button></div>
   </div>`;
   leftHtml += '<div class="task-seg-cards" id="taskSegCards">';
-  for (const t of tasks) {
+  for (const [taskIdx, t] of tasks.entries()) {
     const ev = t.evidence || {};
     const isSelected = t.taskId === selId;
+    const taskTitle = `任务 ${taskIdx + 1}`;
     const typeCls = `task-badge-type-${t.taskType || 'unknown'}`;
     const badges = [
       `<span class="task-badge ${typeCls}">${esc(t.taskType || 'unknown')}</span>`,
@@ -1893,7 +1894,7 @@ function renderTaskSegments(data, sessionId) {
     leftHtml += `<div class="task-card${isSelected ? ' selected' : ''}" data-task-id="${esc(t.taskId)}" data-session-id="${esc(sessionId)}">
       <div class="task-card-hdr">
         <span class="task-card-id">${esc(t.taskId)}</span>
-        <span class="task-card-title">${esc(t.title || '(无标题)')}</span>
+        <span class="task-card-title">${esc(taskTitle)}</span>
         <div class="task-card-badges">${badges}</div>
       </div>
       <div class="task-card-counts">${counts || '<span class="task-count-chip" style="opacity:.4">无 evidence</span>'}</div>

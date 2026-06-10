@@ -326,10 +326,11 @@ def _make_handler(
                 started = time.monotonic()
                 result = segment_session(session)
                 elapsed_ms = int((time.monotonic() - started) * 1000)
-                tasks_json = [
-                    {
+                tasks_json = []
+                for idx, t in enumerate(result.tasks, 1):
+                    tasks_json.append({
                         "taskId": t.task_id,
-                        "title": t.title,
+                        "title": f"任务 {idx}",
                         "taskType": t.task_type,
                         "status": t.status,
                         "startEventId": t.start_event_id,
@@ -349,9 +350,7 @@ def _make_handler(
                             "todosUser": t.evidence.todos_user,
                         },
                         "fileWeights": t.file_weights,
-                    }
-                    for t in result.tasks
-                ]
+                    })
                 self._send_json({
                     "ok": True,
                     "sessionId": result.session_id,

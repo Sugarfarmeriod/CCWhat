@@ -94,8 +94,9 @@ class TestTaskSegmentsSuccess(unittest.TestCase):
         _start(self.server)
         _, data = _post(self.port, "/api/task-segments",
                         {"sessionId": "aabb1122aabb1122aabb1122"})
-        for task in data["tasks"]:
+        for idx, task in enumerate(data["tasks"], 1):
             self.assertIn("taskId", task)
+            self.assertEqual(task["title"], f"任务 {idx}")
             self.assertIn("status", task)
             self.assertEqual(task["status"], "unevaluated")
             self.assertIn("evidence", task)
