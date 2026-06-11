@@ -271,6 +271,7 @@ body {
     background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
     border-left: 3px solid var(--accent); padding-left: 9px;
   }
+  .turn-card.filter-empty { opacity: .72; }
   .turn-card-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   .turn-card-label { font-size: 11px; font-weight: 700; color: var(--accent); white-space: nowrap; }
   .turn-card-summary { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -280,6 +281,7 @@ body {
     background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);
   }
   .turn-meta-badge.error { background: rgba(248,81,73,0.1); color: var(--danger); border-color: rgba(248,81,73,0.25); }
+  .turn-meta-badge.muted { color: var(--text-tertiary); }
   .turn-task-badge {
     font-size: 10px; padding: 1px 5px; border-radius: 3px; cursor: pointer;
     background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.3);
@@ -294,6 +296,11 @@ body {
   }
   .turn-detail-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
   .turn-detail-group { font-size: 11px; color: var(--text-tertiary); }
+  .turn-detail-hint {
+    font-size: 10px; color: var(--text-tertiary); background: rgba(210,153,34,0.08);
+    border: 1px solid rgba(210,153,34,0.15); border-radius: var(--radius-sm);
+    padding: 4px 8px; margin-bottom: 12px;
+  }
   .turn-detail-section { margin-bottom: 14px; }
   .turn-detail-label {
     font-size: 10px; font-weight: 600; color: var(--text-tertiary); letter-spacing: .06em;
@@ -303,6 +310,10 @@ body {
     font-size: 12px; color: var(--text-primary); white-space: pre-wrap; word-break: break-word;
     background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 8px 10px; max-height: 180px; overflow-y: auto;
+  }
+  .turn-detail-empty {
+    font-size: 12px; color: var(--text-secondary); background: var(--bg-surface);
+    border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 8px 10px;
   }
   .turn-tool-row {
     font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -1277,11 +1288,13 @@ function rebuildTurnTaskAssociation(taskData) {
   for (const task of taskData.tasks) {
     const startNav = task.startEventId ? (
       turnNavigationIndex.byFileAnchor.get(task.startEventId) ||
-      turnNavigationIndex.byEventId.get(task.startEventId)
+      turnNavigationIndex.byEventId.get(task.startEventId) ||
+      turnNavigationIndex.byUuid.get(task.startEventId)
     ) : null;
     const endNav = task.endEventId ? (
       turnNavigationIndex.byFileAnchor.get(task.endEventId) ||
-      turnNavigationIndex.byEventId.get(task.endEventId)
+      turnNavigationIndex.byEventId.get(task.endEventId) ||
+      turnNavigationIndex.byUuid.get(task.endEventId)
     ) : null;
     if (!startNav && !endNav) continue;
     // Mark turns in range as associated with this task
@@ -1486,8 +1499,11 @@ function renderTurnList() {
     list.appendChild(gHdr);
 
     for (const turn of visibleTurns) {
+      const stats = getTurnFilterStats(turn);
       const card = document.createElement('div');
-      card.className = 'turn-card' + (turn.turnKey === selectedTurnKey ? ' selected' : '');
+      card.className = 'turn-card'
+        + (turn.turnKey === selectedTurnKey ? ' selected' : '')
+        + (stats.visibleEntries.length === 0 ? ' filter-empty' : '');
       card.dataset.turnKey = turn.turnKey;
       card.dataset.groupId = groupId;
 
@@ -1500,14 +1516,15 @@ function renderTurnList() {
 
       // Meta badges
       const metaHtml = [
-        turn.entryCount ? `<span class="turn-meta-badge">${turn.entryCount} entries</span>` : '',
-        turn.toolCount ? `<span class="turn-meta-badge">${turn.toolCount} tools</span>` : '',
-        turn.errorCount ? `<span class="turn-meta-badge error">${turn.errorCount} errors</span>` : '',
+        `<span class="turn-meta-badge">${stats.visibleEntries.length} visible</span>`,
+        stats.visibleToolCount ? `<span class="turn-meta-badge">${stats.visibleToolCount} tools</span>` : '',
+        stats.visibleErrorCount ? `<span class="turn-meta-badge error">${stats.visibleErrorCount} errors</span>` : '',
+        stats.hiddenCount ? `<span class="turn-meta-badge muted">${stats.hiddenCount} hidden</span>` : '',
       ].filter(Boolean).join('');
 
       card.innerHTML =
         `<div class="turn-card-hdr"><span class="turn-card-label">${esc(turn.label)}</span>${taskBadgeHtml}</div>` +
-        `<div class="turn-card-summary">${esc(turn.userSummary || '—')}</div>` +
+        `<div class="turn-card-summary">${esc(stats.visibleSummary || '—')}</div>` +
         (metaHtml ? `<div class="turn-meta">${metaHtml}</div>` : '');
 
       card.addEventListener('click', () => selectTurn(groupId, turn.turnKey));
@@ -1531,7 +1548,9 @@ function renderTurnDetailInPanel(groupId, turn) {
 }
 
 function buildTurnDetailHtml(groupId, turn) {
-  const allTurnEntries = turn.root ? [turn.root, ...turn.children] : turn.children;
+  const allTurnEntries = getTurnEntries(turn);
+  const visibleTurnEntries = getVisibleTurnEntries(turn);
+  const hiddenCount = allTurnEntries.length - visibleTurnEntries.length;
   let html = `<div class="turn-detail">`;
   html += `<div class="turn-detail-hdr">
     <span class="turn-detail-title">${esc(turn.label)}</span>
@@ -1540,15 +1559,23 @@ function buildTurnDetailHtml(groupId, turn) {
     html += `<span class="turn-meta-badge">lines ${turn.startFileLine}–${turn.endFileLine || turn.startFileLine}</span>`;
   html += `</div>`;
 
+  // Hint when type filters hide some entries in this turn
+  if (hiddenCount > 0) {
+    html += `<div class="turn-detail-hint">当前 event 类型筛选隐藏了 ${hiddenCount} 条事件（共 ${allTurnEntries.length} 条）</div>`;
+  }
+  if (visibleTurnEntries.length === 0) {
+    html += `<div class="turn-detail-section"><div class="turn-detail-empty">当前筛选隐藏了该 Turn 的全部事件。调整上方类型筛选可查看内容。</div></div>`;
+  }
+
   // User text
-  const userText = turn.root ? extractFullText(turn.root) : '';
+  const userText = (turn.root && entryMatchesFilter(turn.root)) ? extractFullText(turn.root) : '';
   if (userText) {
     html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div>
       <div class="turn-detail-text">${esc(userText)}</div></div>`;
   }
 
   // Assistant text (all assistant entries)
-  const asstTexts = turn.children
+  const asstTexts = visibleTurnEntries
     .filter(e => e.type === 'assistant')
     .map(extractFullText).filter(Boolean);
   if (asstTexts.length) {
@@ -1557,7 +1584,7 @@ function buildTurnDetailHtml(groupId, turn) {
   }
 
   // Tool calls
-  const toolEntries = allTurnEntries.filter(e => {
+  const toolEntries = visibleTurnEntries.filter(e => {
     const c = e.message?.content;
     return Array.isArray(c) && c.some(b => b.type === 'tool_use');
   });
@@ -1574,13 +1601,14 @@ function buildTurnDetailHtml(groupId, turn) {
         </div>`;
       }
     }
-    html += `<div class="turn-detail-section"><div class="turn-detail-label">工具调用 (${turn.toolCount})</div>${toolsHtml}</div>`;
+    html += `<div class="turn-detail-section"><div class="turn-detail-label">工具调用 (${countToolUses(toolEntries)})</div>${toolsHtml}</div>`;
   }
 
   // Errors
-  if (turn.errorCount) {
+  const visibleErrorCount = countErrorEntries(visibleTurnEntries);
+  if (visibleErrorCount) {
     let errHtml = '';
-    for (const e of allTurnEntries) {
+    for (const e of visibleTurnEntries) {
       const c = Array.isArray(e.message?.content) ? e.message.content : [];
       for (const b of c) {
         if (b.type === 'tool_result' && b.is_error) {
@@ -2087,18 +2115,18 @@ function trunc(s, n) { s = String(s??''); return s.length>n ? s.slice(0,n)+'…'
 document.getElementById('typeFilters').addEventListener('click', e => {
   const label = e.target.closest('label');
   if (!label) return;
-  // Toggle checkbox (click on label already toggles it, but we need to update style)
-  // Use setTimeout 0 so checkbox state is updated before we read it
-  setTimeout(() => {
-    const cb = label.querySelector('input');
-    const type = label.dataset.type;
-    if (cb.checked) {
-      label.classList.add(`checked-${type}`);
-    } else {
-      label.classList.remove(`checked-${type}`);
-    }
-    renderList();
-  }, 0);
+    // Toggle checkbox (click on label already toggles it, but we need to update style)
+    // Use setTimeout 0 so checkbox state is updated before we read it
+    setTimeout(() => {
+      const cb = label.querySelector('input');
+      const type = label.dataset.type;
+      if (cb.checked) {
+        label.classList.add(`checked-${type}`);
+      } else {
+        label.classList.remove(`checked-${type}`);
+      }
+      renderPage(workbenchState.activeView);
+    }, 0);
 });
 
 function getActiveTypes() {
@@ -2923,8 +2951,6 @@ async function loadSession() {
     selectedTurnKey = null;
     rebuildCanonicalNavIndex();
     rebuildAllGroupTurns();
-    renderList();
-    document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">← 点击 Turn 或列表项查看详情</div>';
 
     // Enable export button
     const exportBtn = document.getElementById('exportBtn');
@@ -3235,6 +3261,112 @@ function isEntryHiddenByFilter(idx) {
   return e ? !entryMatchesFilter(e) : true;
 }
 
+function getTurnEntries(turn) {
+  return turn ? (turn.root ? [turn.root, ...turn.children] : turn.children) : [];
+}
+
+function getVisibleTurnEntries(turn) {
+  return getTurnEntries(turn).filter(entryMatchesFilter);
+}
+
+function countToolUses(entries) {
+  return entries.reduce((n, e) => {
+    const c = e.message?.content;
+    return n + (Array.isArray(c) ? c.filter(b => b.type === 'tool_use').length : 0);
+  }, 0);
+}
+
+function countErrorEntries(entries) {
+  return entries.filter(e => {
+    const c = Array.isArray(e.message?.content) ? e.message.content : [];
+    return c.some(b => (b.type === 'tool_result' && b.is_error) ||
+                       (b.type === 'text' && /error|traceback|exception/i.test(b.text || '')));
+  }).length;
+}
+
+function summarizeVisibleTurn(turn) {
+  const visibleEntries = getVisibleTurnEntries(turn);
+  if (!visibleEntries.length) return '当前筛选隐藏了该 Turn 的全部事件';
+  const userEntry = visibleEntries.find(e => e.type === 'user' && extractFullText(e));
+  if (userEntry) return summarize(userEntry);
+  const assistantEntry = visibleEntries.find(e => e.type === 'assistant' && summarize(e));
+  if (assistantEntry) return summarize(assistantEntry);
+  return summarize(visibleEntries[0]) || '—';
+}
+
+function getTurnFilterStats(turn) {
+  const allEntriesInTurn = getTurnEntries(turn);
+  const visibleEntries = allEntriesInTurn.filter(entryMatchesFilter);
+  return {
+    allEntries: allEntriesInTurn,
+    visibleEntries,
+    hiddenCount: allEntriesInTurn.length - visibleEntries.length,
+    visibleToolCount: countToolUses(visibleEntries),
+    visibleErrorCount: countErrorEntries(visibleEntries),
+    visibleSummary: summarizeVisibleTurn(turn),
+  };
+}
+
+// ── Strict Turn root detection ──────────────────────────────────────────
+// Excludes system-injected text, local-commands, tool_result echoes, and
+// near-duplicate user messages without assistant response in between.
+function extractUserText(e) {
+  if (!e || !e.message) return '';
+  const c = e.message.content;
+  if (typeof c === 'string') return c.trim();
+  if (Array.isArray(c))
+    return c.filter(b => b.type === 'text'
+      && !(b.text || '').trimStart().startsWith('<system-reminder')
+      && !(b.text || '').trimStart().startsWith('<local-command'))
+      .map(b => (b.text || '').trim()).join(' ').trim();
+  return '';
+}
+
+function normalizeUserText(t) {
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+function isUserTurnRoot(e, previousTurn) {
+  if (e.type !== 'user') return false;
+  const content = e.message?.content;
+  if (!content) return false;
+
+  let realText = '';
+
+  if (typeof content === 'string') {
+    realText = content.trim();
+  } else if (Array.isArray(content)) {
+    const textBlocks = content.filter(b => {
+      if (b.type !== 'text' && b.type !== 'image') return false;
+      if (b.type === 'text') {
+        const t = (b.text || '').trim();
+        if (!t) return false;
+        if (t.startsWith('<system-reminder') || t.startsWith('<local-command'))
+          return false;
+      }
+      return true;
+    });
+    if (!textBlocks.length) return false;
+
+    const hasToolResult = content.some(b => b.type === 'tool_result');
+    const realTextBlocks = textBlocks.filter(b => b.type === 'text');
+    realText = realTextBlocks.map(b => (b.text || '').trim()).join(' ').trim();
+    if (!realText && hasToolResult) return false;
+  }
+
+  if (!realText) return false;
+
+  if (previousTurn && previousTurn.root) {
+    const prevText = extractUserText(previousTurn.root);
+    if (prevText && normalizeUserText(prevText) === normalizeUserText(realText)) {
+      const hasAsstBetween = previousTurn.children.some(c => c.type === 'assistant');
+      if (!hasAsstBetween) return false;
+    }
+  }
+
+  return true;
+}
+
 // Split group entries into turns: each turn starts at a real user-text entry.
 // Tags each entry with _turnKey for auto-expand on selectEntry.
 // Returns rich Turn objects with label, summary, toolCount, errorCount, taskIds.
@@ -3244,13 +3376,14 @@ function buildTurns(entries, gid) {
   let turnIdx = 0;
   let userTurnCount = 0; // 1-based label counter (not counting preamble)
 
-  for (const e of entries) {
-    const isRealUser = e.type === 'user' && (
-      (typeof e.message?.content === 'string' && e.message.content.trim().length > 0) ||
-      (Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'text' || b.type === 'image'))
-    );
+  function getPrevNonPreambleTurn() {
+    for (let i = turns.length - 1; i >= 0; i--)
+      if (!turns[i]._isPreamble) return turns[i];
+    return null;
+  }
 
-    if (isRealUser) {
+  for (const e of entries) {
+    if (isUserTurnRoot(e, getPrevNonPreambleTurn())) {
       current = { root: e, children: [], _turnIdx: turnIdx++, _isPreamble: false };
       const tk = `${gid}:${current._turnIdx}`;
       current.turnKey = tk;
