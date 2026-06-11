@@ -2,11 +2,11 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v0.1.3` · [更新日志](CHANGELOG.md)
+当前版本：`v1.0.0` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-`v0.1.3` 完成了 Codex 的完整适配。**现在 codelenagent 已全面支持三大主流 AI Coding Agent：Claude Code（VS Code）、Codex 和 OpenCode。** 日志查看、分析报告、时间轴、工具耗时统计、Agent 摘要等核心功能对三者均可用。
+`v1.0.0` 新增 Task Trace Workbench 和第一版规则任务切分。**现在 codelenagent 已支持从长 Session 中识别多个 Coding Task，并继续支持 Claude Code（VS Code）、Codex 和 OpenCode。** 日志查看、任务切分、证据定位、分析报告、时间轴、工具耗时统计、Agent 摘要等核心功能对三者均可用。
 
 **你的 AI 又嘴硬了？see see what！看看他在做什么。**
 
