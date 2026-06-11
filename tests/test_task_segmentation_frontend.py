@@ -683,3 +683,91 @@ class TestTurnFirstSessionNavigation(unittest.TestCase):
         snippet = _HTML[fn_start:fn_start + 400]
         self.assertIn("disabled", snippet)
         self.assertIn("无法定位 Turn", snippet)
+
+
+class TestStrictTurnRootDetection(unittest.TestCase):
+    """Regression: P1 strict isUserTurnRoot, duplicate merging, filter-aware render."""
+
+    def test_is_user_turn_root_function_exists(self):
+        self.assertIn("function isUserTurnRoot", _HTML)
+
+    def test_extract_user_text_helper_exists(self):
+        self.assertIn("function extractUserText", _HTML)
+
+    def test_normalize_user_text_helper_exists(self):
+        self.assertIn("function normalizeUserText", _HTML)
+
+    def test_is_user_turn_root_excludes_system_reminder(self):
+        fn_start = _HTML.index("function isUserTurnRoot")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("<system-reminder", snippet)
+
+    def test_is_user_turn_root_excludes_local_command(self):
+        fn_start = _HTML.index("function isUserTurnRoot")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("<local-command", snippet)
+
+    def test_is_user_turn_root_excludes_tool_result_only(self):
+        fn_start = _HTML.index("function isUserTurnRoot")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("tool_result", snippet)
+
+    def test_is_user_turn_root_duplicate_detection_has_no_asst(self):
+        fn_start = _HTML.index("function isUserTurnRoot")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("previousTurn", snippet)
+        self.assertIn("hasAsstBetween", snippet)
+
+    def test_build_turns_calls_is_user_turn_root(self):
+        fn_start = _HTML.index("function buildTurns")
+        snippet = _HTML[fn_start:fn_start + 400]
+        self.assertIn("isUserTurnRoot(e,", snippet)
+
+    def test_rebuild_turn_task_association_uses_by_uuid(self):
+        fn_start = _HTML.index("function rebuildTurnTaskAssociation")
+        snippet = _HTML[fn_start:fn_start + 800]
+        self.assertIn("byUuid.get(task.startEventId)", snippet)
+        self.assertIn("byUuid.get(task.endEventId)", snippet)
+
+    def test_type_filter_handler_calls_render_page(self):
+        # find the actual typeFilters listener block
+        type_filters_add_evt = _HTML.index("getElementById('typeFilters').addEventListener('click'")
+        listener_snippet = _HTML[type_filters_add_evt:type_filters_add_evt + 600]
+        self.assertIn("renderPage(workbenchState.activeView)", listener_snippet)
+        self.assertNotIn("renderList()", listener_snippet)
+
+    def test_load_session_does_not_call_render_list_before_render_page(self):
+        fn_start = _HTML.index("async function loadSession()")
+        fn_end = _HTML.index("} catch(e) {", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        # after rebuildAllGroupTurns(), should NOT call renderList()
+        rebuild_idx = snippet.index("rebuildAllGroupTurns()")
+        after_rebuild = snippet[rebuild_idx:rebuild_idx + 200]
+        self.assertNotIn("renderList()", after_rebuild)
+
+    def test_build_turn_detail_has_filter_hint(self):
+        fn_start = _HTML.index("function buildTurnDetailHtml")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("turn-detail-hint", snippet)
+
+
+class TestTurnFilterInteractions(unittest.TestCase):
+    """Regression: type filters must affect Turn-first visible content."""
+
+    def test_turn_filter_stats_helper_exists(self):
+        self.assertIn("function getTurnFilterStats", _HTML)
+        self.assertIn("function getVisibleTurnEntries", _HTML)
+
+    def test_render_turn_list_uses_filter_stats(self):
+        fn_start = _HTML.index("function renderTurnList")
+        snippet = _HTML[fn_start:fn_start + 2400]
+        self.assertIn("getTurnFilterStats(turn)", snippet)
+        self.assertIn("visibleEntries.length", snippet)
+        self.assertIn("hiddenCount", snippet)
+
+    def test_build_turn_detail_uses_visible_entries_for_body(self):
+        fn_start = _HTML.index("function buildTurnDetailHtml")
+        snippet = _HTML[fn_start:fn_start + 2500]
+        self.assertIn("const visibleTurnEntries", snippet)
+        self.assertIn("visibleTurnEntries.length === 0", snippet)
+        self.assertIn("visibleTurnEntries", snippet)

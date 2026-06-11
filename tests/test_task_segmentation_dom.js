@@ -137,6 +137,29 @@ async function loadTestSession(dom) {
   await flushAsync();
 }
 
+async function setOnlyType(dom, type) {
+  const doc = dom.window.document;
+  for (const label of Array.from(doc.querySelectorAll('#typeFilters label'))) {
+    const input = label.querySelector('input');
+    const shouldCheck = label.dataset.type === type;
+    input.checked = shouldCheck;
+    label.classList.toggle(`checked-${label.dataset.type}`, shouldCheck);
+  }
+  dom.window.renderPage('sessions');
+  await flushAsync();
+}
+
+async function clearAllTypes(dom) {
+  const doc = dom.window.document;
+  for (const label of Array.from(doc.querySelectorAll('#typeFilters label'))) {
+    const input = label.querySelector('input');
+    input.checked = false;
+    label.classList.remove(`checked-${label.dataset.type}`);
+  }
+  dom.window.renderPage('sessions');
+  await flushAsync();
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: eventIdToEntryIdx populated after loadSession
 // ---------------------------------------------------------------------------
@@ -193,6 +216,57 @@ async function test_turn_root_has_data_idx_in_dom() {
   assert.ok(/Turn \d+/.test(label.textContent), `turn label should match 'Turn N', got: ${label.textContent}`);
 
   console.log('  ✓ Session page renders Turn-first cards after loadSession');
+}
+
+// ---------------------------------------------------------------------------
+// Test 2b: type filters affect selected Turn detail body
+// ---------------------------------------------------------------------------
+
+async function test_turn_detail_filters_assistant_when_only_user_enabled() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const doc = dom.window.document;
+  doc.querySelector('.turn-card').click();
+  await flushAsync();
+
+  assert.ok(doc.getElementById('detailPanel').textContent.includes('Fix the login bug'));
+  assert.ok(doc.getElementById('detailPanel').textContent.includes('Looking into it'));
+
+  await setOnlyType(dom, 'user');
+
+  const detailText = doc.getElementById('detailPanel').textContent;
+  const visibleBodyText = Array.from(doc.querySelectorAll('.turn-detail-text'))
+    .map(el => el.textContent).join('\n');
+  assert.ok(detailText.includes('Fix the login bug'), 'user text should remain visible');
+  assert.ok(!visibleBodyText.includes('Looking into it'), 'assistant text should be hidden by user-only filter body');
+  assert.ok(detailText.includes('当前 event 类型筛选隐藏了'), 'hidden-count hint should be visible');
+  console.log('  ✓ user-only type filter hides assistant content in Turn detail');
+}
+
+// ---------------------------------------------------------------------------
+// Test 2c: clearing all type filters keeps Turn cards but hides detail body
+// ---------------------------------------------------------------------------
+
+async function test_clearing_all_type_filters_keeps_turn_cards_with_empty_detail() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const doc = dom.window.document;
+  doc.querySelector('.turn-card').click();
+  await flushAsync();
+
+  await clearAllTypes(dom);
+
+  const turnCards = doc.querySelectorAll('.turn-card');
+  assert.ok(turnCards.length > 0, 'Turn cards should remain when all type filters are unchecked');
+  const detailText = doc.getElementById('detailPanel').textContent;
+  const visibleBodyText = Array.from(doc.querySelectorAll('.turn-detail-text'))
+    .map(el => el.textContent).join('\n');
+  assert.ok(detailText.includes('当前筛选隐藏了该 Turn 的全部事件'), 'empty filtered Turn detail should explain why content is hidden');
+  assert.ok(!visibleBodyText.includes('Fix the login bug'), 'user text should not be shown in visible body when all filters are unchecked');
+  assert.ok(turnCards[0].textContent.includes('0 visible'), 'Turn card should show filtered visible count');
+  console.log('  ✓ clearing all type filters keeps Turn structure and shows empty filtered detail');
 }
 
 // ---------------------------------------------------------------------------
@@ -392,6 +466,8 @@ async function test_missing_page_falls_back_to_session() {
 const tests = [
   test_map_populated_after_load,
   test_turn_root_has_data_idx_in_dom,
+  test_turn_detail_filters_assistant_when_only_user_enabled,
+  test_clearing_all_type_filters_keeps_turn_cards_with_empty_detail,
   test_focusEntryInNav_turn_root_visible,
   test_focusEntryInNav_child_entry,
   test_make_nav_btn_disabled_for_unknown_event,
