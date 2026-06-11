@@ -2,11 +2,11 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
-## v1.0.0 - 2026-06-11
+## v1.0.0 preview - 2026-06-11
 
 ### 新增
 
-- 发布 V1：新增 Task Trace Workbench。
+- 发布 V1 preview版本：新增 Task Trace Workbench。
 - 新增第一版规则任务切分能力，可从长 Session 中识别多个 Coding Task。
 - Viewer 新增任务列表、任务详情、边界原因、Evidence、命令/错误、Raw JSON 等任务切分展示。
 - 左侧导航升级为 App Shell 工作台，包含 Session、Tasks、Overview、Timeline、Req / Resp、Diff、Diagnostics、Export、Settings。
