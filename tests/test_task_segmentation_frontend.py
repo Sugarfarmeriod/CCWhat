@@ -515,3 +515,15 @@ class TestViewerWorkbenchBugFixes(unittest.TestCase):
         snippet = _HTML[fn_start:fn_end]
         self.assertIn("agentBadgeEl", snippet)
         self.assertIn("sessionAgent", snippet)
+
+    def test_agent_badge_default_is_neutral(self):
+        """agentBadge initial HTML value must not be hardcoded 'claude'."""
+        # Find the span element itself
+        idx = _HTML.index('id="agentBadge"')
+        snippet = _HTML[max(0, idx - 50):idx + 80]
+        self.assertNotIn(">claude<", snippet)
+
+    def test_dom_content_loaded_calls_init(self):
+        """DOMContentLoaded must trigger init so page auto-initializes on open."""
+        self.assertIn("DOMContentLoaded", _HTML)
+        self.assertIn("addEventListener('DOMContentLoaded', init)", _HTML)
