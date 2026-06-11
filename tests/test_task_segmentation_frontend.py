@@ -249,10 +249,10 @@ class TestTaskSegmentationNavigation(unittest.TestCase):
         self.assertIn(".nav-btn", _HTML)
 
     def test_start_event_nav_label(self):
-        self.assertIn("定位开始事件", _HTML)
+        self.assertIn("定位开始 Turn", _HTML)
 
     def test_end_event_nav_label(self):
-        self.assertIn("定位结束事件", _HTML)
+        self.assertIn("定位结束 Turn", _HTML)
 
     def test_main_event_id_parsing(self):
         # main:<line> pattern handled
@@ -284,13 +284,13 @@ class TestBugFixes(unittest.TestCase):
     def test_stale_session_guard_in_run(self):
         """P1: success path must check current session still matches."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 800]
+        snippet = _HTML[fn_start:fn_start + 1000]
         self.assertIn("currentSession !== sessionId", snippet)
 
     def test_stale_guard_in_catch_path(self):
         """P1: failure/catch path must also check current session (stale guard)."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 1200]
+        snippet = _HTML[fn_start:fn_start + 1500]
         # Must appear in both try (success) and catch (failure) paths
         first_guard = snippet.index("currentSession !== sessionId")
         second_guard = snippet.index("currentSession !== sessionId", first_guard + 1)
@@ -299,7 +299,7 @@ class TestBugFixes(unittest.TestCase):
     def test_stale_guard_still_caches_result(self):
         """P1: stale guard must cache result before returning."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 800]
+        snippet = _HTML[fn_start:fn_start + 1000]
         # Cache write must come before the stale guard check
         cache_pos = snippet.index("taskSegmentReports[sessionId] = data")
         stale_pos = snippet.index("currentSession !== sessionId")
@@ -402,7 +402,7 @@ class TestNavigationImprovements(unittest.TestCase):
     # 5.4: stable turn index, focusEntryInNav, scrollIntoView, filter-hidden hint
     def test_stable_turn_root_idx_set(self):
         fn_start = _HTML.index("function buildTurns")
-        snippet = _HTML[fn_start:fn_start + 800]
+        snippet = _HTML[fn_start:fn_start + 1200]
         self.assertIn("_turnRootIdx", snippet)
 
     def test_render_list_uses_full_group_entries(self):
@@ -541,3 +541,145 @@ class TestViewerWorkbenchBugFixes(unittest.TestCase):
         """DOMContentLoaded must trigger init so page auto-initializes on open."""
         self.assertIn("DOMContentLoaded", _HTML)
         self.assertIn("addEventListener('DOMContentLoaded', init)", _HTML)
+
+
+class TestTurnFirstSessionNavigation(unittest.TestCase):
+    """4.1 — Turn-first session navigation: Turn helpers, navigation index, Task-to-Turn."""
+
+    # Turn helper and index functions
+    def test_rebuild_all_group_turns_exists(self):
+        self.assertIn("function rebuildAllGroupTurns", _HTML)
+
+    def test_build_turn_navigation_index_exists(self):
+        self.assertIn("function buildTurnNavigationIndex", _HTML)
+
+    def test_lookup_turn_by_event_id_exists(self):
+        self.assertIn("function lookupTurnByEventId", _HTML)
+
+    def test_rebuild_turn_task_association_exists(self):
+        self.assertIn("function rebuildTurnTaskAssociation", _HTML)
+
+    def test_navigate_to_turn_exists(self):
+        self.assertIn("function navigateToTurn", _HTML)
+
+    def test_make_nav_turn_btn_exists(self):
+        self.assertIn("function makeNavTurnBtn", _HTML)
+
+    def test_select_turn_function_exists(self):
+        self.assertIn("function selectTurn", _HTML)
+
+    def test_render_turn_list_function_exists(self):
+        self.assertIn("function renderTurnList", _HTML)
+
+    def test_build_turn_detail_html_exists(self):
+        self.assertIn("function buildTurnDetailHtml", _HTML)
+
+    # Turn label generation
+    def test_turn_label_format(self):
+        fn_start = _HTML.index("function buildTurns")
+        snippet = _HTML[fn_start:fn_start + 1500]
+        self.assertIn("Turn ${userTurnCount}", snippet)
+
+    def test_build_turns_returns_turn_key(self):
+        fn_start = _HTML.index("function buildTurns")
+        snippet = _HTML[fn_start:fn_start + 1200]
+        self.assertIn("current.turnKey = tk", snippet)
+
+    def test_turn_navigation_index_state_declared(self):
+        self.assertIn("const turnNavigationIndex = {", _HTML)
+        self.assertIn("byFileAnchor: new Map()", _HTML)
+        self.assertIn("byTurnKey: new Map()", _HTML)
+
+    def test_selected_turn_key_state_declared(self):
+        self.assertIn("let selectedTurnKey = null", _HTML)
+
+    def test_all_group_turns_state_declared(self):
+        self.assertIn("let allGroupTurns = []", _HTML)
+
+    # Turn navigation in Task detail
+    def test_task_overview_shows_start_turn_label(self):
+        fn_start = _HTML.index("function renderTabOverview(task)")
+        snippet = _HTML[fn_start:fn_start + 600]
+        self.assertIn("startTurn", snippet)
+        self.assertIn("Turn", snippet)
+
+    def test_task_overview_uses_nav_turn_btn(self):
+        fn_start = _HTML.index("function renderTabOverview(task)")
+        snippet = _HTML[fn_start:fn_start + 800]
+        self.assertIn("makeNavTurnBtn", snippet)
+
+    def test_task_turns_tab_shows_turn_range(self):
+        fn_start = _HTML.index("function renderTabTurns(task)")
+        snippet = _HTML[fn_start:fn_start + 800]
+        self.assertIn("startTurn", snippet)
+        self.assertIn("endTurn", snippet)
+        self.assertIn("定位开始 Turn", snippet)
+        self.assertIn("定位结束 Turn", snippet)
+
+    def test_task_turns_tab_shows_turn_list(self):
+        fn_start = _HTML.index("function renderTabTurns(task)")
+        snippet = _HTML[fn_start:fn_start + 1800]
+        self.assertIn("rangeTurns", snippet)
+        self.assertIn("navigateToTurn", snippet)
+
+    def test_task_turns_tab_has_debug_eventid_section(self):
+        fn_start = _HTML.index("function renderTabTurns(task)")
+        snippet = _HTML[fn_start:fn_start + 2500]
+        self.assertIn("调试", snippet)
+        self.assertIn("startEventId", snippet)
+
+    # Turn card CSS
+    def test_turn_card_css_exists(self):
+        self.assertIn(".turn-card", _HTML)
+        self.assertIn(".turn-card.selected", _HTML)
+
+    def test_turn_card_label_css_exists(self):
+        self.assertIn(".turn-card-label", _HTML)
+
+    def test_turn_task_badge_css_exists(self):
+        self.assertIn(".turn-task-badge", _HTML)
+
+    def test_turn_meta_badge_css_exists(self):
+        self.assertIn(".turn-meta-badge", _HTML)
+
+    def test_turn_detail_css_exists(self):
+        self.assertIn(".turn-detail", _HTML)
+        self.assertIn(".turn-detail-section", _HTML)
+
+    # Session page now renders Turn list
+    def test_render_session_page_calls_render_turn_list(self):
+        fn_start = _HTML.index("function renderSessionPage()")
+        fn_end = fn_start + 900
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("renderTurnList()", snippet)
+
+    # rebuild called in loadSession
+    def test_load_session_calls_rebuild_all_group_turns(self):
+        fn_start = _HTML.index("async function loadSession()")
+        fn_end = _HTML.index("} catch(e) {", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("rebuildAllGroupTurns()", snippet)
+
+    # Turn task association rebuild called after segmentation
+    def test_task_segments_triggers_turn_association(self):
+        fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
+        snippet = _HTML[fn_start:fn_start + 1000]
+        self.assertIn("rebuildTurnTaskAssociation(data)", snippet)
+
+    # navigateToTurn switches to sessions page
+    def test_navigate_to_turn_switches_to_sessions(self):
+        fn_start = _HTML.index("function navigateToTurn")
+        snippet = _HTML[fn_start:fn_start + 400]
+        self.assertIn("navigateToPage('sessions')", snippet)
+
+    def test_navigate_to_turn_triggers_scroll(self):
+        fn_start = _HTML.index("function navigateToTurn")
+        snippet = _HTML[fn_start:fn_start + 600]
+        self.assertIn("scrollIntoView", snippet)
+
+    # makeNavTurnBtn disabled when Turn not found
+    def test_make_nav_turn_btn_disabled_when_not_found(self):
+        fn_start = _HTML.index("function makeNavTurnBtn")
+        snippet = _HTML[fn_start:fn_start + 400]
+        self.assertIn("disabled", snippet)
+        self.assertIn("无法定位 Turn", snippet)

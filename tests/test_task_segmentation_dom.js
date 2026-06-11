@@ -165,7 +165,7 @@ async function test_map_populated_after_load() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: turn root has data-idx in DOM after loadSession
+// Test 2: Session page renders Turn-first cards after loadSession
 // ---------------------------------------------------------------------------
 
 async function test_turn_root_has_data_idx_in_dom() {
@@ -173,26 +173,30 @@ async function test_turn_root_has_data_idx_in_dom() {
   await loadTestSession(dom);
 
   const doc = dom.window.document;
-  const turnHdrs = doc.querySelectorAll('.turn-hdr');
+  // Session page now renders Turn cards (Turn-first), not raw turn-hdr elements
+  const turnCards = doc.querySelectorAll('.turn-card');
 
-  // There should be turn headers
-  assert.ok(turnHdrs.length > 0, 'turn headers should exist after loadSession');
+  assert.ok(turnCards.length > 0, 'turn cards should exist after loadSession (Turn-first view)');
 
-  // Every turn header should have data-idx
-  for (const hdr of turnHdrs) {
+  // Every turn card should have data-turn-key
+  for (const card of turnCards) {
     assert.ok(
-      hdr.dataset.idx !== undefined && hdr.dataset.idx !== '',
-      `turn header should have data-idx, got: ${hdr.dataset.idx}`
+      card.dataset.turnKey !== undefined && card.dataset.turnKey !== '',
+      `turn card should have data-turn-key, got: ${card.dataset.turnKey}`
     );
-    // data-idx should be a valid number
-    assert.ok(!isNaN(Number(hdr.dataset.idx)), `data-idx should be numeric`);
   }
 
-  console.log('  ✓ turn headers have data-idx after loadSession');
+  // Turn labels should be visible (Turn 1, Turn 2 ...)
+  const firstCard = turnCards[0];
+  const label = firstCard.querySelector('.turn-card-label');
+  assert.ok(label, 'turn card should contain a .turn-card-label element');
+  assert.ok(/Turn \d+/.test(label.textContent), `turn label should match 'Turn N', got: ${label.textContent}`);
+
+  console.log('  ✓ Session page renders Turn-first cards after loadSession');
 }
 
 // ---------------------------------------------------------------------------
-// Test 3: focusEntryInNav finds the turn root (not a no-op)
+// Test 3: focusEntryInNav works after raw events are rendered
 // ---------------------------------------------------------------------------
 
 async function test_focusEntryInNav_turn_root_visible() {
@@ -211,14 +215,16 @@ async function test_focusEntryInNav_turn_root_visible() {
     detailPanel.appendChild(tc);
   }
 
+  // Switch to raw events list (navigateToEventId calls renderList() internally)
+  win.renderList();
+
   // Find the index for main:1 (turn root)
   const idx = win.findEntryByEventId('main:1');
   assert.ok(idx >= 0, `main:1 should be findable, got ${idx}`);
 
-  // Expand turns so the element is visible (not collapsed)
-  // Turn roots are turn-hdr elements — make sure we can find [data-idx="idx"]
+  // After renderList(), turn-hdr elements should exist with data-idx
   const targetEl = doc.querySelector(`[data-idx="${idx}"]`);
-  assert.ok(targetEl !== null, `[data-idx="${idx}"] should exist in DOM after load`);
+  assert.ok(targetEl !== null, `[data-idx="${idx}"] should exist in DOM after renderList()`);
 
   // Call focusEntryInNav — should not throw and should trigger scrollIntoView
   let scrollCalled = false;
@@ -228,7 +234,7 @@ async function test_focusEntryInNav_turn_root_visible() {
   win.HTMLElement.prototype.scrollIntoView = origScroll;
 
   assert.ok(scrollCalled, 'scrollIntoView should be called when focusing turn root');
-  console.log('  ✓ focusEntryInNav works on turn root (no longer a no-op)');
+  console.log('  ✓ focusEntryInNav works on turn root after renderList()');
 }
 
 // ---------------------------------------------------------------------------
