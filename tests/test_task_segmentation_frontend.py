@@ -42,16 +42,26 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         session_nav_snippet = _HTML[max(0, session_nav_idx - 80):session_nav_idx + 160]
         self.assertIn("nav-item active", session_nav_snippet)
 
-    def test_left_nav_core_modules_are_session_and_tasks(self):
+    def test_left_nav_core_modules_are_present(self):
         nav_start = _HTML.index('<nav class="left-nav">')
         nav_end = _HTML.index('</nav>', nav_start)
         nav = _HTML[nav_start:nav_end]
-        self.assertIn('data-page="sessions"', nav)
+        for page in [
+            "sessions",
+            "tasks",
+            "overview",
+            "timeline",
+            "reqresp",
+            "differential",
+            "diagnostics",
+            "export",
+            "settings",
+        ]:
+            self.assertIn(f'data-page="{page}"', nav)
         self.assertIn('> Session', nav)
-        self.assertIn('data-page="tasks"', nav)
-        self.assertNotIn('data-page="overview"', nav)
-        self.assertNotIn('data-page="raw-events"', nav)
-        self.assertNotIn('data-page="differential"', nav)
+        self.assertIn('> Tasks', nav)
+        self.assertIn('> Req / Resp', nav)
+        self.assertIn('> Diff', nav)
 
     def test_session_page_contains_migrated_log_viewer(self):
         self.assertIn('data-page="sessions"', _HTML)
@@ -89,8 +99,8 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         fn_end = _HTML.index("function resetAnalysisState", fn_start)
         snippet = _HTML[fn_start:fn_end]
         self.assertNotIn("navigateToPage('raw-events')", snippet)
-        # loadSession must refresh the active workbench view after loading
-        self.assertIn("_renderView(activeView)", snippet)
+        # loadSession must refresh the active workbench page after loading
+        self.assertIn("renderPage(workbenchState.activeView)", snippet)
 
 
 class TestTaskSegmentationCache(unittest.TestCase):
@@ -121,13 +131,14 @@ class TestTaskSegmentationCache(unittest.TestCase):
     def test_on_click_handler_exists(self):
         self.assertIn("function onTaskSegmentsBtnClick", _HTML)
 
-    def test_tasks_page_auto_runs_for_loaded_session(self):
+    def test_tasks_page_waits_for_manual_segmentation(self):
         fn_start = _HTML.index("function renderTasksPage")
         fn_end = _HTML.index("function renderReqRespPage", fn_start)
         snippet = _HTML[fn_start:fn_end]
         self.assertIn("sessionId !== currentLoadedSessionId", snippet)
-        self.assertIn("正在切分当前 Session 的任务", snippet)
-        self.assertIn("runTaskSegmentationForCurrentSession({ navigate: false })", snippet)
+        self.assertIn("当前 Session 尚未生成任务切分结果", snippet)
+        self.assertIn('onclick="runTaskSegmentationForCurrentSession({ navigate: false })"', snippet)
+        self.assertNotIn("正在切分当前 Session 的任务", snippet)
 
     def test_task_runner_accepts_navigation_option(self):
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
@@ -474,31 +485,34 @@ if __name__ == "__main__":
 class TestViewerWorkbenchBugFixes(unittest.TestCase):
     """Regression tests for viewer workbench bug fixes."""
 
-    def test_show_view_no_early_return_on_same_view(self):
-        """showView must not early-return when viewId == activeView."""
-        fn_start = _HTML.index("function showView(viewId)")
-        fn_end = _HTML.index("function _renderView(viewId)", fn_start)
+    def test_navigate_to_page_rerenders_same_page(self):
+        """navigateToPage must not early-return when the page is already active."""
+        fn_start = _HTML.index("function navigateToPage(pageId)")
+        fn_end = _HTML.index("function renderPage(pageId)", fn_start)
         snippet = _HTML[fn_start:fn_end]
-        # The early return based on same view must be gone
-        self.assertNotIn("if (activeView === viewId) return;", snippet)
-        # _renderView must always be called
-        self.assertIn("_renderView(viewId)", snippet)
+        self.assertNotIn("return;", snippet.split("renderPage(normalizedPageId)")[0])
+        self.assertIn("renderPage(normalizedPageId)", snippet)
 
-    def test_render_view_helper_exists(self):
-        """_renderView helper must exist and handle all views."""
-        self.assertIn("function _renderView(viewId)", _HTML)
-        fn_start = _HTML.index("function _renderView(viewId)")
+    def test_render_page_helper_exists(self):
+        """renderPage helper must exist and handle core pages."""
+        self.assertIn("function renderPage(pageId)", _HTML)
+        fn_start = _HTML.index("function renderPage(pageId)")
         snippet = _HTML[fn_start:fn_start + 600]
-        self.assertIn("'tasks'", snippet)
-        self.assertIn("'overview'", snippet)
-        self.assertIn("'sessions'", snippet)
+        self.assertIn("case 'tasks'", snippet)
+        self.assertIn("case 'overview'", snippet)
+        self.assertIn("case 'sessions'", snippet)
 
-    def test_load_session_calls_render_view_after_success(self):
-        """loadSession must call _renderView(activeView) after successfully loading."""
+    def test_load_session_calls_render_page_after_success(self):
+        """loadSession must call renderPage(workbenchState.activeView) after success."""
         fn_start = _HTML.index("async function loadSession()")
         fn_end = _HTML.index("} catch(e) {", fn_start)
         snippet = _HTML[fn_start:fn_end]
-        self.assertIn("_renderView(activeView)", snippet)
+        self.assertIn("renderPage(workbenchState.activeView)", snippet)
+
+    def test_init_wrapper_removed(self):
+        """init must not be wrapped through _origInit, which can recurse."""
+        self.assertNotIn("_origInit", _HTML)
+        self.assertEqual(_HTML.count("async function init()"), 1)
 
     def test_agent_badge_no_hardcoded_claude_fallback(self):
         """agentBadge must not fall back to hardcoded 'claude' string."""
