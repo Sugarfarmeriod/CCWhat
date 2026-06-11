@@ -2,7 +2,7 @@
 
 [English](README.en.md) | 中文
 
-当前版本：`v0.2.0` · [更新日志](CHANGELOG.md)
+当前版本：`v1.0.0` · [更新日志](CHANGELOG.md)
 
 **你的 AI 又嘴硬了？see see what！看看他在做什么。**
 
