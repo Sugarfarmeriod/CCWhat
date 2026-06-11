@@ -308,10 +308,10 @@ async function test_show_nav_hint() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: clicking Tasks auto-runs segmentation for the loaded session
+// Test 7: clicking Tasks waits for manual segmentation
 // ---------------------------------------------------------------------------
 
-async function test_tasks_page_auto_segments_loaded_session() {
+async function test_tasks_page_waits_for_manual_segmentation() {
   const dom = makeDOM();
   await loadTestSession(dom);
 
@@ -321,11 +321,20 @@ async function test_tasks_page_auto_segments_loaded_session() {
   win.navigateToPage('tasks');
   await flushAsync();
 
-  assert.strictEqual(win.__taskSegmentRequests.length, 1, 'Tasks page should request segmentation once');
-  assert.deepStrictEqual(win.__taskSegmentRequests[0], { sessionId: 'test-session-001' });
+  assert.strictEqual(win.__taskSegmentRequests.length, 0, 'Tasks page should not auto-request segmentation');
   assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'tasks');
+  assert.ok(doc.getElementById('taskSegContent').textContent.includes('尚未生成任务切分结果'));
+
+  const taskButton = Array.from(doc.querySelectorAll('#taskSegContent button'))
+    .find(btn => btn.textContent.includes('任务切分'));
+  assert.ok(taskButton, 'manual task segmentation button should be visible');
+  taskButton.click();
+  await flushAsync();
+
+  assert.strictEqual(win.__taskSegmentRequests.length, 1, 'Manual click should request segmentation once');
+  assert.deepStrictEqual(win.__taskSegmentRequests[0], { sessionId: 'test-session-001' });
   assert.ok(doc.getElementById('taskSegContent').textContent.includes('Fix the login bug'));
-  console.log('  ✓ Tasks page auto-runs segmentation for the loaded session');
+  console.log('  ✓ Tasks page waits for manual segmentation');
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +390,7 @@ const tests = [
   test_focusEntryInNav_child_entry,
   test_make_nav_btn_disabled_for_unknown_event,
   test_show_nav_hint,
-  test_tasks_page_auto_segments_loaded_session,
+  test_tasks_page_waits_for_manual_segmentation,
   test_session_tasks_session_roundtrip_keeps_logs_visible,
   test_missing_page_falls_back_to_session,
 ];
