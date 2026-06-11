@@ -2265,13 +2265,10 @@ async function init() {
     if (!resp.ok) throw await apiError(resp, url);
     allProjects = await resp.json();
 
-    // Show agent from first project
+    // Show agent from first project — use actual agent name, not hardcoded 'claude'
     const agentBadge = document.getElementById('agentBadge');
-    if (allProjects.length > 0 && allProjects[0].agent) {
-      agentBadge.textContent = allProjects[0].agent;
-    } else {
-      agentBadge.textContent = 'claude';
-    }
+    const detectedAgent = allProjects.length > 0 && allProjects[0].agent ? allProjects[0].agent : null;
+    agentBadge.textContent = detectedAgent || '—';
 
     const sel = document.getElementById('projectSel');
     const curProject = sel.value;
@@ -2461,7 +2458,12 @@ async function loadSession() {
       mainEntries = eventsToEntries(data.events);
     }
 
-    const agentLabel = data.agent && data.agent !== 'claude' ? data.agent : 'Main Session';
+    // Update agent badge to reflect the actual session agent
+    const sessionAgent = data.agent || 'unknown';
+    const agentBadgeEl = document.getElementById('agentBadge');
+    if (agentBadgeEl) agentBadgeEl.textContent = sessionAgent;
+    // Use agent-aware label for main group
+    const agentLabel = sessionAgent !== 'claude' ? sessionAgent : 'Claude Code';
     const mainGroup = { id: 'main', label: `🤖 ${agentLabel}`, desc: data.sessionId?.slice(0,8) || '', entries: [] };
     for (const e of mainEntries) {
       const idx = allEntries.length;
@@ -2520,14 +2522,9 @@ async function loadSession() {
     currentLoadedSessionId = sessionId;   // mark session as fully loaded
     updateAnalyzeButton();
     updateTaskSegmentsButton();
-
-    // Update workbench state & rebuild canonical nav
-    workbenchState.sessionId = sessionId;
-    workbenchState.sessionData = data;
-    rebuildCanonicalNavIndex();
-
-    // Refresh the current page without changing the user's active module.
-    renderPage(workbenchState.activeView);
+    // Refresh whichever workbench view is currently active so it shows the
+    // new session data immediately (sessions/overview/tasks all depend on it)
+    _renderView(activeView);
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
@@ -3523,6 +3520,225 @@ function copyImportCmd() {
 }
 
 // ── Init ────────────────────────────────────────────────────────────────
+
+// ── Workbench State ─────────────────────────────────────────────────────
+let activeView = 'tasks';
+
+function showView(viewId) {
+  // Always update DOM visibility and nav active state (no early-return on same view)
+  if (activeView !== viewId) {
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('hidden', v.id !== 'view-' + viewId));
+    document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
+    activeView = viewId;
+  }
+  // Always re-render the target view content so it stays fresh after loadSession()
+  _renderView(viewId);
+}
+
+function _renderView(viewId) {
+  if (viewId === 'tasks') {
+    const sid = document.getElementById('sessionSel').value;
+    if (sid && taskSegmentReports[sid]) renderTaskSegments(taskSegmentReports[sid], sid);
+    else if (sid) renderTasksEmpty();
+  }
+  if (viewId === 'overview') renderOverview();
+  if (viewId === 'diagnostics') renderDiagnostics();
+  if (viewId === 'export') renderExportPage();
+  if (viewId === 'sessions') renderSessionsList();
+}
+
+function renderTasksEmpty() {
+  const p = document.getElementById('taskDetailOuter');
+  if (!p) return;
+  const sid = document.getElementById('sessionSel').value;
+  if (!sid) { p.innerHTML = '<div class="wb-empty">请先选择 Project 和 Session</div>'; return; }
+  p.innerHTML = '<div class="wb-empty"><div style="margin-bottom:12px;color:var(--muted)">当前 session 尚未切分任务</div><button class="wb-btn-primary" onclick="runTaskSegmentationForCurrentSession()">开始切分</button></div>';
+}
+
+function renderOverview() {
+  const el = document.getElementById('overviewContainer');
+  if (!el) return;
+  const sid = document.getElementById('sessionSel').value;
+  const taskData = sid ? taskSegmentReports[sid] : null;
+  const tasks = taskData ? taskData.tasks || [] : [];
+  const totalTurns = allEntries.filter(e => e.type === 'user' && e._gid === 'main').length;
+  const totalFiles = [...new Set(tasks.flatMap(t => (t.evidence && t.evidence.filesChanged) || []))].length;
+  const totalCmds = tasks.reduce((n,t) => n + ((t.evidence && t.evidence.commands && t.evidence.commands.length) || 0), 0);
+  const totalErrors = tasks.reduce((n,t) => n + ((t.evidence && t.evidence.errors && t.evidence.errors.length) || 0), 0);
+  const failedTasks = tasks.filter(t => t.status === 'failed').length;
+  const ambiguousTasks = tasks.filter(t => t.isAmbiguous).length;
+  const stats = [
+    ['任务数', tasks.length, ''],
+    ['Turns', totalTurns, ''],
+    ['文件改动', totalFiles, ''],
+    ['命令', totalCmds, ''],
+    ['错误', totalErrors, totalErrors > 0 ? 'danger' : ''],
+    ['失败任务', failedTasks, failedTasks > 0 ? 'danger' : ''],
+    ['模糊任务', ambiguousTasks, ambiguousTasks > 0 ? 'warning' : ''],
+  ];
+  const cards = stats.map(([l,v,c]) =>
+    '<div class="stat-card' + (c ? ' stat-'+c : '') + '"><div class="stat-val">' + v + '</div><div class="stat-label">' + esc(l) + '</div></div>'
+  ).join('');
+  const taskRows = tasks.map(t => {
+    const ttype = t.taskType || 'unknown';
+    return '<div class="overview-task-row" onclick="showView(\'tasks\');selectedTaskSegmentId=\'' + esc(t.taskId) + '\';const _d=taskSegmentReports[\'' + esc(sid||'') + '\'];if(_d)renderTaskSegments(_d,\'' + esc(sid||'') + '\')">' +
+      '<span class="ot-id">' + esc(t.taskId) + '</span>' +
+      '<span class="ot-title">' + esc(t.title||'(无标题)') + '</span>' +
+      '<span class="ot-type task-badge task-badge-type-' + esc(ttype) + '">' + esc(ttype) + '</span>' +
+      '<span class="ot-status">' + esc(t.status) + '</span></div>';
+  }).join('');
+  const elapsedTxt = taskData && taskData.elapsedMs ? (taskData.elapsedMs/1000).toFixed(1)+'s' : '';
+  el.innerHTML = '<div class="overview-hdr"><span class="wb-section-title">Session 概览</span>' +
+    (sid ? '<span class="wb-muted">' + esc(sid.slice(0,12)) + '…  ' + elapsedTxt + '</span>' : '') + '</div>' +
+    '<div class="stat-row">' + cards + '</div>' +
+    (tasks.length ? '<div class="overview-task-list"><div class="ot-header"><span>任务</span><span>标题</span><span>类型</span><span>状态</span></div>' + taskRows + '</div>' : '<div class="wb-empty">暂无任务数据，请先在 Tasks 视图切分</div>');
+}
+
+function renderDiagnostics() {
+  const el = document.getElementById('diagnosticsContainer');
+  if (!el) return;
+  const sid = document.getElementById('sessionSel').value;
+  const taskData = sid ? taskSegmentReports[sid] : null;
+  const tasks = taskData ? taskData.tasks || [] : [];
+  const items = [];
+  tasks.filter(t => t.status === 'failed').forEach(t => {
+    items.push({level:'danger', title:'任务失败：'+(t.title||t.taskId), desc:'任务 '+t.taskId+' 状态为 failed', taskId: t.taskId});
+  });
+  tasks.filter(t => t.isAmbiguous).forEach(t => {
+    items.push({level:'warning', title:'模糊边界：'+(t.title||t.taskId), desc:'任务 '+t.taskId+' 切分边界置信度低', taskId: t.taskId});
+  });
+  tasks.filter(t => t.evidence && t.evidence.errors && t.evidence.errors.length > 0).forEach(t => {
+    items.push({level:'info', title:'错误证据：'+(t.title||t.taskId), desc:'包含 '+t.evidence.errors.length+' 条错误，'+(t.evidence.errors[0]||'').slice(0,80), taskId: t.taskId});
+  });
+  if (taskData && taskData.isAmbiguous) {
+    items.unshift({level:'warning', title:'整体切分结果模糊', desc:'Topic flips: '+((taskData.summary && taskData.summary.topicFlips)||0)+', 建议调整规则阈值', taskId:null});
+  }
+  const rows = items.length ? items.map(item => {
+    const onclick = item.taskId ? ' onclick="showView(\'tasks\');selectedTaskSegmentId=\''+esc(item.taskId)+'\';const _d=taskSegmentReports[\''+esc(sid||'')+'\'];if(_d)renderTaskSegments(_d,\''+esc(sid||'')+'\')"' : '';
+    return '<div class="diag-item diag-'+item.level+'"'+onclick+'><div class="diag-level-dot"></div><div><div class="diag-title">'+esc(item.title)+'</div><div class="diag-desc">'+esc(item.desc)+'</div></div></div>';
+  }).join('') : '<div class="wb-empty">未发现诊断问题</div>';
+  el.innerHTML = '<div class="wb-section-title" style="margin-bottom:12px">诊断结果 ('+items.length+')</div>'+rows;
+}
+
+function renderExportPage() {
+  const el = document.getElementById('exportPageContainer');
+  if (!el) return;
+  const sid = document.getElementById('sessionSel').value;
+  el.innerHTML = '<div class="wb-section-title" style="margin-bottom:16px">导出</div>' +
+    '<div class="export-grid">' +
+    '<div class="export-card-page" onclick="openExportModal()"><div class="export-card-icon">📦</div><div class="export-card-title">Session 诊断包</div><div class="export-card-desc">导出 Claude 日志、Subagent 日志、原始请求响应</div></div>' +
+    '<div class="export-card-page"><div class="export-card-icon">📋</div><div class="export-card-title">Task Trace</div><div class="export-card-desc">导出当前 session 的任务切分结果 JSON</div><button class="wb-btn-sm" onclick="exportTaskTrace()"' + (sid ? '' : ' disabled') + '>导出 JSON</button></div>' +
+    '<div class="export-card-page"><div class="export-card-icon">🔬</div><div class="export-card-title">Dataset <span class="badge-exp">experimental</span></div><div class="export-card-desc">将任务切分结果准备为评测数据集格式（预览）</div><button class="wb-btn-sm" disabled>即将推出</button></div>' +
+    '</div>';
+}
+
+function exportTaskTrace() {
+  const sid = document.getElementById('sessionSel').value;
+  if (!sid || !taskSegmentReports[sid]) return;
+  const data = JSON.stringify(taskSegmentReports[sid], null, 2);
+  const blob = new Blob([data], {type: 'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'task-trace-' + sid.slice(0,8) + '.json'; a.click();
+}
+
+function renderSessionsList() {
+  const el = document.getElementById('sessionsListContainer');
+  if (!el) return;
+  if (!allProjects.length) { el.innerHTML = '<div class="wb-empty">暂无项目数据，请刷新</div>'; return; }
+  const rows = allProjects.flatMap(p => (p.sessions||[]).map(s => {
+    const id = typeof s === 'string' ? s : s.id;
+    const ts = typeof s === 'object' ? (s.lastTimestamp||'') : '';
+    const tsStr = ts ? new Date(ts).toLocaleString('zh-CN', {hour12:false}) : '';
+    return '<div class="session-row" onclick="document.getElementById(\'projectSel\').value=\''+esc(p.projectDir)+'\';onProjectChange();setTimeout(function(){document.getElementById(\'sessionSel\').value=\''+esc(id)+'\';loadSession();showView(\'tasks\');},200)">' +
+      '<span class="sr-proj">' + esc(p.projectDir) + '</span>' +
+      '<span class="sr-id">' + esc(id.slice(0,20)) + '</span>' +
+      '<span class="sr-ts">' + esc(tsStr) + '</span></div>';
+  }));
+  el.innerHTML = '<div class="wb-section-title" style="margin-bottom:12px">Sessions (' + rows.length + ')</div>' +
+    '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden"><div class="sessions-hdr"><span>Project</span><span>Session ID</span><span>最近时间</span></div>' +
+    rows.join('') + '</div>';
+}
+
+// ── Task panel wiring ─────────────────────────────────────────────────────
+function onTaskSegmentsBtnClick() {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || taskSegmentsInFlight) return;
+  if (taskSegmentReports[sessionId]) { showCachedTaskSegments(); return; }
+  runTaskSegmentationForCurrentSession();
+}
+
+// Override renderTaskSegments for two-panel layout
+function renderTaskSegments(data, sessionId) {
+  const listPanel = document.getElementById('taskListPanel');
+  const detailOuter = document.getElementById('taskDetailOuter');
+  const tasks = data.tasks || [];
+  const isAmbiguous = data.isAmbiguous || false;
+  const elapsedMs = data.elapsedMs || 0;
+
+  const tcb = document.getElementById('taskCountBadge');
+  if (tcb) tcb.textContent = tasks.length ? tasks.length + ' 个任务' : '';
+
+  if (listPanel && detailOuter) {
+    if (tasks.length === 0) {
+      listPanel.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">未识别到任务片段</div>';
+      detailOuter.innerHTML = '<div class="wb-empty">暂无任务</div>';
+      return;
+    }
+    const selId = selectedTaskSegmentId || tasks[0].taskId;
+    listPanel.innerHTML = tasks.map(t => {
+      const ev = t.evidence || {};
+      const isSelected = t.taskId === selId;
+      const typeCls = 'task-badge-type-' + (t.taskType || 'unknown');
+      const badges = [
+        '<span class="task-badge ' + typeCls + '">' + esc(t.taskType || 'unknown') + '</span>',
+        t.isAmbiguous ? '<span class="task-badge task-badge-ambiguous">ambiguous</span>' : '',
+        t.finalClaim ? '<span class="task-badge task-badge-final-claim">claim</span>' : '',
+      ].filter(Boolean).join('');
+      const counts = [
+        ev.filesChanged && ev.filesChanged.length ? '<span class="task-count-chip">✎' + ev.filesChanged.length + '</span>' : '',
+        ev.commands && ev.commands.length ? '<span class="task-count-chip">$' + ev.commands.length + '</span>' : '',
+        ev.errors && ev.errors.length ? '<span class="task-count-chip has-errors">⚠' + ev.errors.length + '</span>' : '',
+        ev.subagentIds && ev.subagentIds.length ? '<span class="task-count-chip">⚙' + ev.subagentIds.length + '</span>' : '',
+      ].filter(Boolean).join('');
+      return '<div class="task-card' + (isSelected ? ' selected' : '') + '" data-task-id="' + esc(t.taskId) + '" data-session-id="' + esc(sessionId) + '">' +
+        '<div class="task-card-hdr"><span class="task-card-id">' + esc(t.taskId) + '</span>' +
+        '<span class="task-card-title">' + esc(t.title || '(无标题)') + '</span>' +
+        '<div class="task-card-badges">' + badges + '</div></div>' +
+        '<div class="task-card-counts">' + (counts || '<span class="task-count-chip" style="opacity:.4">无 evidence</span>') + '</div></div>';
+    }).join('');
+
+    listPanel.addEventListener('click', function(e) {
+      const card = e.target.closest('[data-task-id]');
+      if (!card) return;
+      selectTaskSegment(card.dataset.taskId, card.dataset.sessionId);
+    }, { once: true });
+
+    const selTask = tasks.find(t => t.taskId === selId) || tasks[0];
+    if (selTask) {
+      const hdr = '<div class="task-seg-header">' +
+        '<div class="task-seg-title">' + esc(selTask.title || selTask.taskId) + '</div>' +
+        '<div class="task-seg-meta">' + (isAmbiguous ? '<span class="task-badge task-badge-ambiguous">ambiguous</span>' : '') + (elapsedMs ? '<span>' + (elapsedMs/1000).toFixed(1) + 's</span>' : '') + '</div>' +
+        '<div class="task-seg-actions"><button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button></div></div>';
+      detailOuter.innerHTML = hdr + renderTaskDetail(selTask, data.debugBoundaries);
+    }
+  }
+}
+
+function selectTaskSegment(taskId, sessionId) {
+  const cached = taskSegmentReports[sessionId];
+  if (!cached) return;
+  const task = (cached.tasks || []).find(t => t.taskId === taskId);
+  if (!task) return;
+  selectedTaskSegmentId = taskId;
+  renderTaskSegments(cached, sessionId);
+}
+
+// Override init to also init workbench
+const _origInit = init;
+async function init() {
+  await _origInit.call(this);
+}
+
 init();
 </script>
 </body>

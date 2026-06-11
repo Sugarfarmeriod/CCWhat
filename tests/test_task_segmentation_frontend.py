@@ -89,8 +89,8 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         fn_end = _HTML.index("function resetAnalysisState", fn_start)
         snippet = _HTML[fn_start:fn_end]
         self.assertNotIn("navigateToPage('raw-events')", snippet)
-        self.assertNotIn("taskSegmentReports[sessionId]?.tasks?.length", snippet)
-        self.assertIn("renderPage(workbenchState.activeView)", snippet)
+        # loadSession must refresh the active workbench view after loading
+        self.assertIn("_renderView(activeView)", snippet)
 
 
 class TestTaskSegmentationCache(unittest.TestCase):
@@ -469,3 +469,49 @@ class TestWorkbenchReviewFixes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestViewerWorkbenchBugFixes(unittest.TestCase):
+    """Regression tests for viewer workbench bug fixes."""
+
+    def test_show_view_no_early_return_on_same_view(self):
+        """showView must not early-return when viewId == activeView."""
+        fn_start = _HTML.index("function showView(viewId)")
+        fn_end = _HTML.index("function _renderView(viewId)", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        # The early return based on same view must be gone
+        self.assertNotIn("if (activeView === viewId) return;", snippet)
+        # _renderView must always be called
+        self.assertIn("_renderView(viewId)", snippet)
+
+    def test_render_view_helper_exists(self):
+        """_renderView helper must exist and handle all views."""
+        self.assertIn("function _renderView(viewId)", _HTML)
+        fn_start = _HTML.index("function _renderView(viewId)")
+        snippet = _HTML[fn_start:fn_start + 600]
+        self.assertIn("'tasks'", snippet)
+        self.assertIn("'overview'", snippet)
+        self.assertIn("'sessions'", snippet)
+
+    def test_load_session_calls_render_view_after_success(self):
+        """loadSession must call _renderView(activeView) after successfully loading."""
+        fn_start = _HTML.index("async function loadSession()")
+        fn_end = _HTML.index("} catch(e) {", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("_renderView(activeView)", snippet)
+
+    def test_agent_badge_no_hardcoded_claude_fallback(self):
+        """agentBadge must not fall back to hardcoded 'claude' string."""
+        fn_start = _HTML.index("async function init()")
+        fn_end = fn_start + 1500
+        snippet = _HTML[fn_start:fn_end]
+        # Must not assign hardcoded 'claude'
+        self.assertNotIn("agentBadge.textContent = 'claude'", snippet)
+
+    def test_session_agent_updates_badge(self):
+        """loadSession must update agentBadge from actual session data."""
+        fn_start = _HTML.index("async function loadSession()")
+        fn_end = _HTML.index("} catch(e) {", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("agentBadgeEl", snippet)
+        self.assertIn("sessionAgent", snippet)

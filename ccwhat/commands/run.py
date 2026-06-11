@@ -34,6 +34,34 @@ def _marker_path(port: int) -> Path:
     return Path(tempfile.gettempdir()) / f"ccwhat-proxy-{port}.pid"
 
 
+def _viewer_agent_marker_path(port: int) -> Path:
+    """Return path to the marker file tracking which agent the viewer serves."""
+    import tempfile
+    return Path(tempfile.gettempdir()) / f"ccwhat-viewer-{port}.agent"
+
+
+def _viewer_agent_matches(port: int, agent_name: str) -> bool:
+    """Return True if an existing viewer on this port serves the given agent."""
+    marker = _viewer_agent_marker_path(port)
+    if not marker.exists():
+        return False
+    try:
+        return marker.read_text().strip() == agent_name
+    except OSError:
+        return False
+
+
+def _write_viewer_agent_marker(port: int, agent_name: str) -> None:
+    try:
+        _viewer_agent_marker_path(port).write_text(agent_name)
+    except OSError:
+        pass
+
+
+def _clear_viewer_agent_marker(port: int) -> None:
+    _viewer_agent_marker_path(port).unlink(missing_ok=True)
+
+
 def _proxy_port_in_use(port: int) -> bool:
     """Return True if something is listening on localhost:port."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -168,7 +196,11 @@ def _start_managed_web(
 
     url = viewer_url(port)
     if _proxy_port_in_use(port):
-        existing_agent = _probe_viewer_agent(port)
+        # Use API probe first (most reliable), fall back to file-based marker
+        existing_agent = _probe_viewer_agent(port) or (
+            _viewer_agent_marker_path(port).read_text().strip()
+            if _viewer_agent_marker_path(port).exists() else None
+        )
         if existing_agent is not None and existing_agent != agent_name:
             click.echo(
                 f"Error: viewer port {port} is already serving agent '{existing_agent}', "
@@ -198,6 +230,7 @@ def _start_managed_web(
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    _write_viewer_agent_marker(port, agent_name)
     click.echo(f"Viewer: {url}")
     open_viewer(port)
     return server
@@ -231,11 +264,13 @@ def _probe_viewer_agent(port: int) -> str | None:
     return None
 
 
-def _stop_managed_web(server: HTTPServer | None) -> None:
+def _stop_managed_web(server: HTTPServer | None, web_port: int | None = None) -> None:
     if server is None:
         return
     server.shutdown()
     server.server_close()
+    if web_port is not None:
+        _clear_viewer_agent_marker(web_port)
 
 
 _KNOWN_BINARY_PATHS: dict[str, str] = {
@@ -412,6 +447,6 @@ def run(
             except subprocess.TimeoutExpired:
                 proxy_proc.kill()
             _marker_path(port).unlink(missing_ok=True)
-        _stop_managed_web(web_server)
+        _stop_managed_web(web_server, web_port)
 
     sys.exit(exit_code)
