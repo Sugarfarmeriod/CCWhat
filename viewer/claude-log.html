@@ -254,6 +254,76 @@ body {
   .turn-child:hover { background: var(--bg-elevated); }
   .turn-child.active { background: color-mix(in srgb, var(--accent) 8%, var(--bg-base)) !important; border-left-color: var(--accent); }
 
+  /* ── Turn-first Session view ─────────────────────────────────────────── */
+  .turn-list { display: flex; flex-direction: column; gap: 0; overflow-y: auto; height: 100%; }
+  .turn-group-hdr {
+    font-size: 10px; font-weight: 600; color: var(--text-tertiary); letter-spacing: .06em;
+    padding: 8px 10px 4px; text-transform: uppercase; border-bottom: 1px solid var(--border);
+    background: var(--bg-base); position: sticky; top: 0; z-index: 1;
+  }
+  .turn-card {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none;
+    transition: background .1s; position: relative;
+  }
+  .turn-card:hover { background: var(--bg-surface); }
+  .turn-card.selected {
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
+    border-left: 3px solid var(--accent); padding-left: 9px;
+  }
+  .turn-card-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .turn-card-label { font-size: 11px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .turn-card-summary { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .turn-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+  .turn-meta-badge {
+    font-size: 10px; padding: 1px 5px; border-radius: 3px;
+    background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border);
+  }
+  .turn-meta-badge.error { background: rgba(248,81,73,0.1); color: var(--danger); border-color: rgba(248,81,73,0.25); }
+  .turn-task-badge {
+    font-size: 10px; padding: 1px 5px; border-radius: 3px; cursor: pointer;
+    background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.3);
+    white-space: nowrap;
+  }
+  .turn-task-badge:hover { background: rgba(88,166,255,0.22); }
+  /* Turn detail panel */
+  .turn-detail { padding: 14px; overflow-y: auto; }
+  .turn-detail-hdr {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .turn-detail-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+  .turn-detail-group { font-size: 11px; color: var(--text-tertiary); }
+  .turn-detail-section { margin-bottom: 14px; }
+  .turn-detail-label {
+    font-size: 10px; font-weight: 600; color: var(--text-tertiary); letter-spacing: .06em;
+    text-transform: uppercase; margin-bottom: 5px;
+  }
+  .turn-detail-text {
+    font-size: 12px; color: var(--text-primary); white-space: pre-wrap; word-break: break-word;
+    background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 10px; max-height: 180px; overflow-y: auto;
+  }
+  .turn-tool-row {
+    font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 4px; background: var(--bg-surface);
+  }
+  .turn-tool-name { font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
+  .turn-tool-arg { color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px; }
+  .turn-error-row {
+    font-size: 11px; padding: 5px 8px; border-radius: var(--radius-sm); margin-bottom: 4px;
+    background: rgba(248,81,73,0.07); border: 1px solid rgba(248,81,73,0.2); color: var(--danger);
+  }
+  .turn-raw-details summary {
+    font-size: 10px; color: var(--text-tertiary); cursor: pointer; user-select: none; padding: 2px 0;
+  }
+  .turn-raw-details pre {
+    font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary);
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px; overflow: auto; max-height: 240px; white-space: pre-wrap; word-break: break-all;
+    margin-top: 4px;
+  }
+
   .entry-item {
     padding: 8px 10px; border-bottom: 1px solid var(--border);
     cursor: pointer; transition: background .1s;
@@ -1148,6 +1218,86 @@ function rebuildCanonicalNavIndex() {
   }
 }
 
+// ── Turn navigation index ────────────────────────────────────────────────
+function rebuildAllGroupTurns() {
+  allGroupTurns = groups.map(g => ({
+    groupId: g.id,
+    label: g.label,
+    turns: buildTurns(g.entries, g.id),
+  }));
+  buildTurnNavigationIndex();
+}
+
+function buildTurnNavigationIndex() {
+  turnNavigationIndex.byFileAnchor.clear();
+  turnNavigationIndex.byEventId.clear();
+  turnNavigationIndex.byUuid.clear();
+  turnNavigationIndex.byTurnKey.clear();
+
+  for (const { groupId, turns } of allGroupTurns) {
+    for (const turn of turns) {
+      if (turn._isPreamble) continue;
+      const tk = turn.turnKey;
+      turnNavigationIndex.byTurnKey.set(tk, { groupId, turn });
+      const allTurnEntries = turn.root ? [turn.root, ...turn.children] : turn.children;
+      for (const e of allTurnEntries) {
+        const nav = { groupId, turnKey: tk, turnIndex: turn._turnIdx, entryIdx: e._idx };
+        if (e._gid === 'main' && e._fileLine)
+          turnNavigationIndex.byFileAnchor.set(`main:${e._fileLine}`, nav);
+        if (e._gid && e._gid !== 'main' && e._fileLine) {
+          const aid = e._gid.replace(/^sa-/, '');
+          turnNavigationIndex.byFileAnchor.set(`agent-${aid}:${e._fileLine}`, nav);
+        }
+        if (e._eventId) turnNavigationIndex.byEventId.set(e._eventId, nav);
+        if (e.uuid) turnNavigationIndex.byUuid.set(e.uuid, nav);
+        if (e.message?.id) turnNavigationIndex.byUuid.set(e.message.id, nav);
+      }
+    }
+  }
+}
+
+// Lookup which Turn an eventId belongs to. Returns {groupId, turnKey, turn} or null.
+function lookupTurnByEventId(eventId) {
+  if (!eventId) return null;
+  const nav = turnNavigationIndex.byFileAnchor.get(eventId)
+    || turnNavigationIndex.byEventId.get(eventId)
+    || turnNavigationIndex.byUuid.get(eventId);
+  if (!nav) return null;
+  const res = turnNavigationIndex.byTurnKey.get(nav.turnKey);
+  return res ? { ...res, entryIdx: nav.entryIdx } : null;
+}
+
+// After task segments are loaded, annotate turns with associated taskIds.
+function rebuildTurnTaskAssociation(taskData) {
+  if (!taskData?.tasks) return;
+  // Clear existing taskIds
+  for (const { turns } of allGroupTurns)
+    for (const t of turns) t.taskIds = [];
+
+  for (const task of taskData.tasks) {
+    const startNav = task.startEventId ? (
+      turnNavigationIndex.byFileAnchor.get(task.startEventId) ||
+      turnNavigationIndex.byEventId.get(task.startEventId)
+    ) : null;
+    const endNav = task.endEventId ? (
+      turnNavigationIndex.byFileAnchor.get(task.endEventId) ||
+      turnNavigationIndex.byEventId.get(task.endEventId)
+    ) : null;
+    if (!startNav && !endNav) continue;
+    // Mark turns in range as associated with this task
+    for (const { groupId, turns } of allGroupTurns) {
+      if (startNav && startNav.groupId !== groupId) continue;
+      const startIdx = startNav ? startNav.turnIndex : 0;
+      const endIdx = endNav ? endNav.turnIndex : turns.length - 1;
+      for (const t of turns) {
+        if (t._isPreamble) continue;
+        if (t._turnIdx >= startIdx && t._turnIdx <= endIdx)
+          if (!t.taskIds.includes(task.taskId)) t.taskIds.push(task.taskId);
+      }
+    }
+  }
+}
+
 function canonicalPageId(pageId) {
   if (pageId === 'raw-events' || pageId === 'session' || pageId === 'evidence') return 'sessions';
   return pageId || 'sessions';
@@ -1294,10 +1444,174 @@ function renderSessionPage() {
     detailPanel.innerHTML = '<div class="empty-detail">没有可展示的日志详情</div>';
     return;
   }
-  renderList();
-  if (selectedIdx < 0) {
-    detailPanel.innerHTML = '<div class="empty-detail">← 点击左侧列表项查看原始日志</div>';
+  renderTurnList();
+  if (!selectedTurnKey) {
+    detailPanel.innerHTML = '<div class="empty-detail">← 点击 Turn 查看详情</div>';
+  } else {
+    const found = lookupTurnByKey(selectedTurnKey);
+    if (found) renderTurnDetailInPanel(found.groupId, found.turn);
+    else detailPanel.innerHTML = '<div class="empty-detail">← 点击 Turn 查看详情</div>';
   }
+}
+
+function lookupTurnByKey(turnKey) {
+  return turnNavigationIndex.byTurnKey.get(turnKey) || null;
+}
+
+function renderTurnList() {
+  const list = document.getElementById('entryList');
+  if (!list) return;
+  if (!allGroupTurns.length) {
+    list.innerHTML = '<div class="placeholder">无 Turn 数据</div>';
+    return;
+  }
+  list.innerHTML = '';
+  const taskData = (() => {
+    const sid = document.getElementById('sessionSel').value;
+    return sid ? taskSegmentReports[sid] : null;
+  })();
+  const taskIndex = {};
+  if (taskData?.tasks) {
+    taskData.tasks.forEach((t, i) => { taskIndex[t.taskId] = i + 1; });
+  }
+
+  for (const { groupId, label, turns } of allGroupTurns) {
+    const visibleTurns = turns.filter(t => !t._isPreamble);
+    if (!visibleTurns.length) continue;
+
+    // Group header
+    const gHdr = document.createElement('div');
+    gHdr.className = 'turn-group-hdr';
+    gHdr.textContent = label;
+    list.appendChild(gHdr);
+
+    for (const turn of visibleTurns) {
+      const card = document.createElement('div');
+      card.className = 'turn-card' + (turn.turnKey === selectedTurnKey ? ' selected' : '');
+      card.dataset.turnKey = turn.turnKey;
+      card.dataset.groupId = groupId;
+
+      // Task badges
+      const taskBadgeHtml = (turn.taskIds || []).map(tid => {
+        const n = taskIndex[tid];
+        const display = n ? `Task ${n}` : esc(tid.slice(0, 8));
+        return `<span class="turn-task-badge" data-task-id="${esc(tid)}" onclick="event.stopPropagation();navigateToPage('tasks');selectTaskSegment('${escRaw(tid)}','${escRaw(document.getElementById('sessionSel').value)}')">${display}</span>`;
+      }).join('');
+
+      // Meta badges
+      const metaHtml = [
+        turn.entryCount ? `<span class="turn-meta-badge">${turn.entryCount} entries</span>` : '',
+        turn.toolCount ? `<span class="turn-meta-badge">${turn.toolCount} tools</span>` : '',
+        turn.errorCount ? `<span class="turn-meta-badge error">${turn.errorCount} errors</span>` : '',
+      ].filter(Boolean).join('');
+
+      card.innerHTML =
+        `<div class="turn-card-hdr"><span class="turn-card-label">${esc(turn.label)}</span>${taskBadgeHtml}</div>` +
+        `<div class="turn-card-summary">${esc(turn.userSummary || '—')}</div>` +
+        (metaHtml ? `<div class="turn-meta">${metaHtml}</div>` : '');
+
+      card.addEventListener('click', () => selectTurn(groupId, turn.turnKey));
+      list.appendChild(card);
+    }
+  }
+}
+
+function selectTurn(groupId, turnKey) {
+  selectedTurnKey = turnKey;
+  // Re-render turn list to update selection highlight
+  renderTurnList();
+  const found = lookupTurnByKey(turnKey);
+  if (found) renderTurnDetailInPanel(found.groupId, found.turn);
+}
+
+function renderTurnDetailInPanel(groupId, turn) {
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return;
+  panel.innerHTML = buildTurnDetailHtml(groupId, turn);
+}
+
+function buildTurnDetailHtml(groupId, turn) {
+  const allTurnEntries = turn.root ? [turn.root, ...turn.children] : turn.children;
+  let html = `<div class="turn-detail">`;
+  html += `<div class="turn-detail-hdr">
+    <span class="turn-detail-title">${esc(turn.label)}</span>
+    <span class="turn-detail-group">${esc(groupId)}</span>`;
+  if (turn.startFileLine != null)
+    html += `<span class="turn-meta-badge">lines ${turn.startFileLine}–${turn.endFileLine || turn.startFileLine}</span>`;
+  html += `</div>`;
+
+  // User text
+  const userText = turn.root ? extractFullText(turn.root) : '';
+  if (userText) {
+    html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div>
+      <div class="turn-detail-text">${esc(userText)}</div></div>`;
+  }
+
+  // Assistant text (all assistant entries)
+  const asstTexts = turn.children
+    .filter(e => e.type === 'assistant')
+    .map(extractFullText).filter(Boolean);
+  if (asstTexts.length) {
+    html += `<div class="turn-detail-section"><div class="turn-detail-label">助手回复</div>
+      <div class="turn-detail-text">${esc(asstTexts.join('\n\n'))}</div></div>`;
+  }
+
+  // Tool calls
+  const toolEntries = allTurnEntries.filter(e => {
+    const c = e.message?.content;
+    return Array.isArray(c) && c.some(b => b.type === 'tool_use');
+  });
+  if (toolEntries.length) {
+    let toolsHtml = '';
+    for (const e of toolEntries) {
+      for (const b of (e.message?.content || [])) {
+        if (b.type !== 'tool_use') continue;
+        const argStr = b.input ? JSON.stringify(b.input) : '';
+        const argPreview = trunc(argStr, 100);
+        toolsHtml += `<div class="turn-tool-row">
+          <span class="turn-tool-name">${esc(b.name || '?')}</span>
+          ${argPreview ? `<span class="turn-tool-arg"> ${esc(argPreview)}</span>` : ''}
+        </div>`;
+      }
+    }
+    html += `<div class="turn-detail-section"><div class="turn-detail-label">工具调用 (${turn.toolCount})</div>${toolsHtml}</div>`;
+  }
+
+  // Errors
+  if (turn.errorCount) {
+    let errHtml = '';
+    for (const e of allTurnEntries) {
+      const c = Array.isArray(e.message?.content) ? e.message.content : [];
+      for (const b of c) {
+        if (b.type === 'tool_result' && b.is_error) {
+          const txt = Array.isArray(b.content) ? b.content.map(x=>x.text||'').join(' ') : String(b.content || '');
+          errHtml += `<div class="turn-error-row">${esc(trunc(txt, 200))}</div>`;
+        }
+      }
+    }
+    if (errHtml)
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">错误</div>${errHtml}</div>`;
+  }
+
+  // Raw JSON (collapsed)
+  html += `<div class="turn-detail-section"><details class="turn-raw-details">
+    <summary>原始 JSON (${allTurnEntries.length} entries)</summary>
+    <pre>${esc(JSON.stringify(allTurnEntries.map(e => ({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, message: e.message })), null, 2))}</pre>
+  </details></div>`;
+
+  html += `</div>`;
+  return html;
+}
+
+function extractFullText(e) {
+  if (!e) return '';
+  const c = e.message?.content ?? e.content;
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) {
+    const texts = c.filter(b => b.type === 'text' && !/^<system-reminder|^<local-command/.test(b.text || ''));
+    return texts.map(b => b.text || '').join('\n').trim();
+  }
+  return '';
 }
 
 function renderTasksPage() {
@@ -1715,6 +2029,16 @@ let selectedTaskSegmentId = null;
 let currentLoadedSessionId = null;   // set only after session loads successfully
 const eventIdToEntryIdx = new Map(); // eventId string → allEntries index
 
+// Turn-first session view state
+let selectedTurnKey = null;       // currently selected turn: "groupId:turnIdx"
+let allGroupTurns = [];           // [{groupId, label, turns: [...rich turn objects]}]
+const turnNavigationIndex = {
+  byFileAnchor: new Map(),        // "main:fileLine" or "agent-X:fileLine" -> navTarget
+  byEventId: new Map(),           // normalized eventId -> navTarget
+  byUuid: new Map(),              // uuid / message.id -> navTarget
+  byTurnKey: new Map(),           // turnKey -> {groupId, turn}
+}; // navTarget: {groupId, turnKey, turnIndex, entryIdx}
+
 function promptFingerprint(text) {
   let h = 0;
   const s = String(text || '');
@@ -1864,6 +2188,7 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
   try {
     const data = await requestTaskSegments(sessionId);
     taskSegmentReports[sessionId] = data;
+    rebuildTurnTaskAssociation(data);
     const currentSession = document.getElementById('sessionSel').value;
     if (currentSession !== sessionId) return;
     selectedTaskSegmentId = data.tasks && data.tasks.length ? data.tasks[0].taskId : null;
@@ -2009,18 +2334,22 @@ function renderTaskDetailWithTabs(task, debugBoundaries) {
 }
 
 function renderTabOverview(task) {
+  const startTurn = lookupTurnByEventId(task.startEventId);
+  const endTurn = lookupTurnByEventId(task.endEventId);
+  const startLabel = startTurn ? startTurn.turn.label : (task.startEventId ? '无法定位 Turn' : '—');
+  const endLabel = endTurn ? endTurn.turn.label : (task.endEventId ? '无法定位 Turn' : '—');
   const overviewRows = [
-    ['起始事件', task.startEventId, true],
-    ['结束事件', task.endEventId, true],
+    ['开始', startLabel],
+    ['结束', endLabel],
     ['类型', task.taskType],
     ['状态', task.status],
   ];
-  const overviewHtml = overviewRows.map(([k, v, mono]) =>
+  const overviewHtml = overviewRows.map(([k, v]) =>
     `<div class="task-detail-row"><span class="task-detail-key">${esc(k)}</span>
-     <span class="${mono ? 'task-detail-val' : ''}">${esc(String(v || '—'))}</span></div>`
+     <span>${esc(String(v || '—'))}</span></div>`
   ).join('');
-  const startNav = makeNavBtn('定位开始事件', task.startEventId);
-  const endNav = makeNavBtn('定位结束事件', task.endEventId);
+  const startNav = makeNavTurnBtn('定位开始 Turn', task.startEventId);
+  const endNav = makeNavTurnBtn('定位结束 Turn', task.endEventId);
   const fwEntries = Object.entries(task.fileWeights || {}).sort((a, b) => b[1] - a[1]);
   const maxW = fwEntries.length ? fwEntries[0][1] : 1;
   const fwHtml = fwEntries.length === 0 ? '<span class="evidence-empty">无</span>' :
@@ -2068,22 +2397,41 @@ function renderTabEvidence(task) {
 }
 
 function renderTabTurns(task) {
-  let html = '<div class="task-detail-section"><div class="task-detail-label">Turn 范围</div>';
-  const startNav = makeNavBtn('定位开始事件', task.startEventId);
-  const endNav = makeNavBtn('定位结束事件', task.endEventId);
-  html += `<div class="task-detail-row"><span class="task-detail-key">开始事件</span><span class="task-detail-val">${esc(task.startEventId || '—')}</span>${startNav}</div>`;
-  html += `<div class="task-detail-row"><span class="task-detail-key">结束事件</span><span class="task-detail-val">${esc(task.endEventId || '—')}</span>${endNav}</div>`;
+  const startTurn = lookupTurnByEventId(task.startEventId);
+  const endTurn = lookupTurnByEventId(task.endEventId);
+  const startLabel = startTurn ? startTurn.turn.label : (task.startEventId ? '无法定位 Turn' : '—');
+  const endLabel = endTurn ? endTurn.turn.label : (task.endEventId ? '无法定位 Turn' : '—');
+  const startNav = makeNavTurnBtn('定位开始 Turn', task.startEventId);
+  const endNav = makeNavTurnBtn('定位结束 Turn', task.endEventId);
 
-  // Try to find all entries in this task's range
-  const startIdx = findEntryByEventId(task.startEventId);
-  const endIdx = findEntryByEventId(task.endEventId);
-  if (startIdx >= 0 && endIdx >= 0) {
-    const rangeEntries = allEntries.slice(startIdx, endIdx + 1);
-    const turnKeys = new Set();
-    for (const e of rangeEntries) if (e._turnKey) turnKeys.add(e._turnKey);
-    html += `<div class="task-detail-row" style="margin-top:6px"><span class="task-detail-key">关联 Turns</span><span>${turnKeys.size} turns, ${rangeEntries.length} entries</span>
-      <button class="nav-btn" onclick="navigateToEventId('${escRaw(task.startEventId)}')">定位首个 turn</button></div>`;
+  let html = '<div class="task-detail-section"><div class="task-detail-label">Turn 范围</div>';
+  html += `<div class="task-detail-row"><span class="task-detail-key">开始</span><span>${esc(startLabel)}</span>${startNav}</div>`;
+  html += `<div class="task-detail-row"><span class="task-detail-key">结束</span><span>${esc(endLabel)}</span>${endNav}</div>`;
+
+  // Show Turn list for this task's range
+  const startTIdx = startTurn?.turn._turnIdx ?? -1;
+  const endTIdx = endTurn?.turn._turnIdx ?? -1;
+  const groupId = startTurn?.groupId ?? endTurn?.groupId;
+  const grp = groupId ? allGroupTurns.find(g => g.groupId === groupId) : null;
+  if (grp && startTIdx >= 0 && endTIdx >= 0) {
+    const rangeTurns = grp.turns.filter(t => !t._isPreamble && t._turnIdx >= startTIdx && t._turnIdx <= endTIdx);
+    if (rangeTurns.length) {
+      html += `<div style="margin-top:8px"><div class="task-detail-label">包含 Turns (${rangeTurns.length})</div>`;
+      for (const t of rangeTurns) {
+        html += `<div class="task-detail-row" style="cursor:pointer" onclick="navigateToTurn('${escRaw(groupId)}','${escRaw(t.turnKey)}')">
+          <span class="turn-card-label" style="min-width:52px">${esc(t.label)}</span>
+          <span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.userSummary || '—')}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
   }
+
+  // Folded debug: raw event IDs
+  html += `<details style="margin-top:8px"><summary style="font-size:10px;color:var(--text-tertiary);cursor:pointer">▸ 调试：原始 event ID</summary>
+    <div style="margin-top:4px;font-size:10px;font-family:var(--font-mono);color:var(--text-tertiary)">
+      startEventId: ${esc(task.startEventId || '—')}<br>endEventId: ${esc(task.endEventId || '—')}
+    </div></details>`;
   html += '</div>';
   return html;
 }
@@ -2216,6 +2564,33 @@ function makeNavBtn(label, eventId) {
   return `<button class="nav-btn" onclick="navigateToEventId('${escRaw(eventId)}')">${esc(label)}</button>`;
 }
 
+// Turn-based navigation button. Looks up the Turn via navigationIndex.
+function makeNavTurnBtn(label, eventId) {
+  const found = lookupTurnByEventId(eventId);
+  if (!found) {
+    return `<button class="nav-btn" disabled title="无法定位 Turn (${esc(eventId || '—')})">${esc(label)}</button>`;
+  }
+  return `<button class="nav-btn" onclick="navigateToTurn('${escRaw(found.groupId)}','${escRaw(found.turn.turnKey)}')">${esc(label)}</button>`;
+}
+
+// Navigate to Session page and select the target Turn.
+function navigateToTurn(groupId, turnKey) {
+  selectedTurnKey = turnKey;
+  navigateToPage('sessions');
+  // renderSessionPage is called by renderPage via navigateToPage;
+  // scroll to the selected card after render
+  requestAnimationFrame(() => {
+    const list = document.getElementById('entryList');
+    if (!list) return;
+    const card = list.querySelector(`.turn-card[data-turn-key="${CSS.escape(turnKey)}"]`);
+    if (card) {
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      card.classList.add('nav-flash');
+      setTimeout(() => card.classList.remove('nav-flash'), 1200);
+    }
+  });
+}
+
 // 4.1: focus an entry in the left nav without replacing the right task detail
 function focusEntryInNav(idx) {
   const e = allEntries[idx];
@@ -2279,10 +2654,13 @@ function _showNavHint(msg) {
 }
 
 // 4.2: navigate to event, switching to raw-events page
+// Explicitly calls renderList() to ensure raw event entries are in DOM
+// (Session page defaults to Turn-first view; this overrides to raw events).
 function navigateToEventId(eventId) {
   const idx = findEntryByEventId(eventId);
   if (idx < 0) return;
   navigateToPage('raw-events');
+  renderList();
   focusEntryInNav(idx);
 }
 
@@ -2542,8 +2920,11 @@ async function loadSession() {
     }
 
     selectedIdx = -1;
+    selectedTurnKey = null;
+    rebuildCanonicalNavIndex();
+    rebuildAllGroupTurns();
     renderList();
-    document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">← 点击列表项查看原始日志</div>';
+    document.getElementById('detailPanel').innerHTML = '<div class="empty-detail">← 点击 Turn 或列表项查看详情</div>';
 
     // Enable export button
     const exportBtn = document.getElementById('exportBtn');
@@ -2570,6 +2951,8 @@ function resetAnalysisState() {
   }
   selectedTaskSegmentId = null;
   currentLoadedSessionId = null;
+  selectedTurnKey = null;
+  allGroupTurns = [];
   updateTaskSegmentsButton();
 }
 
@@ -2853,11 +3236,13 @@ function isEntryHiddenByFilter(idx) {
 }
 
 // Split group entries into turns: each turn starts at a real user-text entry.
-// Also tags each entry with _turnKey for auto-expand on selectEntry.
+// Tags each entry with _turnKey for auto-expand on selectEntry.
+// Returns rich Turn objects with label, summary, toolCount, errorCount, taskIds.
 function buildTurns(entries, gid) {
   const turns = [];
   let current = null;
   let turnIdx = 0;
+  let userTurnCount = 0; // 1-based label counter (not counting preamble)
 
   for (const e of entries) {
     const isRealUser = e.type === 'user' && (
@@ -2866,25 +3251,63 @@ function buildTurns(entries, gid) {
     );
 
     if (isRealUser) {
-      current = { root: e, children: [], _turnIdx: turnIdx++ };
+      current = { root: e, children: [], _turnIdx: turnIdx++, _isPreamble: false };
       const tk = `${gid}:${current._turnIdx}`;
+      current.turnKey = tk;
+      current.groupId = gid;
+      current.labelIndex = ++userTurnCount;
+      current.label = `Turn ${userTurnCount}`;
+      current.taskIds = [];
       e._turnKey = tk;
-      e._turnRootIdx = e._idx;   // 3.1: stable turn root index
+      e._turnRootIdx = e._idx;   // stable turn root index
       turns.push(current);
     } else if (current) {
       e._turnKey = `${gid}:${current._turnIdx}`;
-      e._turnRootIdx = current.root ? current.root._idx : e._idx;  // 3.1
+      e._turnRootIdx = current.root ? current.root._idx : e._idx;
       current.children.push(e);
     } else {
       // Preamble before first user message
       if (!turns.length) {
         current = { root: null, children: [], _isPreamble: true, _turnIdx: turnIdx++ };
+        current.turnKey = `${gid}:${current._turnIdx}`;
+        current.groupId = gid;
+        current.label = 'Preamble';
+        current.labelIndex = 0;
+        current.taskIds = [];
         turns.push(current);
       }
       e._turnKey = `${gid}:${current._turnIdx}`;
       e._turnRootIdx = e._idx;
       current.children.push(e);
     }
+  }
+  // Compute rich metadata for each non-preamble turn
+  for (const t of turns) {
+    if (t._isPreamble) continue;
+    const allTurnEntries = t.root ? [t.root, ...t.children] : t.children;
+    // userSummary: first meaningful text from root entry
+    t.userSummary = t.root ? trunc(summarize(t.root), 90) : '';
+    // assistantSummary: first assistant text entry
+    const firstAsst = t.children.find(e => e.type === 'assistant');
+    t.assistantSummary = firstAsst ? trunc(summarize(firstAsst), 60) : '';
+    // toolCount: all tool_use blocks across all entries
+    t.toolCount = allTurnEntries.reduce((n, e) => {
+      if (!e.message?.content || !Array.isArray(e.message.content)) return n;
+      return n + e.message.content.filter(b => b.type === 'tool_use').length;
+    }, 0);
+    // errorCount: entries with error-like signals
+    t.errorCount = allTurnEntries.filter(e => {
+      if (!e.message?.content) return false;
+      const c = Array.isArray(e.message.content) ? e.message.content : [];
+      return c.some(b => (b.type === 'tool_result' && b.is_error) ||
+                         (b.type === 'text' && /error|traceback|exception/i.test(b.text || '')));
+    }).length;
+    // entryCount: total entries in this turn
+    t.entryCount = allTurnEntries.length;
+    // fileLine range
+    const lines = allTurnEntries.map(e => e._fileLine).filter(Boolean);
+    t.startFileLine = lines.length ? Math.min(...lines) : null;
+    t.endFileLine = lines.length ? Math.max(...lines) : null;
   }
   return turns;
 }
