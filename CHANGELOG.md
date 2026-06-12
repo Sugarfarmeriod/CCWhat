@@ -2,6 +2,38 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v1.0.0 - 2026-06-12
+
+### 正式发布：Session Trace 双视图 + 自动任务切分闭环
+
+V1.0.0 正式发布。相比 Preview 版，核心补齐了 Session 页面的双视图浏览能力和任务切分闭环。
+
+### 新增
+
+- **Session Trace 双视图切换**：顶部新增 `默认视图` / `调试视图` 切换控件。
+- **默认视图**：只展示主执行链路 Step，隐藏普通内部事件。默认视图包含：
+  - `Step N` 连续编号
+  - 用户请求（user request）、思考过程（thinking）、Agent 文本回复（agent text）、工具调用（tool call）、工具结果（tool result）
+  - 包含 error/warning/failed/denied 等异常信号的内部事件也会自动提升为 primary Step
+- **调试视图**：展示完整 Turn 时间线，保留原始 `Turn N` 标签和时序，包括默认视图中隐藏的内部事件：
+  - `permission-mode`、`last-prompt`、`PostToolUse` hook
+  - `file-history-snapshot`、`queue-operation`
+  - `system`、`context` 注入、`attachment` 元数据、`unknown` 事件
+  - 调试视图下保留底层类型筛选（user/assistant/system/attachment/perm/fhs/queue/other）作为高级筛选
+- **自动任务切分闭环**：任务切分完成后，Session Trace 自动切换为 `Task -> 会话 -> Step/Turn` 树形结构，无需额外点击确认。
+- **Turn Detail 完整证据**：右侧详情区始终展示当前选中 Turn 的完整证据（不再受左侧筛选影响），包括完整 tool input/output、thinking 全文、internal event 结构化字段、可展开 raw JSON 和 entry/block 定位信息。
+- **任务切分定位强化**：Task 起止事件可稳定映射回 Session Trace Turn，支持 OpenCode/Codex adapter 的 normalized event id 稳定性。
+
+### 改进
+
+- 默认进入 Session 页面，默认使用默认视图，减少首屏信息噪声。
+- 类型筛选降级为调试视图下的高级筛选，默认视图不显示类型筛选栏。
+- 搜索支持两步过滤：默认视图下搜索主执行 Step，调试视图下搜索完整 Turn + 类型筛选。
+- 切换视图时，当前选中节点尽量保持选中；internal Turn 切回默认视图时自动回退到父会话并给出切换提示。
+- 保留 Tasks 页面的确认状态机制，确认只影响 UI badge，不改变 Tree 结构。
+
+---
+
 ## v1.0.0 preview - 2026-06-11
 
 ### 新增
@@ -68,7 +100,7 @@
 - `ccwhat -- <target>` 会根据启动目标推断 agent 类型，并把类型传给 Viewer。
 - Codex 和 OpenCode 先按各自本地日志结构适配，不假设它们和 Claude Code JSONL 相同。
 
-## v0.1.0 - 初始版本
+## v0.1.0 - 2026-05-28（初始版本）
 
 ### 新增
 

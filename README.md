@@ -2,11 +2,11 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v1.0.0_preview` · [更新日志](CHANGELOG.md)
+当前版本：`v1.0.0` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-`v1.0.0_preview` 新增 Task Trace Workbench 和第一版规则任务切分。**现在 codelenagent 已支持从长 Session 中识别多个 Coding Task，并继续支持 Claude Code（VS Code）、Codex 和 OpenCode。** 日志查看、任务切分、证据定位、分析报告、时间轴、工具耗时统计、Agent 摘要等核心功能对三者均可用。
+`v1.0.0` 正式发布：**自动任务切分 + Session Trace 双视图**。任务切分完成后，Session 页面自动展示 `Task → 会话 → Turn` 树形结构。默认视图只显示主执行 Step（用户请求、思考过程、Agent 回复、工具调用/结果），调试视图展示完整 Turn 时间线（含 system/context/permission/snapshot/queue 等内部事件）。右侧 Detail 始终展示完整证据和原始 JSON。**同时支持 Claude Code（VS Code）、Codex 和 OpenCode 三类 Agent 的日志查看、任务切分、证据定位、分析报告、时间轴、工具耗时统计和 Agent 摘要。**
 
 **你的 AI 又嘴硬了？see see what！看看他在做什么。**
 
