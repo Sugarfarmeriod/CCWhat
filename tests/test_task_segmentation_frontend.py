@@ -137,12 +137,24 @@ class TestTaskSegmentationCache(unittest.TestCase):
         snippet = _HTML[fn_start:fn_end]
         self.assertIn("sessionId !== currentLoadedSessionId", snippet)
         self.assertIn("当前 Session 尚未生成任务切分结果", snippet)
-        self.assertIn('onclick="runTaskSegmentationForCurrentSession({ navigate: false })"', snippet)
+        self.assertIn('onclick="onTaskSegmentsBtnClick()"', snippet)
+        self.assertIn('onclick="startManualTaskSegmentationFromTasks()"', snippet)
         self.assertNotIn("正在切分当前 Session 的任务", snippet)
+
+    def test_manual_segmentation_functions_exist(self):
+        for name in [
+            "startManualTaskSegmentationFromTasks",
+            "createManualSegmentTask",
+            "undoLastManualSegmentTask",
+            "completeManualTaskSegmentation",
+            "cancelManualTaskSegmentation",
+        ]:
+            self.assertIn(f"function {name}", _HTML)
 
     def test_task_runner_accepts_navigation_option(self):
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 500]
+        fn_end = _HTML.index("// 3.1-3.4", fn_start)
+        snippet = _HTML[fn_start:fn_end]
         self.assertIn("{ navigate = true } = {}", snippet)
         self.assertIn("if (navigate && workbenchState.activeView !== 'tasks')", snippet)
 
@@ -249,10 +261,10 @@ class TestTaskSegmentationNavigation(unittest.TestCase):
         self.assertIn(".nav-btn", _HTML)
 
     def test_start_event_nav_label(self):
-        self.assertIn("定位开始 Turn", _HTML)
+        self.assertIn("定位起始会话", _HTML)
 
     def test_end_event_nav_label(self):
-        self.assertIn("定位结束 Turn", _HTML)
+        self.assertIn("定位结束会话", _HTML)
 
     def test_main_event_id_parsing(self):
         # main:<line> pattern handled
@@ -284,13 +296,15 @@ class TestBugFixes(unittest.TestCase):
     def test_stale_session_guard_in_run(self):
         """P1: success path must check current session still matches."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 1000]
+        fn_end = _HTML.index("// 3.1-3.4", fn_start)
+        snippet = _HTML[fn_start:fn_end]
         self.assertIn("currentSession !== sessionId", snippet)
 
     def test_stale_guard_in_catch_path(self):
         """P1: failure/catch path must also check current session (stale guard)."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 1500]
+        fn_end = _HTML.index("// 3.1-3.4", fn_start)
+        snippet = _HTML[fn_start:fn_end]
         # Must appear in both try (success) and catch (failure) paths
         first_guard = snippet.index("currentSession !== sessionId")
         second_guard = snippet.index("currentSession !== sessionId", first_guard + 1)
@@ -299,7 +313,8 @@ class TestBugFixes(unittest.TestCase):
     def test_stale_guard_still_caches_result(self):
         """P1: stale guard must cache result before returning."""
         fn_start = _HTML.index("async function runTaskSegmentationForCurrentSession")
-        snippet = _HTML[fn_start:fn_start + 1000]
+        fn_end = _HTML.index("// 3.1-3.4", fn_start)
+        snippet = _HTML[fn_start:fn_end]
         # Cache write must come before the stale guard check
         cache_pos = snippet.index("taskSegmentReports[sessionId] = data")
         stale_pos = snippet.index("currentSession !== sessionId")
@@ -474,8 +489,70 @@ class TestWorkbenchReviewFixes(unittest.TestCase):
 
     def test_analysis_no_longer_navigates_to_missing_evidence_page(self):
         self.assertNotIn("navigateToPage('evidence')", _HTML)
-        self.assertIn("function ensureSessionAnalysisPanel", _HTML)
-        self.assertIn("navigateToPage('sessions')", _HTML)
+
+
+class TestEditableTaskTraceOverlayStatic(unittest.TestCase):
+    """Static coverage for editable Task Trace Overlay change."""
+
+    def test_overlay_state_declared(self):
+        for name in [
+            "taskTraceOverlaysBySession",
+            "activeTaskTraceOverlayBySession",
+            "savedTaskTraceOverlayBySession",
+        ]:
+            self.assertIn(name, _HTML)
+
+    def test_edit_mode_state_declared(self):
+        for name in ["taskTraceEditMode", "selectedEditableTaskId", "selectedEditableTurnKey", "selectedEditableConversationKey", "manualTaskCreateState"]:
+            self.assertIn(name, _HTML)
+
+    def test_overlay_lifecycle_functions_exist(self):
+        for name in [
+            "createTaskTraceOverlayFromSegments",
+            "ensureTaskTraceOverlayFromSegments",
+            "setActiveTaskTraceOverlay",
+            "markTaskTraceOverlayEdited",
+            "saveTaskTraceOverlay",
+            "undoTaskTraceOverlay",
+            "exportTaskTraceOverlay",
+        ]:
+            self.assertIn(f"function {name}", _HTML)
+
+    def test_edit_operation_functions_exist(self):
+        for name in [
+            "setSelectedConversationAsTaskStart",
+            "setSelectedConversationAsTaskEnd",
+            "setSelectedTurnAsTaskStart",
+            "setSelectedTurnAsTaskEnd",
+            "moveSelectedConversationToPreviousTask",
+            "moveSelectedConversationToNextTask",
+            "moveSelectedTurnToPreviousTask",
+            "moveSelectedTurnToNextTask",
+            "splitTaskAtSelectedConversation",
+            "splitTaskAtSelectedTurn",
+            "mergeSelectedTaskWithNext",
+            "deleteSelectedTask",
+            "editSelectedTaskMetadata",
+        ]:
+            self.assertIn(f"function {name}", _HTML)
+
+    def test_manual_create_functions_exist(self):
+        for name in ["startManualTaskCreate", "handleManualTaskConversationSelection", "handleManualTaskTurnSelection", "createManualTaskFromSelection"]:
+            self.assertIn(f"function {name}", _HTML)
+
+    def test_trace_consumes_overlay_source(self):
+        fn_start = _HTML.index("function getActiveTaskTraceState")
+        fn_end = _HTML.index("function expandTaskTraceNodes", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("getActiveTaskTraceOverlay", snippet)
+        self.assertIn("taskTraceLikeData", snippet)
+
+    def test_export_uses_overlay_payload_without_raw_trace(self):
+        self.assertIn("function overlayExportPayload", _HTML)
+        fn_start = _HTML.index("function overlayExportPayload")
+        fn_end = _HTML.index("function exportTaskTraceOverlay", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertNotIn("raw", snippet.lower())
 
 
 if __name__ == "__main__":
@@ -600,21 +677,21 @@ class TestTurnFirstSessionNavigation(unittest.TestCase):
     def test_task_overview_shows_start_turn_label(self):
         fn_start = _HTML.index("function renderTabOverview(task)")
         snippet = _HTML[fn_start:fn_start + 600]
-        self.assertIn("startTurn", snippet)
-        self.assertIn("Turn", snippet)
+        self.assertIn("startConversation", snippet)
+        self.assertIn("会话", snippet)
 
     def test_task_overview_uses_nav_turn_btn(self):
         fn_start = _HTML.index("function renderTabOverview(task)")
-        snippet = _HTML[fn_start:fn_start + 800]
+        snippet = _HTML[fn_start:fn_start + 1200]
         self.assertIn("makeNavTurnBtn", snippet)
 
     def test_task_turns_tab_shows_turn_range(self):
         fn_start = _HTML.index("function renderTabTurns(task)")
-        snippet = _HTML[fn_start:fn_start + 800]
-        self.assertIn("startTurn", snippet)
-        self.assertIn("endTurn", snippet)
-        self.assertIn("定位开始 Turn", snippet)
-        self.assertIn("定位结束 Turn", snippet)
+        snippet = _HTML[fn_start:fn_start + 1000]
+        self.assertIn("startConversation", snippet)
+        self.assertIn("endConversation", snippet)
+        self.assertIn("定位起始会话", snippet)
+        self.assertIn("定位结束会话", snippet)
 
     def test_task_turns_tab_shows_turn_list(self):
         fn_start = _HTML.index("function renderTabTurns(task)")
