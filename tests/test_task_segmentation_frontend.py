@@ -771,3 +771,170 @@ class TestTurnFilterInteractions(unittest.TestCase):
         self.assertIn("const visibleTurnEntries", snippet)
         self.assertIn("visibleTurnEntries.length === 0", snippet)
         self.assertIn("visibleTurnEntries", snippet)
+
+
+class TestConversationMinimalTurnDataLayer(unittest.TestCase):
+    """task 6.1 — Conversation helper, minimal Turn helper, navigation index assertions."""
+
+    # ── Conversation helper ──────────────────────────────────────────────
+
+    def test_build_conversations_function_exists(self):
+        self.assertIn("function buildConversations", _HTML)
+
+    def test_is_real_user_request_function_exists(self):
+        self.assertIn("function isRealUserRequest", _HTML)
+
+    def test_build_conversations_returns_preamble_and_conversations(self):
+        fn = _HTML.index("function buildConversations")
+        snippet = _HTML[fn:fn + 1200]
+        self.assertIn("preamble", snippet)
+        self.assertIn("conversations", snippet)
+
+    def test_conversation_key_format(self):
+        fn = _HTML.index("function buildConversations")
+        snippet = _HTML[fn:fn + 1200]
+        self.assertIn("conversation:", snippet)
+        self.assertIn("conversationKey", snippet)
+
+    def test_conversation_label_format(self):
+        fn = _HTML.index("function buildConversations")
+        snippet = _HTML[fn:fn + 1200]
+        self.assertIn("会话", snippet)
+
+    def test_user_message_text_computed(self):
+        fn = _HTML.index("function buildConversations")
+        snippet = _HTML[fn:fn + 1500]
+        self.assertIn("userMessageText", snippet)
+        self.assertIn("finalAgentText", snippet)
+
+    # ── MinimalTurn helper ───────────────────────────────────────────────
+
+    def test_build_minimal_turns_function_exists(self):
+        self.assertIn("function buildMinimalTurns", _HTML)
+
+    def test_minimal_turn_kinds_declared(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 4000]
+        for kind in ["user_message", "tool_use", "tool_result", "assistant_text", "thinking", "context", "system"]:
+            self.assertIn(f"'{kind}'", snippet)
+
+    def test_multiblock_assistant_split(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 4000]
+        # Multi-block iteration
+        self.assertIn("for (let i = 0; i < c.length; i++)", snippet)
+        # tool_use block creates separate Turn
+        self.assertIn("'tool_use'", snippet)
+        self.assertIn("addTurn", snippet)
+
+    def test_block_anchor_generated(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 2000]
+        self.assertIn("blockAnchor", snippet)
+        self.assertIn("#content:", snippet)
+
+    def test_is_minimal_turn_flag(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 1200]
+        self.assertIn("_isMinimalTurn: true", snippet)
+
+    def test_tool_use_id_recorded(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 4000]
+        self.assertIn("toolUseId", snippet)
+        self.assertIn("toolName", snippet)
+
+    def test_tool_result_records_is_error(self):
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 2500]
+        self.assertIn("isError", snippet)
+        self.assertIn("resultSummary", snippet)
+
+    # ── Navigation index ─────────────────────────────────────────────────
+
+    def test_by_conversation_key_in_index(self):
+        self.assertIn("byConversationKey: new Map()", _HTML)
+
+    def test_by_block_anchor_in_index(self):
+        self.assertIn("byBlockAnchor: new Map()", _HTML)
+
+    def test_build_turn_navigation_index_populates_conversation_key(self):
+        fn = _HTML.index("function buildTurnNavigationIndex")
+        snippet = _HTML[fn:fn + 1200]
+        self.assertIn("byConversationKey.set", snippet)
+        self.assertIn("byBlockAnchor.set", snippet)
+
+    def test_lookup_conversation_by_event_id_exists(self):
+        self.assertIn("function lookupConversationByEventId", _HTML)
+
+    def test_all_group_conversations_state_declared(self):
+        self.assertIn("let allGroupConversations = []", _HTML)
+
+    # ── rebuildAllGroupTurns uses new pipeline ───────────────────────────
+
+    def test_rebuild_all_group_turns_calls_build_conversations(self):
+        fn = _HTML.index("function rebuildAllGroupTurns")
+        snippet = _HTML[fn:fn + 600]
+        self.assertIn("buildConversations", snippet)
+        self.assertIn("buildMinimalTurns", snippet)
+
+    def test_rebuild_all_group_turns_populates_group_conversations(self):
+        fn = _HTML.index("function rebuildAllGroupTurns")
+        snippet = _HTML[fn:fn + 600]
+        self.assertIn("allGroupConversations", snippet)
+
+    def test_load_session_calls_rebuild_all_group_turns(self):
+        fn = _HTML.index("async function loadSession()")
+        fn_end = _HTML.index("} catch(e) {", fn)
+        snippet = _HTML[fn:fn_end]
+        self.assertIn("rebuildAllGroupTurns()", snippet)
+
+    # ── renderTurnList uses Conversations ────────────────────────────────
+
+    def test_render_turn_list_uses_group_conversations(self):
+        fn = _HTML.index("function renderTurnList()")
+        snippet = _HTML[fn:fn + 2800]
+        self.assertIn("allGroupConversations", snippet)
+        self.assertIn("conv-hdr", snippet)
+
+    def test_turn_card_has_turn_label_and_kind_badge(self):
+        fn = _HTML.index("function renderTurnList()")
+        snippet = _HTML[fn:fn + 2800]
+        self.assertIn("turn-card-label", snippet)
+        self.assertIn("turn-kind-badge", snippet)
+
+    # ── buildMinimalTurnDetailHtml ───────────────────────────────────────
+
+    def test_build_minimal_turn_detail_html_exists(self):
+        self.assertIn("function buildMinimalTurnDetailHtml", _HTML)
+
+    def test_minimal_turn_detail_shows_filter_hint(self):
+        fn = _HTML.index("function buildMinimalTurnDetailHtml")
+        snippet = _HTML[fn:fn + 2000]
+        self.assertIn("当前筛选隐藏了该 Turn 的全部事件", snippet)
+
+    def test_minimal_turn_detail_has_tool_use_section(self):
+        fn = _HTML.index("function buildMinimalTurnDetailHtml")
+        snippet = _HTML[fn:fn + 3500]
+        self.assertIn("case 'tool_use':", snippet)
+        self.assertIn("case 'tool_result':", snippet)
+
+    # ── kind labels ──────────────────────────────────────────────────────
+
+    def test_kind_label_function_exists(self):
+        self.assertIn("function kindLabel", _HTML)
+
+    def test_turn_display_text_function_exists(self):
+        self.assertIn("function turnDisplayText", _HTML)
+
+    # ── CSS ──────────────────────────────────────────────────────────────
+
+    def test_conv_hdr_css_exists(self):
+        self.assertIn(".conv-hdr", _HTML)
+        self.assertIn(".conv-hdr-label", _HTML)
+
+    def test_turn_kind_badge_css_exists(self):
+        self.assertIn(".turn-kind-badge", _HTML)
+        self.assertIn(".kind-tool_use", _HTML)
+        self.assertIn(".kind-tool_result", _HTML)
+        self.assertIn(".kind-user_message", _HTML)

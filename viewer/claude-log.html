@@ -334,6 +334,33 @@ body {
     padding: 8px; overflow: auto; max-height: 240px; white-space: pre-wrap; word-break: break-all;
     margin-top: 4px;
   }
+  /* ── Conversation header ────────────────────────────────────────────── */
+  .conv-hdr {
+    font-size: 11px; font-weight: 600; color: var(--text-secondary);
+    padding: 6px 10px 4px; border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--accent) 4%, var(--bg-base));
+    display: flex; align-items: center; gap: 6px; cursor: default;
+  }
+  .conv-hdr-label { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .conv-hdr-summary {
+    font-size: 11px; color: var(--text-secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+  }
+  /* ── Minimal Turn kind badges ───────────────────────────────────────── */
+  .turn-kind-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0; font-family: var(--font-mono);
+  }
+  .kind-user_message   { background: var(--type-user-bg); color: var(--type-user-fg); }
+  .kind-assistant_text { background: var(--type-asst-bg); color: var(--type-asst-fg); }
+  .kind-tool_use       { background: rgba(255,159,10,0.12); color: #b36a00; }
+  .kind-tool_result    { background: rgba(48,209,88,0.10); color: #1c8c3c; }
+  .kind-thinking       { background: rgba(175,82,222,0.12); color: #7a2fa0; }
+  .kind-context,
+  .kind-system         { background: var(--type-sys-bg); color: var(--type-sys-fg); }
+  .kind-unknown        { background: var(--type-other-bg); color: var(--type-other-fg); }
+  [data-theme="dark"] .kind-tool_use    { background: rgba(255,159,10,0.15); color: #ffa533; }
+  [data-theme="dark"] .kind-tool_result { background: rgba(48,209,88,0.12); color: #30d158; }
 
   .entry-item {
     padding: 8px 10px; border-bottom: 1px solid var(--border);
@@ -1229,13 +1256,210 @@ function rebuildCanonicalNavIndex() {
   }
 }
 
+// ── Conversation + MinimalTurn data layer ────────────────────────────────
+
+// Determine if an entry represents a real user request (opens a new Conversation).
+// Delegates to the stricter isUserTurnRoot once it is defined below.
+function isRealUserRequest(entry, prevConversation) {
+  if (entry.type !== 'user') return false;
+  // Build a fake "previousTurn" compatible with isUserTurnRoot's signature
+  // by extracting the last real-user entry from prevConversation.
+  let prevTurnCompat = null;
+  if (prevConversation && !prevConversation._isPreamble) {
+    const entries = prevConversation.entries || [];
+    const lastAsst = [...entries].reverse().find(e => e.type === 'assistant');
+    prevTurnCompat = {
+      root: prevConversation.entries[0] || null,
+      children: entries.slice(1),
+      _hadAssistant: !!lastAsst,
+    };
+  }
+  return isUserTurnRoot(entry, prevTurnCompat);
+}
+
+// Build Conversation objects from a group's entries.
+// Returns {preamble: Conversation|null, conversations: Conversation[]}.
+function buildConversations(entries, groupId) {
+  const conversations = [];
+  let preamble = null;
+  let current = null;
+  let convIdx = 0;
+  let prevConversation = null;
+
+  for (const e of entries) {
+    if (isRealUserRequest(e, prevConversation)) {
+      prevConversation = current;
+      current = {
+        conversationKey: `${groupId}:conversation:${convIdx}`,
+        groupId,
+        label: `会话 ${convIdx + 1}`,
+        index: convIdx,
+        entries: [e],
+        _isPreamble: false,
+        userMessageText: '',
+        finalAgentText: '',
+        turns: [],    // populated by buildMinimalTurns
+        taskIds: [],
+      };
+      convIdx++;
+      conversations.push(current);
+    } else if (current) {
+      current.entries.push(e);
+    } else {
+      if (!preamble) {
+        preamble = {
+          conversationKey: `${groupId}:preamble`,
+          groupId, label: 'Preamble', index: -1,
+          entries: [], _isPreamble: true,
+          userMessageText: '', finalAgentText: '', turns: [], taskIds: [],
+        };
+      }
+      preamble.entries.push(e);
+    }
+  }
+
+  // Compute summary fields
+  for (const conv of conversations) {
+    conv.userMessageText = extractFullText(conv.entries[0]) || '';
+    const lastAsst = [...conv.entries].reverse().find(e => e.type === 'assistant');
+    conv.finalAgentText = lastAsst ? (extractFullText(lastAsst) || '') : '';
+  }
+  return { preamble, conversations };
+}
+
+// Break a Conversation's entries into minimal Turns (one per execution fragment).
+// One assistant entry with text + 2 tool_use blocks → 3 Turns.
+// Populates and returns conversation.turns.
+function buildMinimalTurns(conversation) {
+  const turns = [];
+  let turnIdx = 0;
+  const convKey = conversation.conversationKey;
+  const groupId = conversation.groupId;
+
+  function fileAnchorPrefix() {
+    return groupId === 'main' ? 'main' : `agent-${groupId.replace(/^sa-/, '')}`;
+  }
+
+  function addTurn(kind, sourceEntry, contentIndex, extra) {
+    const seqIdx = turns.length;
+    const tk = `${convKey}:turn:${seqIdx}`;
+    const anchor = fileAnchorPrefix();
+    const blockAnchor = (contentIndex != null && sourceEntry._fileLine != null)
+      ? `${anchor}:${sourceEntry._fileLine}#content:${contentIndex}`
+      : null;
+    const t = {
+      _isMinimalTurn: true,
+      turnKey: tk,
+      conversationKey: convKey,
+      groupId,
+      label: `Turn ${seqIdx + 1}`,
+      index: seqIdx,
+      kind,
+      sourceEntryIdx: sourceEntry._idx,
+      contentIndex: contentIndex ?? null,
+      blockAnchor,
+      taskIds: [],
+      ...extra,
+    };
+    // Tag the source entry for cross-reference
+    if (!sourceEntry._minimalTurnKeys) sourceEntry._minimalTurnKeys = [];
+    sourceEntry._minimalTurnKeys.push(tk);
+    turns.push(t);
+    return t;
+  }
+
+  for (const e of conversation.entries) {
+    if (e.type === 'user') {
+      const c = e.message?.content ?? e.content;
+      if (Array.isArray(c)) {
+        let addedUserMsg = false;
+        for (let i = 0; i < c.length; i++) {
+          const b = c[i];
+          if (b.type === 'tool_result') {
+            const txt = Array.isArray(b.content)
+              ? b.content.map(x => x.text || '').join(' ')
+              : String(b.content || '');
+            addTurn('tool_result', e, i, {
+              toolUseId: b.tool_use_id || null,
+              resultSummary: trunc(txt, 200),
+              isError: b.is_error || false,
+              text: trunc(txt, 200),
+            });
+          } else if (b.type === 'text') {
+            const t = (b.text || '').trim();
+            if (!t) continue;
+            if (t.startsWith('<system-reminder') || t.startsWith('<local-command')) {
+              addTurn('context', e, i, { text: trunc(t, 120) });
+            } else if (!addedUserMsg) {
+              addedUserMsg = true;
+              addTurn('user_message', e, i, { text: t });
+            }
+          } else if (b.type === 'image') {
+            if (!addedUserMsg) { addedUserMsg = true; addTurn('user_message', e, i, { text: '[image]' }); }
+          }
+        }
+      } else if (typeof c === 'string') {
+        const t = c.trim();
+        if (t && !t.startsWith('<system-reminder') && !t.startsWith('<local-command')) {
+          addTurn('user_message', e, null, { text: t });
+        } else if (t) {
+          addTurn('context', e, null, { text: trunc(t, 120) });
+        }
+      }
+    } else if (e.type === 'assistant') {
+      const c = e.message?.content;
+      if (!Array.isArray(c)) {
+        const t = extractFullText(e);
+        if (t.trim()) addTurn('assistant_text', e, null, { text: t });
+        continue;
+      }
+      for (let i = 0; i < c.length; i++) {
+        const b = c[i];
+        if (b.type === 'thinking' || b.type === 'reasoning') {
+          addTurn('thinking', e, i, { text: trunc(b.thinking || b.text || '', 200) });
+        } else if (b.type === 'text') {
+          const t = (b.text || '').trim();
+          if (t) addTurn('assistant_text', e, i, { text: t });
+        } else if (b.type === 'tool_use') {
+          addTurn('tool_use', e, i, {
+            toolName: b.name || '?',
+            toolUseId: b.id || null,
+            inputSummary: trunc(JSON.stringify(b.input || {}), 120),
+            text: b.name || '?',
+          });
+        }
+      }
+    } else if (e.type === 'system') {
+      addTurn('system', e, null, { text: e.subtype || e.type });
+    } else if (e.type === 'attachment' || e.type === 'file-history-snapshot') {
+      addTurn('context', e, null, { text: e.type });
+    } else if (e.type !== 'unknown') {
+      addTurn('unknown', e, null, { text: e.type || 'unknown' });
+    }
+  }
+
+  conversation.turns = turns;
+  return turns;
+}
+
 // ── Turn navigation index ────────────────────────────────────────────────
 function rebuildAllGroupTurns() {
-  allGroupTurns = groups.map(g => ({
-    groupId: g.id,
-    label: g.label,
-    turns: buildTurns(g.entries, g.id),
+  // isUserTurnRoot must be defined before this runs (it is, below in the file).
+  // Build Conversations → MinimalTurns for each group.
+  allGroupConversations = groups.map(g => {
+    const { preamble, conversations } = buildConversations(g.entries, g.id);
+    for (const conv of conversations) buildMinimalTurns(conv);
+    if (preamble) buildMinimalTurns(preamble);
+    return { groupId: g.id, label: g.label, preamble, conversations };
+  });
+
+  // Flatten minimal Turns per group into allGroupTurns (used by renderTurnList & nav).
+  allGroupTurns = allGroupConversations.map(({ groupId, label, conversations }) => ({
+    groupId,
+    label,
+    turns: conversations.flatMap(c => c.turns),
   }));
+
   buildTurnNavigationIndex();
 }
 
@@ -1244,33 +1468,44 @@ function buildTurnNavigationIndex() {
   turnNavigationIndex.byEventId.clear();
   turnNavigationIndex.byUuid.clear();
   turnNavigationIndex.byTurnKey.clear();
+  turnNavigationIndex.byConversationKey.clear();
+  turnNavigationIndex.byBlockAnchor.clear();
 
-  for (const { groupId, turns } of allGroupTurns) {
-    for (const turn of turns) {
-      if (turn._isPreamble) continue;
-      const tk = turn.turnKey;
-      turnNavigationIndex.byTurnKey.set(tk, { groupId, turn });
-      const allTurnEntries = turn.root ? [turn.root, ...turn.children] : turn.children;
-      for (const e of allTurnEntries) {
-        const nav = { groupId, turnKey: tk, turnIndex: turn._turnIdx, entryIdx: e._idx };
+  // Index conversations
+  for (const { groupId, conversations } of allGroupConversations) {
+    for (const conv of conversations) {
+      turnNavigationIndex.byConversationKey.set(conv.conversationKey, { groupId, conversation: conv });
+      // Index minimal turns
+      for (const turn of conv.turns) {
+        const tk = turn.turnKey;
+        const navBase = { groupId, conversationKey: conv.conversationKey, turnKey: tk, turnIndex: turn.index, entryIdx: turn.sourceEntryIdx };
+        turnNavigationIndex.byTurnKey.set(tk, { groupId, conversationKey: conv.conversationKey, turn });
+        if (turn.blockAnchor) turnNavigationIndex.byBlockAnchor.set(turn.blockAnchor, navBase);
+        // Register entry-level anchors (pointing to first turn for that entry)
+        const e = allEntries[turn.sourceEntryIdx];
+        if (!e) continue;
+        const setIfAbsent = (map, key) => { if (!map.has(key)) map.set(key, navBase); };
         if (e._gid === 'main' && e._fileLine)
-          turnNavigationIndex.byFileAnchor.set(`main:${e._fileLine}`, nav);
+          setIfAbsent(turnNavigationIndex.byFileAnchor, `main:${e._fileLine}`);
         if (e._gid && e._gid !== 'main' && e._fileLine) {
           const aid = e._gid.replace(/^sa-/, '');
-          turnNavigationIndex.byFileAnchor.set(`agent-${aid}:${e._fileLine}`, nav);
+          setIfAbsent(turnNavigationIndex.byFileAnchor, `agent-${aid}:${e._fileLine}`);
         }
-        if (e._eventId) turnNavigationIndex.byEventId.set(e._eventId, nav);
-        if (e.uuid) turnNavigationIndex.byUuid.set(e.uuid, nav);
-        if (e.message?.id) turnNavigationIndex.byUuid.set(e.message.id, nav);
+        if (e._eventId) setIfAbsent(turnNavigationIndex.byEventId, e._eventId);
+        if (e.uuid) setIfAbsent(turnNavigationIndex.byUuid, e.uuid);
+        if (e.message?.id) setIfAbsent(turnNavigationIndex.byUuid, e.message.id);
       }
     }
   }
 }
 
-// Lookup which Turn an eventId belongs to. Returns {groupId, turnKey, turn} or null.
+// Lookup which minimal Turn an eventId belongs to.
+// Returns {groupId, conversationKey, turn, entryIdx} or null.
 function lookupTurnByEventId(eventId) {
   if (!eventId) return null;
-  const nav = turnNavigationIndex.byFileAnchor.get(eventId)
+  // Try block anchor first, then file anchor, then eventId, then uuid
+  const nav = turnNavigationIndex.byBlockAnchor.get(eventId)
+    || turnNavigationIndex.byFileAnchor.get(eventId)
     || turnNavigationIndex.byEventId.get(eventId)
     || turnNavigationIndex.byUuid.get(eventId);
   if (!nav) return null;
@@ -1278,10 +1513,21 @@ function lookupTurnByEventId(eventId) {
   return res ? { ...res, entryIdx: nav.entryIdx } : null;
 }
 
-// After task segments are loaded, annotate turns with associated taskIds.
+// Lookup which Conversation an eventId belongs to.
+// Returns {groupId, conversation} or null.
+function lookupConversationByEventId(eventId) {
+  if (!eventId) return null;
+  const nav = turnNavigationIndex.byFileAnchor.get(eventId)
+    || turnNavigationIndex.byEventId.get(eventId)
+    || turnNavigationIndex.byUuid.get(eventId);
+  if (!nav?.conversationKey) return null;
+  return turnNavigationIndex.byConversationKey.get(nav.conversationKey) || null;
+}
+
+// After task segments are loaded, annotate minimal Turns with associated taskIds.
 function rebuildTurnTaskAssociation(taskData) {
   if (!taskData?.tasks) return;
-  // Clear existing taskIds
+  // Clear existing taskIds on all minimal turns
   for (const { turns } of allGroupTurns)
     for (const t of turns) t.taskIds = [];
 
@@ -1297,16 +1543,16 @@ function rebuildTurnTaskAssociation(taskData) {
       turnNavigationIndex.byUuid.get(task.endEventId)
     ) : null;
     if (!startNav && !endNav) continue;
-    // Mark turns in range as associated with this task
-    for (const { groupId, turns } of allGroupTurns) {
-      if (startNav && startNav.groupId !== groupId) continue;
-      const startIdx = startNav ? startNav.turnIndex : 0;
-      const endIdx = endNav ? endNav.turnIndex : turns.length - 1;
-      for (const t of turns) {
-        if (t._isPreamble) continue;
-        if (t._turnIdx >= startIdx && t._turnIdx <= endIdx)
-          if (!t.taskIds.includes(task.taskId)) t.taskIds.push(task.taskId);
-      }
+    const gId = startNav?.groupId ?? endNav?.groupId;
+    const groupTurns = allGroupTurns.find(g => g.groupId === gId)?.turns || [];
+    // Find flat sequential positions of start/end turns in the group
+    const startPos = startNav ? groupTurns.findIndex(t => t.turnKey === startNav.turnKey) : 0;
+    const endPos = endNav ? groupTurns.findIndex(t => t.turnKey === endNav.turnKey) : groupTurns.length - 1;
+    const lo = Math.min(startPos < 0 ? 0 : startPos, endPos < 0 ? groupTurns.length - 1 : endPos);
+    const hi = Math.max(startPos < 0 ? 0 : startPos, endPos < 0 ? groupTurns.length - 1 : endPos);
+    for (let i = lo; i <= hi; i++) {
+      const t = groupTurns[i];
+      if (t && !t.taskIds.includes(task.taskId)) t.taskIds.push(task.taskId);
     }
   }
 }
@@ -1474,23 +1720,18 @@ function lookupTurnByKey(turnKey) {
 function renderTurnList() {
   const list = document.getElementById('entryList');
   if (!list) return;
-  if (!allGroupTurns.length) {
+  if (!allGroupConversations.length) {
     list.innerHTML = '<div class="placeholder">无 Turn 数据</div>';
     return;
   }
   list.innerHTML = '';
-  const taskData = (() => {
-    const sid = document.getElementById('sessionSel').value;
-    return sid ? taskSegmentReports[sid] : null;
-  })();
+  const sid = document.getElementById('sessionSel').value;
+  const taskData = sid ? taskSegmentReports[sid] : null;
   const taskIndex = {};
-  if (taskData?.tasks) {
-    taskData.tasks.forEach((t, i) => { taskIndex[t.taskId] = i + 1; });
-  }
+  if (taskData?.tasks) taskData.tasks.forEach((t, i) => { taskIndex[t.taskId] = i + 1; });
 
-  for (const { groupId, label, turns } of allGroupTurns) {
-    const visibleTurns = turns.filter(t => !t._isPreamble);
-    if (!visibleTurns.length) continue;
+  for (const { groupId, label, conversations } of allGroupConversations) {
+    if (!conversations.length) continue;
 
     // Group header
     const gHdr = document.createElement('div');
@@ -1498,39 +1739,74 @@ function renderTurnList() {
     gHdr.textContent = label;
     list.appendChild(gHdr);
 
-    for (const turn of visibleTurns) {
-      const stats = getTurnFilterStats(turn);
-      const card = document.createElement('div');
-      card.className = 'turn-card'
-        + (turn.turnKey === selectedTurnKey ? ' selected' : '')
-        + (stats.visibleEntries.length === 0 ? ' filter-empty' : '');
-      card.dataset.turnKey = turn.turnKey;
-      card.dataset.groupId = groupId;
+    for (const conv of conversations) {
+      // Conversation header
+      const convHdr = document.createElement('div');
+      convHdr.className = 'conv-hdr';
+      const convSummary = conv.userMessageText ? trunc(conv.userMessageText, 50) : '';
+      convHdr.innerHTML =
+        `<span class="conv-hdr-label">${esc(conv.label)}</span>` +
+        (convSummary ? `<span class="conv-hdr-summary">${esc(convSummary)}</span>` : '');
+      list.appendChild(convHdr);
 
-      // Task badges
-      const taskBadgeHtml = (turn.taskIds || []).map(tid => {
-        const n = taskIndex[tid];
-        const display = n ? `Task ${n}` : esc(tid.slice(0, 8));
-        return `<span class="turn-task-badge" data-task-id="${esc(tid)}" onclick="event.stopPropagation();navigateToPage('tasks');selectTaskSegment('${escRaw(tid)}','${escRaw(document.getElementById('sessionSel').value)}')">${display}</span>`;
-      }).join('');
+      // Minimal Turn cards
+      for (const turn of conv.turns) {
+        const stats = getTurnFilterStats(turn);
+        const { visibleEntries, hiddenCount } = stats;
+        const isVisible = visibleEntries.length > 0;
+        const card = document.createElement('div');
+        card.className = 'turn-card'
+          + (turn.turnKey === selectedTurnKey ? ' selected' : '')
+          + (!isVisible ? ' filter-empty' : '');
+        card.dataset.turnKey = turn.turnKey;
+        card.dataset.groupId = groupId;
 
-      // Meta badges
-      const metaHtml = [
-        `<span class="turn-meta-badge">${stats.visibleEntries.length} visible</span>`,
-        stats.visibleToolCount ? `<span class="turn-meta-badge">${stats.visibleToolCount} tools</span>` : '',
-        stats.visibleErrorCount ? `<span class="turn-meta-badge error">${stats.visibleErrorCount} errors</span>` : '',
-        stats.hiddenCount ? `<span class="turn-meta-badge muted">${stats.hiddenCount} hidden</span>` : '',
-      ].filter(Boolean).join('');
+        // Kind badge + Turn label
+        const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}">${esc(kindLabel(turn.kind))}</span>`;
+        const turnLabelSpan = `<span class="turn-card-label">${esc(turn.label)}</span>`;
 
-      card.innerHTML =
-        `<div class="turn-card-hdr"><span class="turn-card-label">${esc(turn.label)}</span>${taskBadgeHtml}</div>` +
-        `<div class="turn-card-summary">${esc(stats.visibleSummary || '—')}</div>` +
-        (metaHtml ? `<div class="turn-meta">${metaHtml}</div>` : '');
+        // Task badges (only on user_message/tool_use turns to avoid clutter)
+        const taskBadgeHtml = (turn.kind === 'user_message' || turn.kind === 'tool_use')
+          ? (turn.taskIds || []).map(tid => {
+              const n = taskIndex[tid];
+              const display = n ? `Task ${n}` : esc(tid.slice(0, 8));
+              return `<span class="turn-task-badge" data-task-id="${esc(tid)}" onclick="event.stopPropagation();navigateToPage('tasks');selectTaskSegment('${escRaw(tid)}','${escRaw(sid)}')">${display}</span>`;
+            }).join('')
+          : '';
 
-      card.addEventListener('click', () => selectTurn(groupId, turn.turnKey));
-      list.appendChild(card);
+        const summary = turnDisplayText(turn);
+        const metaHtml = !isVisible
+          ? `<div class="turn-meta"><span class="turn-meta-badge">0 visible</span></div>`
+          : '';
+
+        card.innerHTML =
+          `<div class="turn-card-hdr">${turnLabelSpan}${kindBadge}${taskBadgeHtml}</div>` +
+          `<div class="turn-card-summary">${esc(summary || '—')}</div>` +
+          metaHtml;
+
+        card.addEventListener('click', () => selectTurn(groupId, turn.turnKey));
+        list.appendChild(card);
+      }
     }
   }
+}
+
+// Human-readable kind label
+function kindLabel(kind) {
+  const labels = {
+    user_message: 'user', assistant_text: 'text', thinking: 'think',
+    tool_use: 'tool', tool_result: 'result', context: 'ctx',
+    system: 'sys', unknown: '?',
+  };
+  return labels[kind] || kind;
+}
+
+// Primary display text for a minimal Turn card
+function turnDisplayText(turn) {
+  if (turn.kind === 'tool_use') return turn.toolName || '?';
+  if (turn.kind === 'tool_result') return turn.isError ? `✗ ${trunc(turn.resultSummary || '', 60)}` : trunc(turn.resultSummary || '', 60);
+  if (turn.kind === 'thinking') return trunc(turn.text || '', 80);
+  return trunc(turn.text || '', 80);
 }
 
 function selectTurn(groupId, turnKey) {
@@ -1548,86 +1824,114 @@ function renderTurnDetailInPanel(groupId, turn) {
 }
 
 function buildTurnDetailHtml(groupId, turn) {
+  if (turn._isMinimalTurn) return buildMinimalTurnDetailHtml(groupId, turn);
+  // Legacy path for old-style turns (raw events view)
   const allTurnEntries = getTurnEntries(turn);
   const visibleTurnEntries = getVisibleTurnEntries(turn);
   const hiddenCount = allTurnEntries.length - visibleTurnEntries.length;
   let html = `<div class="turn-detail">`;
   html += `<div class="turn-detail-hdr">
     <span class="turn-detail-title">${esc(turn.label)}</span>
-    <span class="turn-detail-group">${esc(groupId)}</span>`;
-  if (turn.startFileLine != null)
-    html += `<span class="turn-meta-badge">lines ${turn.startFileLine}–${turn.endFileLine || turn.startFileLine}</span>`;
+    <span class="turn-detail-group">${esc(groupId)}</span></div>`;
+  if (hiddenCount > 0)
+    html += `<div class="turn-detail-hint">当前筛选隐藏了 ${hiddenCount} 条事件</div>`;
+  if (visibleTurnEntries.length === 0)
+    html += `<div class="turn-detail-section"><div class="turn-detail-empty">当前筛选隐藏了该 Turn 的全部事件</div></div>`;
+  const userText = turn.root ? extractFullText(turn.root) : '';
+  if (userText) html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div><div class="turn-detail-text">${esc(userText)}</div></div>`;
+  const asstTexts = visibleTurnEntries.filter(e => e.type === 'assistant').map(extractFullText).filter(Boolean);
+  if (asstTexts.length) html += `<div class="turn-detail-section"><div class="turn-detail-label">助手回复</div><div class="turn-detail-text">${esc(asstTexts.join('\n\n'))}</div></div>`;
+  html += `<div class="turn-detail-section"><details class="turn-raw-details">
+    <summary>原始 JSON (${allTurnEntries.length} entries)</summary>
+    <pre>${esc(JSON.stringify(allTurnEntries.map(e => ({ type: e.type, _fileLine: e._fileLine, _idx: e._idx })), null, 2))}</pre>
+  </details></div></div>`;
+  return html;
+}
+
+// Kind-specific detail for minimal Turns
+function buildMinimalTurnDetailHtml(groupId, turn) {
+  const e = allEntries[turn.sourceEntryIdx];
+  const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:11px;padding:2px 8px">${esc(kindLabel(turn.kind))}</span>`;
+  let html = `<div class="turn-detail">`;
+  html += `<div class="turn-detail-hdr">
+    <span class="turn-detail-title">${esc(turn.label)}</span>
+    ${kindBadge}
+    <span class="turn-detail-group">${esc(turn.conversationKey)}</span>`;
+  if (turn.blockAnchor) html += `<span class="turn-meta-badge" style="font-family:var(--font-mono)">${esc(turn.blockAnchor)}</span>`;
   html += `</div>`;
 
-  // Hint when type filters hide some entries in this turn
-  if (hiddenCount > 0) {
-    html += `<div class="turn-detail-hint">当前 event 类型筛选隐藏了 ${hiddenCount} 条事件（共 ${allTurnEntries.length} 条）</div>`;
+  if (!e) {
+    html += `<div class="turn-detail-section">entry not found (idx ${turn.sourceEntryIdx})</div>`;
+    html += '</div>'; return html;
   }
-  if (visibleTurnEntries.length === 0) {
+
+  // Filter hint: when the source entry is hidden by current type filter
+  const entryHidden = !entryMatchesFilter(e);
+  if (entryHidden) {
     html += `<div class="turn-detail-section"><div class="turn-detail-empty">当前筛选隐藏了该 Turn 的全部事件。调整上方类型筛选可查看内容。</div></div>`;
+    html += `<div class="turn-detail-section"><details class="turn-raw-details">
+      <summary>原始 JSON (entry #${turn.sourceEntryIdx})</summary>
+      <pre>${esc(JSON.stringify({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, kind: turn.kind }, null, 2))}</pre>
+    </details></div></div>`;
+    return html;
   }
 
-  // User text
-  const userText = (turn.root && entryMatchesFilter(turn.root)) ? extractFullText(turn.root) : '';
-  if (userText) {
-    html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div>
-      <div class="turn-detail-text">${esc(userText)}</div></div>`;
-  }
+  switch (turn.kind) {
+    case 'user_message':
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div>
+        <div class="turn-detail-text">${esc(turn.text || extractFullText(e))}</div></div>`;
+      break;
 
-  // Assistant text (all assistant entries)
-  const asstTexts = visibleTurnEntries
-    .filter(e => e.type === 'assistant')
-    .map(extractFullText).filter(Boolean);
-  if (asstTexts.length) {
-    html += `<div class="turn-detail-section"><div class="turn-detail-label">助手回复</div>
-      <div class="turn-detail-text">${esc(asstTexts.join('\n\n'))}</div></div>`;
-  }
+    case 'assistant_text':
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">助手回复</div>
+        <div class="turn-detail-text">${esc(turn.text || '')}</div></div>`;
+      break;
 
-  // Tool calls
-  const toolEntries = visibleTurnEntries.filter(e => {
-    const c = e.message?.content;
-    return Array.isArray(c) && c.some(b => b.type === 'tool_use');
-  });
-  if (toolEntries.length) {
-    let toolsHtml = '';
-    for (const e of toolEntries) {
-      for (const b of (e.message?.content || [])) {
-        if (b.type !== 'tool_use') continue;
-        const argStr = b.input ? JSON.stringify(b.input) : '';
-        const argPreview = trunc(argStr, 100);
-        toolsHtml += `<div class="turn-tool-row">
-          <span class="turn-tool-name">${esc(b.name || '?')}</span>
-          ${argPreview ? `<span class="turn-tool-arg"> ${esc(argPreview)}</span>` : ''}
-        </div>`;
-      }
+    case 'thinking':
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">思考过程</div>
+        <div class="turn-detail-text" style="font-style:italic;color:var(--text-secondary)">${esc(turn.text || '')}</div></div>`;
+      break;
+
+    case 'tool_use': {
+      const c = Array.isArray(e.message?.content) ? e.message.content[turn.contentIndex] : null;
+      const inputStr = c?.input ? JSON.stringify(c.input, null, 2) : turn.inputSummary || '';
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">工具调用</div>
+        <div class="turn-tool-row">
+          <span class="turn-tool-name">${esc(turn.toolName || '?')}</span>
+          ${turn.toolUseId ? `<span class="turn-tool-arg"> id:${esc(turn.toolUseId)}</span>` : ''}
+        </div>
+        ${inputStr ? `<div class="turn-detail-label" style="margin-top:8px">Input</div>
+          <pre style="font-size:10px;font-family:var(--font-mono);background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;overflow:auto;max-height:200px;white-space:pre-wrap;word-break:break-all">${esc(inputStr.slice(0, 2000))}</pre>` : ''}
+      </div>`;
+      break;
     }
-    html += `<div class="turn-detail-section"><div class="turn-detail-label">工具调用 (${countToolUses(toolEntries)})</div>${toolsHtml}</div>`;
-  }
 
-  // Errors
-  const visibleErrorCount = countErrorEntries(visibleTurnEntries);
-  if (visibleErrorCount) {
-    let errHtml = '';
-    for (const e of visibleTurnEntries) {
-      const c = Array.isArray(e.message?.content) ? e.message.content : [];
-      for (const b of c) {
-        if (b.type === 'tool_result' && b.is_error) {
-          const txt = Array.isArray(b.content) ? b.content.map(x=>x.text||'').join(' ') : String(b.content || '');
-          errHtml += `<div class="turn-error-row">${esc(trunc(txt, 200))}</div>`;
-        }
-      }
+    case 'tool_result': {
+      const c = Array.isArray(e.message?.content) ? e.message.content[turn.contentIndex] : null;
+      const resultStr = c ? (Array.isArray(c.content) ? c.content.map(x => x.text||'').join('\n') : String(c.content||'')) : (turn.resultSummary || '');
+      html += `<div class="turn-detail-section">
+        <div class="turn-detail-label">工具结果 ${turn.isError ? '<span style="color:var(--danger)">✗ Error</span>' : ''}</div>
+        ${turn.toolUseId ? `<div class="turn-tool-arg" style="margin-bottom:4px">tool_use_id: ${esc(turn.toolUseId)}</div>` : ''}
+        <div class="turn-detail-text${turn.isError ? '" style="border-color:var(--danger);color:var(--danger)' : ''}">${esc(trunc(resultStr, 1000))}</div>
+      </div>`;
+      break;
     }
-    if (errHtml)
-      html += `<div class="turn-detail-section"><div class="turn-detail-label">错误</div>${errHtml}</div>`;
+
+    case 'context':
+    case 'system':
+    case 'unknown':
+    default:
+      html += `<div class="turn-detail-section"><div class="turn-detail-label">内容</div>
+        <div class="turn-detail-text">${esc(trunc(turn.text || e.type || '', 400))}</div></div>`;
   }
 
   // Raw JSON (collapsed)
   html += `<div class="turn-detail-section"><details class="turn-raw-details">
-    <summary>原始 JSON (${allTurnEntries.length} entries)</summary>
-    <pre>${esc(JSON.stringify(allTurnEntries.map(e => ({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, message: e.message })), null, 2))}</pre>
+    <summary>原始 JSON (entry #${turn.sourceEntryIdx})</summary>
+    <pre>${esc(JSON.stringify({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, contentIndex: turn.contentIndex, message: e.message }, null, 2))}</pre>
   </details></div>`;
 
-  html += `</div>`;
+  html += '</div>';
   return html;
 }
 
@@ -2058,14 +2362,18 @@ let currentLoadedSessionId = null;   // set only after session loads successfull
 const eventIdToEntryIdx = new Map(); // eventId string → allEntries index
 
 // Turn-first session view state
-let selectedTurnKey = null;       // currently selected turn: "groupId:turnIdx"
-let allGroupTurns = [];           // [{groupId, label, turns: [...rich turn objects]}]
+let selectedTurnKey = null;       // currently selected minimal turn key
+let allGroupTurns = [];           // [{groupId, label, turns: [...minimal Turn objects]}]
+let allGroupConversations = [];   // [{groupId, label, preamble, conversations: [...]}]
 const turnNavigationIndex = {
-  byFileAnchor: new Map(),        // "main:fileLine" or "agent-X:fileLine" -> navTarget
-  byEventId: new Map(),           // normalized eventId -> navTarget
-  byUuid: new Map(),              // uuid / message.id -> navTarget
-  byTurnKey: new Map(),           // turnKey -> {groupId, turn}
-}; // navTarget: {groupId, turnKey, turnIndex, entryIdx}
+  byFileAnchor: new Map(),    // "main:fileLine" / "agent-X:fileLine" -> navTarget
+  byEventId: new Map(),       // normalized eventId -> navTarget
+  byUuid: new Map(),          // uuid / message.id -> navTarget
+  byTurnKey: new Map(),       // turnKey -> {groupId, conversationKey, turn}
+  byConversationKey: new Map(), // conversationKey -> {groupId, conversation}
+  byBlockAnchor: new Map(),   // "main:42#content:2" -> {groupId, conversationKey, turnKey, turn}
+};
+// navTarget shape: {groupId, conversationKey, turnKey, turnIndex, entryIdx}
 
 function promptFingerprint(text) {
   let h = 0;
@@ -2979,6 +3287,7 @@ function resetAnalysisState() {
   currentLoadedSessionId = null;
   selectedTurnKey = null;
   allGroupTurns = [];
+  allGroupConversations = [];
   updateTaskSegmentsButton();
 }
 
@@ -3262,7 +3571,12 @@ function isEntryHiddenByFilter(idx) {
 }
 
 function getTurnEntries(turn) {
-  return turn ? (turn.root ? [turn.root, ...turn.children] : turn.children) : [];
+  if (!turn) return [];
+  if (turn._isMinimalTurn) {
+    const e = allEntries[turn.sourceEntryIdx];
+    return e ? [e] : [];
+  }
+  return turn.root ? [turn.root, ...turn.children] : turn.children;
 }
 
 function getVisibleTurnEntries(turn) {
