@@ -36,8 +36,33 @@ def _read_jsonl(path: Path) -> list[dict]:
     return entries
 
 
-def _make_event_id() -> str:
-    return str(uuid.uuid4())
+def _stable_component(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    return "" if value is None else str(value)
+
+
+def _make_event_id(*parts: Any) -> str:
+    key = "ccwhat:codex:" + "|".join(_stable_component(part) for part in parts)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
+def _raw_event_anchor(raw_entry: dict[str, Any]) -> str:
+    payload = raw_entry.get("payload", {})
+    if raw_entry.get("_fileLine") is not None:
+        return f"line:{raw_entry.get('_fileLine')}"
+    return _stable_component({
+        "type": raw_entry.get("type"),
+        "timestamp": raw_entry.get("timestamp"),
+        "payload_type": payload.get("type") if isinstance(payload, dict) else None,
+        "payload_id": payload.get("id") if isinstance(payload, dict) else None,
+        "call_id": payload.get("call_id") if isinstance(payload, dict) else None,
+        "payload": payload,
+    })
+
+
+def _codex_event_id(raw_entry: dict[str, Any], session_id: str, suffix: str) -> str:
+    return _make_event_id("event", session_id, _raw_event_anchor(raw_entry), suffix)
 
 
 def _truncate(text: Any, max_len: int = 120) -> str:
@@ -80,7 +105,7 @@ def _metadata_event(
     content: Any = None,
 ) -> dict[str, Any]:
     return {
-        "id": _make_event_id(),
+        "id": _codex_event_id(raw_entry, session_id, summary),
         "agent": "codex",
         "sessionId": session_id,
         "turnId": None,
@@ -337,7 +362,7 @@ class CodexAdapter(AgentAdapter):
                         events.append(_metadata_event(raw_entry, session_id, "context: environment"))
                         return events
                     events.append({
-                        "id": _make_event_id(),
+                        "id": _codex_event_id(raw_entry, session_id, "user_message"),
                         "agent": "codex",
                         "sessionId": session_id,
                         "turnId": None,
@@ -364,7 +389,7 @@ class CodexAdapter(AgentAdapter):
                 full_text = _content_blocks_text(content_blocks, ("output_text", "input_text", "text"))
                 if full_text:
                     events.append({
-                        "id": _make_event_id(),
+                        "id": _codex_event_id(raw_entry, session_id, "assistant_message"),
                         "agent": "codex",
                         "sessionId": session_id,
                         "turnId": None,
@@ -386,7 +411,7 @@ class CodexAdapter(AgentAdapter):
                 call_id = payload.get("call_id", "")
                 parsed_args = _safe_parse_json(args)
                 events.append({
-                    "id": _make_event_id(),
+                    "id": _codex_event_id(raw_entry, session_id, f"tool_call:{call_id or name}"),
                     "agent": "codex",
                     "sessionId": session_id,
                     "turnId": None,
@@ -406,7 +431,7 @@ class CodexAdapter(AgentAdapter):
                 call_id = payload.get("call_id", "")
                 output = payload.get("output", "")
                 events.append({
-                    "id": _make_event_id(),
+                    "id": _codex_event_id(raw_entry, session_id, f"tool_result:{call_id}"),
                     "agent": "codex",
                     "sessionId": session_id,
                     "turnId": None,
@@ -426,7 +451,7 @@ class CodexAdapter(AgentAdapter):
                 summary_list = payload.get("summary", [])
                 summary_text = " ".join(str(s) for s in summary_list) if summary_list else "(reasoning)"
                 events.append({
-                    "id": _make_event_id(),
+                    "id": _codex_event_id(raw_entry, session_id, "reasoning"),
                     "agent": "codex",
                     "sessionId": session_id,
                     "turnId": None,
@@ -447,7 +472,7 @@ class CodexAdapter(AgentAdapter):
             if etype == "user_message":
                 msg = payload.get("message", "")
                 events.append({
-                    "id": _make_event_id(),
+                    "id": _codex_event_id(raw_entry, session_id, "event_user_message"),
                     "agent": "codex",
                     "sessionId": session_id,
                     "turnId": None,
@@ -466,7 +491,7 @@ class CodexAdapter(AgentAdapter):
                 msg = payload.get("message", "")
                 phase = payload.get("phase", "")
                 events.append({
-                    "id": _make_event_id(),
+                    "id": _codex_event_id(raw_entry, session_id, f"event_agent_message:{phase}"),
                     "agent": "codex",
                     "sessionId": session_id,
                     "turnId": None,
@@ -486,7 +511,7 @@ class CodexAdapter(AgentAdapter):
                 total_usage = info.get("total_token_usage") or info.get("last_token_usage") or {}
                 if total_usage:
                     events.append({
-                        "id": _make_event_id(),
+                        "id": _codex_event_id(raw_entry, session_id, "token_count"),
                         "agent": "codex",
                         "sessionId": session_id,
                         "turnId": None,
@@ -506,7 +531,7 @@ class CodexAdapter(AgentAdapter):
             cwd = payload.get("cwd", "")
             model = payload.get("model", "")
             events.append({
-                "id": _make_event_id(),
+                "id": _codex_event_id(raw_entry, session_id, "turn_context"),
                 "agent": "codex",
                 "sessionId": session_id,
                 "turnId": None,
@@ -526,7 +551,7 @@ class CodexAdapter(AgentAdapter):
             payload_id = payload.get("id", "")
             cwd = payload.get("cwd", "")
             events.append({
-                "id": _make_event_id(),
+                "id": _codex_event_id(raw_entry, session_id, f"session_meta:{payload_id}"),
                 "agent": "codex",
                 "sessionId": session_id,
                 "turnId": None,
@@ -544,7 +569,7 @@ class CodexAdapter(AgentAdapter):
 
         else:
             events.append({
-                "id": _make_event_id(),
+                "id": _codex_event_id(raw_entry, session_id, f"unknown:{typ}"),
                 "agent": "codex",
                 "sessionId": session_id,
                 "turnId": None,
@@ -571,7 +596,11 @@ class CodexAdapter(AgentAdapter):
             nonlocal current_turn, turn_start_ts
             if not current_turn:
                 return
-            turn_id = _make_event_id()
+            turn_id = _make_event_id(
+                "turn",
+                current_turn[0].get("sessionId"),
+                [ev.get("id") for ev in current_turn],
+            )
             for ev in current_turn:
                 ev["turnId"] = turn_id
             user_summary = ""

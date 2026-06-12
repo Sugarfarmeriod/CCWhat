@@ -546,6 +546,44 @@ const MOCK_SESSION_MULTIBLOCK = {
   subagents: [],
 };
 
+const MOCK_SESSION_WITH_INTERNAL = {
+  sessionId: 'test-session-internal',
+  projectDir: 'test-project',
+  agent: 'claude',
+  main: [
+    { type: 'user', _fileLine: 1, timestamp: '2025-01-01T00:01:00Z',
+      message: { content: [{ type: 'text', text: 'Fix bug with hidden internal state' }] } },
+    { type: 'system', subtype: 'permission-mode', _fileLine: 2, timestamp: '2025-01-01T00:01:30Z',
+      message: { content: [{ type: 'text', text: 'acceptEdits' }] } },
+    { type: 'assistant', _fileLine: 3, timestamp: '2025-01-01T00:02:00Z',
+      message: { content: [{ type: 'text', text: 'Done' }] } },
+  ],
+  subagents: [],
+};
+
+const LONG_TOOL_RESULT = 'RESULT_START ' + 'x'.repeat(1400) + ' RESULT_END_MARKER';
+
+const MOCK_SESSION_TOOL_EVIDENCE = {
+  sessionId: 'test-session-001',
+  projectDir: 'test-project',
+  agent: 'claude',
+  main: [
+    { type: 'user', _fileLine: 1, timestamp: '2025-01-01T00:01:00Z',
+      message: { content: [{ type: 'text', text: 'Run the diagnostic command' }] } },
+    { type: 'assistant', _fileLine: 2, timestamp: '2025-01-01T00:02:00Z',
+      message: { content: [
+        { type: 'tool_use', id: 'toolu-001', name: 'Bash', input: { command: 'echo verySecretFullValue', timeout: 123 } },
+      ] } },
+    { type: 'user', _fileLine: 3, timestamp: '2025-01-01T00:03:00Z',
+      message: { content: [
+        { type: 'tool_result', tool_use_id: 'toolu-001', content: LONG_TOOL_RESULT, is_error: false },
+      ] } },
+    { type: 'assistant', _fileLine: 4, timestamp: '2025-01-01T00:04:00Z',
+      message: { content: [{ type: 'text', text: 'Diagnostic finished.' }] } },
+  ],
+  subagents: [],
+};
+
 async function loadMultiblockSession(dom) {
   const win = dom.window;
   const doc = dom.window.document;
@@ -926,6 +964,56 @@ async function test_confirmed_task_trace_shows_task_as_first_level_node() {
   console.log('  ✓ confirmed Task Trace shows Task as first-level node after Snapshot');
 }
 
+async function test_unconfirmed_task_segments_render_task_first() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_TASK_SEGMENTS_CONFIRMED;
+  win.renderTraceTree();
+  await flushAsync();
+
+  const entryList = doc.getElementById('entryList');
+  const taskCard = doc.querySelector('[data-task-key="task:task-1"]');
+  assert.ok(taskCard, 'Task card should render as first-level node before confirmation');
+  assert.ok(!entryList.textContent.includes('main'), 'Task-first preview should not insert the group layer before task cards');
+
+  console.log('  ✓ unconfirmed task segments render Task-first Trace');
+}
+
+async function test_task_first_unassigned_conversation_has_projection_nodes() {
+  const partialTaskData = {
+    ...MOCK_TASK_SEGMENTS,
+    tasks: [{ ...MOCK_TASK_SEGMENTS.tasks[0], startEventId: 'main:1', endEventId: 'main:2' }],
+  };
+  const dom = makeDOM(MOCK_SESSION, partialTaskData);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = partialTaskData;
+  win.renderTraceTree();
+  await flushAsync();
+
+  assert.ok(doc.getElementById('entryList').textContent.includes('Unassigned'), 'Unassigned group should be visible');
+
+  const unassignedConv = Array.from(doc.querySelectorAll('[data-conversation-key]'))
+    .find(card => card.textContent.includes('Add register feature'));
+  assert.ok(unassignedConv, 'Unassigned conversation should be visible');
+
+  win.toggleConversation(unassignedConv.dataset.conversationKey);
+  await flushAsync();
+
+  const steps = Array.from(doc.querySelectorAll('.trace-step-card, .trace-turn-card'))
+    .filter(card => card.textContent.includes('Add register feature') || card.textContent.includes('Done.'));
+  assert.ok(steps.length > 0, 'Unassigned conversation should render projection Step/Turn nodes');
+
+  console.log('  ✓ Task-first Unassigned conversations render projection nodes');
+}
+
 async function test_confirmed_task_covers_turns_under_task_node() {
   const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
   const win = dom.window;
@@ -973,8 +1061,8 @@ async function test_confirmed_task_covers_turns_under_task_node() {
   win.toggleConversation(convKey);
   await flushAsync();
 
-  // Check that turns are under conversation
-  const turnCards = doc.querySelectorAll('.trace-turn-card');
+  // Check that turns are under conversation (default view uses .trace-step-card, debug uses .trace-turn-card)
+  const turnCards = doc.querySelectorAll('.trace-turn-card, .trace-step-card');
   assert.ok(turnCards.length > 0, 'Turns should exist under Task -> Conversation');
 
   console.log('  ✓ confirmed Task covers Turns under Task -> Conversation hierarchy');
@@ -1264,6 +1352,101 @@ async function test_debug_projection_preserves_turn_labels() {
   console.log('  ✓ debug projection preserves Turn labels');
 }
 
+async function test_debug_view_defaults_to_complete_timeline() {
+  const dom = makeDOM(MOCK_SESSION_WITH_INTERNAL);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  await loadTestSession(dom);
+
+  win.setTraceViewMode('debug');
+  await flushAsync();
+
+  const convCards = Array.from(doc.querySelectorAll('.trace-conversation-card'))
+    .filter(c => !c.dataset.snapshotKey);
+  assert.ok(convCards.length > 0, 'debug view should render at least one conversation');
+
+  win.toggleConversation(convCards[0].dataset.conversationKey);
+  await flushAsync();
+
+  const turnTexts = Array.from(doc.querySelectorAll('.trace-turn-card'))
+    .map(card => card.textContent.replace(/\s+/g, ' ').trim());
+  assert.ok(
+    turnTexts.some(text => text.includes('sys') || text.includes('system') || text.includes('acceptEdits')),
+    `debug view should show internal system turn by default, got: ${turnTexts.join(' | ')}`
+  );
+
+  const unchecked = Array.from(doc.querySelectorAll('#typeFilters input')).filter(input => !input.checked);
+  assert.strictEqual(unchecked.length, 0, 'debug view should enable all type filters before user edits them');
+
+  console.log('  ✓ debug view defaults to complete timeline');
+}
+
+async function test_detail_filter_does_not_hide_selected_internal_turn() {
+  const dom = makeDOM(MOCK_SESSION_WITH_INTERNAL);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  await loadTestSession(dom);
+  win.setTraceViewMode('debug');
+  await flushAsync();
+
+  const conv = Array.from(doc.querySelectorAll('.trace-conversation-card'))
+    .find(c => c.dataset.conversationKey);
+  win.toggleConversation(conv.dataset.conversationKey);
+  await flushAsync();
+
+  const internalTurn = Array.from(doc.querySelectorAll('.trace-turn-card'))
+    .find(card => card.textContent.includes('sys') || card.textContent.includes('acceptEdits'));
+  assert.ok(internalTurn, 'Internal system turn should be selectable in debug view');
+  internalTurn.click();
+  await flushAsync();
+
+  await setOnlyType(dom, 'user');
+
+  const detailText = doc.getElementById('detailPanel').textContent;
+  assert.ok(detailText.includes('acceptEdits') || detailText.includes('permission-mode'),
+    'Detail should keep selected internal turn evidence after filter hides it');
+  assert.ok(!detailText.includes('当前筛选隐藏了该 Turn 的全部事件'),
+    'Detail must not be replaced by filter-hidden placeholder');
+
+  console.log('  ✓ detail filter does not hide selected internal Turn evidence');
+}
+
+async function test_tool_detail_keeps_full_input_and_long_result() {
+  const dom = makeDOM(MOCK_SESSION_TOOL_EVIDENCE);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  await loadTestSession(dom);
+
+  const conv = Array.from(doc.querySelectorAll('.trace-conversation-card'))
+    .find(c => c.dataset.conversationKey);
+  win.toggleConversation(conv.dataset.conversationKey);
+  await flushAsync();
+
+  const toolUseStep = Array.from(doc.querySelectorAll('.trace-step-card'))
+    .find(card => card.textContent.includes('Bash'));
+  assert.ok(toolUseStep, 'Default view should render tool_use Step');
+  toolUseStep.click();
+  await flushAsync();
+
+  let detailText = doc.getElementById('detailPanel').textContent;
+  assert.ok(detailText.includes('verySecretFullValue'), 'tool_use Detail should include full input JSON');
+  assert.ok(detailText.includes('contentBlock'), 'tool_use Detail should include raw content block JSON');
+
+  const resultStep = Array.from(doc.querySelectorAll('.trace-step-card'))
+    .find(card => card.textContent.includes('RESULT_START') || card.textContent.includes('result'));
+  assert.ok(resultStep, 'Default view should render tool_result Step');
+  resultStep.click();
+  await flushAsync();
+
+  detailText = doc.getElementById('detailPanel').textContent;
+  assert.ok(detailText.includes('RESULT_END_MARKER'), 'tool_result Detail should not truncate long result content');
+
+  console.log('  ✓ tool Detail keeps full input and long result evidence');
+}
+
 async function test_projection_preserves_anchors() {
   const dom = makeDOM(MOCK_SESSION_MULTIBLOCK);
   const win = dom.window;
@@ -1402,6 +1585,8 @@ const tests = [
   test_entry_anchor_and_block_anchor_locate_conversation_and_turn,
   // Review fix: Task must be first-level node in confirmed state
   test_confirmed_task_trace_shows_task_as_first_level_node,
+  test_unconfirmed_task_segments_render_task_first,
+  test_task_first_unassigned_conversation_has_projection_nodes,
   test_confirmed_task_covers_turns_under_task_node,
   test_confirmed_task_no_badge_on_covered_turns,
   test_task_navigation_expands_task_and_conversation,
@@ -1415,6 +1600,9 @@ const tests = [
   test_projection_does_not_mutate_turns,
   test_default_projection_step_labels_continuous,
   test_debug_projection_preserves_turn_labels,
+  test_debug_view_defaults_to_complete_timeline,
+  test_detail_filter_does_not_hide_selected_internal_turn,
+  test_tool_detail_keeps_full_input_and_long_result,
   test_projection_preserves_anchors,
   test_task_first_projection_default_mode,
   test_task_first_projection_debug_mode,

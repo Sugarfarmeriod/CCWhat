@@ -928,6 +928,42 @@ class TestCodexAdapter(unittest.TestCase):
                      "content", "summary", "toolName", "toolCallId", "parentId", "usage", "raw"):
             self.assertIn(key, ev)
 
+    def test_raw_event_ids_are_stable(self) -> None:
+        adapter = CodexAdapter()
+        first = adapter.raw_to_normalized_events(self.CODEX_FUNC_CALL, "sid")
+        second = adapter.raw_to_normalized_events(self.CODEX_FUNC_CALL, "sid")
+
+        self.assertEqual([ev["id"] for ev in first], [ev["id"] for ev in second])
+
+    def test_load_session_event_and_turn_ids_are_stable(self) -> None:
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            session_dir = pd / "2025" / "06" / "01"
+            session_dir.mkdir(parents=True)
+            sid = "019e9837-9271-7192-bfbf-f5b74ebe585c"
+            fname = f"rollout-2025-06-01T10-00-00-{sid}.jsonl"
+            (session_dir / fname).write_text(
+                json.dumps(self.CODEX_USER) + "\n" +
+                json.dumps(self.CODEX_FUNC_CALL) + "\n" +
+                json.dumps(self.CODEX_FUNC_OUTPUT) + "\n" +
+                json.dumps(self.CODEX_ASSISTANT) + "\n"
+            )
+            adapter = CodexAdapter(pd)
+
+            first = adapter.load_session(sid)
+            second = adapter.load_session(sid)
+
+            self.assertIsNotNone(first)
+            self.assertIsNotNone(second)
+            self.assertEqual(
+                [ev["id"] for ev in first["events"]],
+                [ev["id"] for ev in second["events"]],
+            )
+            self.assertEqual(
+                [turn["id"] for turn in first["turns"]],
+                [turn["id"] for turn in second["turns"]],
+            )
+
     def test_adapter_implements_interface(self) -> None:
         adapter = CodexAdapter()
         for attr in ("name", "default_projects_dir", "list_projects", "list_sessions", "load_session"):
@@ -1321,6 +1357,32 @@ class TestOpenCodeAdapter(unittest.TestCase):
         self.assertEqual(events[1]["kind"], "tool_result")
         self.assertEqual(events[1]["role"], "tool")
 
+    def test_raw_event_ids_are_stable(self) -> None:
+        entry = {
+            "time_created": 1000050,
+            "message_id": "msg_stable_tool",
+            "message_data": {"role": "assistant"},
+            "parts": [{
+                "id": "part_tool_1",
+                "data": {
+                    "type": "tool",
+                    "tool": "bash",
+                    "callID": "call_stable",
+                    "state": {
+                        "status": "completed",
+                        "input": {"command": "pwd"},
+                        "output": "/tmp\n",
+                    },
+                },
+            }],
+        }
+        adapter = OpenCodeAdapter()
+        first = adapter.raw_to_normalized_events(entry, "sid")
+        second = adapter.raw_to_normalized_events(entry, "sid")
+
+        self.assertEqual([ev["id"] for ev in first], [ev["id"] for ev in second])
+        self.assertEqual(len({ev["id"] for ev in first}), len(first))
+
     def test_raw_to_normalized_events_reasoning(self) -> None:
         entry = {
             "time_created": 1000040,
@@ -1358,6 +1420,39 @@ class TestOpenCodeAdapter(unittest.TestCase):
             self.assertEqual(session["usage"]["outputTokens"], 300)
             self.assertEqual(session["usage"]["reasoningTokens"], 50)
             self.assertEqual(session["usage"]["cacheReadTokens"], 200)
+
+    def test_load_session_event_and_turn_ids_are_stable(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = self._create_db(tmp)
+            sid = "ses_stable_ids"
+            self._insert_session(db, sid)
+            self._insert_message(db, "msg_stable_user", sid, "user", 1000000, {"role": "user"})
+            self._insert_part(db, "part_stable_user", "msg_stable_user", sid, "text", "hello")
+            self._insert_message(db, "msg_stable_assistant", sid, "assistant", 1000050, {"role": "assistant"})
+            self._insert_part(db, "part_stable_tool", "msg_stable_assistant", sid, "tool", time_created=1000051, extra={
+                "tool": "bash",
+                "callID": "call_stable",
+                "state": {
+                    "status": "completed",
+                    "input": {"command": "echo hello"},
+                    "output": "hello\n",
+                },
+            })
+
+            adapter = OpenCodeAdapter(db)
+            first = adapter.load_session(sid)
+            second = adapter.load_session(sid)
+
+            self.assertIsNotNone(first)
+            self.assertIsNotNone(second)
+            self.assertEqual(
+                [ev["id"] for ev in first["events"]],
+                [ev["id"] for ev in second["events"]],
+            )
+            self.assertEqual(
+                [turn["id"] for turn in first["turns"]],
+                [turn["id"] for turn in second["turns"]],
+            )
 
     def test_adapter_implements_interface(self) -> None:
         adapter = OpenCodeAdapter()

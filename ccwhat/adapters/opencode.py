@@ -16,8 +16,43 @@ _OPCODE_DB_PATH = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 _OPENCODE_DB_PATH = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
 
-def _make_event_id() -> str:
-    return str(uuid.uuid4())
+def _stable_component(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    return "" if value is None else str(value)
+
+
+def _make_event_id(*parts: Any) -> str:
+    key = "ccwhat:opencode:" + "|".join(_stable_component(part) for part in parts)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
+def _part_event_id(
+    session_id: str,
+    raw_entry: dict[str, Any],
+    part: dict[str, Any],
+    part_idx: int,
+    suffix: str,
+) -> str:
+    msg_data = raw_entry.get("message_data", {})
+    pdata = part.get("data", {}) if isinstance(part.get("data"), dict) else {}
+    message_id = (
+        raw_entry.get("message_id")
+        or msg_data.get("id")
+        or msg_data.get("messageID")
+        or raw_entry.get("id")
+        or raw_entry.get("time_created")
+    )
+    part_id = part.get("id") or pdata.get("id") or f"part:{part_idx}"
+    return _make_event_id(
+        "event",
+        session_id,
+        message_id,
+        part_id,
+        pdata.get("type"),
+        pdata.get("callID"),
+        suffix,
+    )
 
 
 def _truncate(text: Any, max_len: int = 120) -> str:
@@ -257,7 +292,7 @@ class OpenCodeAdapter(AgentAdapter):
         usage = _normalize_usage(tokens_raw)
 
         if role == "user":
-            for part in parts:
+            for part_idx, part in enumerate(parts):
                 pdata = part.get("data", {})
                 ptype = pdata.get("type", "")
                 part_ts = _to_iso_timestamp(part.get("time_created")) or ts
@@ -265,7 +300,7 @@ class OpenCodeAdapter(AgentAdapter):
                     text = pdata.get("text", "")
                     if text:
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "text"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -282,7 +317,7 @@ class OpenCodeAdapter(AgentAdapter):
                         })
 
         elif role == "assistant":
-            for part in parts:
+            for part_idx, part in enumerate(parts):
                 pdata = part.get("data", {})
                 ptype = pdata.get("type", "")
                 part_ts = _to_iso_timestamp(part.get("time_created")) or ts
@@ -292,7 +327,7 @@ class OpenCodeAdapter(AgentAdapter):
                     text = pdata.get("text", "")
                     if text:
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "text"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -312,7 +347,7 @@ class OpenCodeAdapter(AgentAdapter):
                     text = pdata.get("text", "")
                     if text:
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "reasoning"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -338,7 +373,7 @@ class OpenCodeAdapter(AgentAdapter):
                         tool_start = _to_iso_timestamp(state_time.get("start")) or part_ts
                         tool_end = _to_iso_timestamp(state_time.get("end")) or part_end_ts
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "tool_call"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -354,7 +389,7 @@ class OpenCodeAdapter(AgentAdapter):
                             "raw": raw_entry,
                         })
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "tool_result"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -376,7 +411,7 @@ class OpenCodeAdapter(AgentAdapter):
                     step_tokens = pdata.get("tokens")
                     sub_usage = _normalize_usage(step_tokens) if step_tokens else None
                     events.append({
-                        "id": _make_event_id(),
+                        "id": _part_event_id(session_id, raw_entry, part, part_idx, ptype),
                         "agent": "opencode",
                         "sessionId": session_id,
                         "turnId": None,
@@ -396,7 +431,7 @@ class OpenCodeAdapter(AgentAdapter):
                     text = pdata.get("text", "")
                     if text:
                         events.append({
-                            "id": _make_event_id(),
+                            "id": _part_event_id(session_id, raw_entry, part, part_idx, "input"),
                             "agent": "opencode",
                             "sessionId": session_id,
                             "turnId": None,
@@ -414,7 +449,7 @@ class OpenCodeAdapter(AgentAdapter):
 
                 else:
                     events.append({
-                        "id": _make_event_id(),
+                        "id": _part_event_id(session_id, raw_entry, part, part_idx, ptype or "part"),
                         "agent": "opencode",
                         "sessionId": session_id,
                         "turnId": None,
@@ -447,7 +482,11 @@ class OpenCodeAdapter(AgentAdapter):
             nonlocal current_turn, turn_start_ts
             if not current_turn:
                 return
-            turn_id = _make_event_id()
+            turn_id = _make_event_id(
+                "turn",
+                current_turn[0].get("sessionId"),
+                [ev.get("id") for ev in current_turn],
+            )
             for ev in current_turn:
                 ev["turnId"] = turn_id
             user_summary = ""

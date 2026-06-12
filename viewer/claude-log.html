@@ -375,6 +375,58 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .trace-step-card {
+    padding: 6px 12px 6px 44px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .1s;
+    border-bottom: 1px solid var(--border-subtle, var(--border));
+    background: var(--bg-base);
+  }
+  .trace-step-card:hover { background: var(--bg-surface); }
+  .trace-step-card.selected {
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-base));
+    border-left: 3px solid var(--accent);
+    padding-left: 41px;
+  }
+  .trace-step-card.task-conv-turn { padding-left: 44px; }
+  .trace-step-card.task-conv-turn.selected { padding-left: 41px; }
+
+  /* Step kind badges (projection displayKind) */
+  .step-kind-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0; font-family: var(--font-mono);
+  }
+  .step-user_request { background: var(--type-user-bg); color: var(--type-user-fg); }
+  .step-thinking    { background: rgba(175,82,222,0.12); color: #7a2fa0; }
+  .step-agent_text  { background: var(--type-asst-bg); color: var(--type-asst-fg); }
+  .step-tool_call   { background: rgba(255,159,10,0.12); color: #b36a00; }
+  .step-tool_result { background: rgba(48,209,88,0.10); color: #1c8c3c; }
+  .step-permission  { background: rgba(255,159,10,0.12); color: #b36a00; }
+  .step-error_signal { background: rgba(255,69,58,0.12); color: #d32f2f; }
+  .step-internal    { background: var(--type-sys-bg); color: var(--type-sys-fg); }
+  [data-theme="dark"] .step-thinking    { background: rgba(175,82,222,0.15); color: #bf5af2; }
+  [data-theme="dark"] .step-tool_call   { background: rgba(255,159,10,0.15); color: #ffa533; }
+  [data-theme="dark"] .step-tool_result { background: rgba(48,209,88,0.12); color: #30d158; }
+  [data-theme="dark"] .step-error_signal { background: rgba(255,69,58,0.15); color: #ff6b6b; }
+
+  /* Trace View Mode Control */
+  .trace-view-mode-controls {
+    display: inline-flex; gap: 0; border-radius: 6px;
+    overflow: hidden; border: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  .trace-view-btn {
+    padding: 3px 10px; font-size: 11px; font-weight: 500;
+    border: none; background: transparent; color: var(--text-secondary);
+    cursor: pointer; transition: background .15s, color .15s;
+    font-family: inherit; white-space: nowrap;
+  }
+  .trace-view-btn:not(:last-child) { border-right: 1px solid var(--border); }
+  .trace-view-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+  .trace-view-btn.active {
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
 
   /* Turn detail panel */
   .turn-detail { padding: 14px; overflow-y: auto; }
@@ -1063,6 +1115,10 @@ body {
         <div class="page-pad" id="rawEventsPage" style="padding:0;display:flex;flex-direction:column">
           <div class="ev-toolbar" style="padding:4px 10px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-surface)">
             <span class="badge" id="countBadge"></span>
+            <div class="trace-view-mode-controls" id="traceViewModeControls" style="margin-left:8px">
+              <button class="trace-view-btn active" data-trace-view="default">默认视图</button>
+              <button class="trace-view-btn" data-trace-view="debug">调试视图</button>
+            </div>
             <div class="type-filters" id="typeFilters" style="margin-left:8px">
               <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
               <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
@@ -1925,6 +1981,16 @@ function turnDisplayText(turn) {
   return trunc(turn.text || '', 80);
 }
 
+// Human-readable label for projection displayKind
+function displayKindLabel(displayKind) {
+  const labels = {
+    user_request: 'req', thinking: 'think', agent_text: 'text',
+    tool_call: 'tool', tool_result: 'result', permission: 'perm',
+    error_signal: 'err', internal: 'int',
+  };
+  return labels[displayKind] || displayKind;
+}
+
 // ── Turn View Mode Projection ─────────────────────────────────────────────
 
 // Classification result for a Turn in default view
@@ -2172,7 +2238,171 @@ function buildConversationProjection(mode, conv, groupId, taskKey = null) {
   return convProjection;
 }
 
+function getActiveTaskTraceState(sessionId) {
+  if (!sessionId) return null;
+  const confirmedState = taskTraceConfirmedBySession[sessionId];
+  if (confirmedState?.confirmed === true && confirmedState.taskSegments?.tasks?.length > 0) {
+    return { confirmed: true, taskSegments: confirmedState.taskSegments, source: 'confirmed' };
+  }
+  const preview = taskSegmentReports[sessionId];
+  if (preview?.tasks?.length > 0) {
+    return { confirmed: false, taskSegments: preview, source: 'preview' };
+  }
+  return null;
+}
+
+function expandTaskTraceNodes(taskData) {
+  if (!taskData?.tasks) return;
+  for (const task of taskData.tasks) {
+    if (task?.taskId) expandedTaskKeys.add(`task:${task.taskId}`);
+  }
+}
+
 // ── Trace Tree Rendering ─────────────────────────────────────────────────
+
+// Get the projection source for the current session
+function getProjectionSource() {
+  const sid = document.getElementById('sessionSel').value;
+  const activeTaskState = getActiveTaskTraceState(sid);
+  const taskData = activeTaskState?.taskSegments || null;
+
+  if (taskData?.tasks?.length > 0) {
+    const { taskNodes } = mapTaskSegmentsToTraceNodes(taskData);
+    return { taskNodes };
+  }
+  return { allGroupConversations };
+}
+
+function isNodeVisibleInProjection(turnKey, projection) {
+  for (const group of (projection.groups || [])) {
+    for (const conv of group.conversations) {
+      for (const n of conv.nodes) { if (n.underlyingTurnKey === turnKey) return true; }
+    }
+  }
+  for (const task of (projection.tasks || [])) {
+    for (const conv of task.conversations) {
+      for (const n of conv.nodes) { if (n.underlyingTurnKey === turnKey) return true; }
+    }
+  }
+  return false;
+}
+
+function setTraceViewMode(mode) {
+  if (mode !== 'default' && mode !== 'debug') return;
+  if (traceViewMode === mode) return;
+
+  if (mode === 'debug' && !traceDebugFiltersTouched) {
+    setAllTraceTypeFiltersChecked(true);
+  }
+
+  // Handle selection backoff when switching to default
+  if (mode === 'default' && selectedTraceNodeType === 'turn' && selectedTurnKey) {
+    const projection = buildTurnViewProjection('default', getProjectionSource());
+    if (!isNodeVisibleInProjection(selectedTurnKey, projection)) {
+      const nav = turnNavigationIndex.byTurnKey.get(selectedTurnKey);
+      if (nav?.conversationKey) {
+        selectedTraceNodeKey = nav.conversationKey;
+        selectedTraceNodeType = 'conversation';
+        const hint = document.getElementById('detailPanel');
+        if (hint) hint.innerHTML = '<div class="turn-detail"><div class="turn-detail-section"><div class="turn-detail-label">该 Turn 在默认视图已隐藏</div><div class="turn-detail-text">切换到<a href="#" onclick="event.preventDefault();setTraceViewMode(\'debug\')">调试视图</a>查看完整 Turn</div></div></div>';
+      }
+    }
+  }
+
+  traceViewMode = mode;
+  updateTraceViewModeControls();
+  renderTraceTree();
+}
+
+function updateTraceViewModeControls() {
+  document.querySelectorAll('.trace-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.traceView === traceViewMode);
+  });
+  const typeFilters = document.getElementById('typeFilters');
+  if (typeFilters) {
+    typeFilters.style.display = traceViewMode === 'debug' ? '' : 'none';
+  }
+}
+
+function setAllTraceTypeFiltersChecked(checked) {
+  document.querySelectorAll('#typeFilters label').forEach(label => {
+    const cb = label.querySelector('input');
+    if (!cb) return;
+    cb.checked = checked;
+    const type = label.dataset.type;
+    label.classList.toggle(`checked-${type}`, checked);
+  });
+}
+
+function turnMatchesDebugFilter(turn) {
+  if (!turn || turn.sourceEntryIdx == null) return true;
+  const activeTypes = getActiveTypes();
+  const allLabels = document.querySelectorAll('#typeFilters label input');
+  const allChecked = Array.from(allLabels).every(cb => cb.checked);
+  if (allChecked) return true;
+  const e = allEntries[turn.sourceEntryIdx];
+  if (!e) return true;
+  const bucket = knownTypes.has(e.type) ? e.type : 'other';
+  return activeTypes.has(bucket);
+}
+
+function nodeMatchesDebugFilter(node) {
+  // In default mode, only search filter applies
+  if (traceViewMode !== 'debug') {
+    const q = document.getElementById('searchBox').value.trim().toLowerCase();
+    if (q) {
+      const hay = JSON.stringify(node.turn).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
+  // In debug mode, apply both type filter and search
+  if (!turnMatchesDebugFilter(node.turn)) return false;
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  if (q) {
+    const hay = JSON.stringify(node.turn).toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+function renderProjectionNodeCard(node, indentClass, isTaskNode) {
+  const card = document.createElement('div');
+  const isNodeSelected = selectedTraceNodeKey === node.underlyingTurnKey && selectedTraceNodeType === 'turn';
+  const cssClass = node.nodeType === 'step' ? 'trace-step-card' : 'trace-turn-card';
+  card.className = cssClass + (isNodeSelected ? ' selected' : '');
+  card.dataset.turnKey = node.underlyingTurnKey;
+  if (indentClass) card.classList.add(indentClass);
+
+  let kindBadge;
+  if (node.nodeType === 'step') {
+    kindBadge = `<span class="step-kind-badge step-${esc(node.displayKind)}">${esc(displayKindLabel(node.displayKind))}</span>`;
+  } else {
+    kindBadge = `<span class="turn-kind-badge kind-${esc(node.turn.kind)}">${esc(kindLabel(node.turn.kind))}</span>`;
+  }
+
+  const summary = turnDisplayText(node.turn) || '—';
+
+  card.innerHTML = `
+    <div class="trace-turn-hdr">
+      <span class="trace-turn-label">${esc(node.label)}</span>
+      ${kindBadge}
+    </div>
+    <div class="trace-turn-summary">${esc(summary)}</div>
+  `;
+
+  card.addEventListener('click', () => {
+    selectTraceNode(
+      'turn',
+      node.underlyingTurnKey,
+      node.groupId,
+      node.conversationKey,
+      node.underlyingTurnKey
+    );
+  });
+
+  return card;
+}
 
 // Render the Trace Tree in the Session page
 function renderTraceTree() {
@@ -2186,24 +2416,47 @@ function renderTraceTree() {
   list.innerHTML = '';
   const sid = document.getElementById('sessionSel').value;
 
-  // Get task data for badges (use confirmed state if available, else preview)
-  const confirmedState = sid ? taskTraceConfirmedBySession[sid] : null;
-  const previewTaskData = sid ? taskSegmentReports[sid] : null;
-  const taskData = confirmedState?.confirmed ? confirmedState.taskSegments : previewTaskData;
+  // Get active task data for badges and Task-first rendering
+  const activeTaskState = getActiveTaskTraceState(sid);
+  const taskData = activeTaskState?.taskSegments || null;
   const taskIndex = {};
   if (taskData?.tasks) taskData.tasks.forEach((t, i) => { taskIndex[t.taskId] = i + 1; });
+
+  // Build view projection
+  const projectionSource = getProjectionSource();
+  const projection = buildTurnViewProjection(traceViewMode, projectionSource);
+
+  // Build projection lookup maps
+  const convProjMap = new Map();
+  if (projection.groups) {
+    for (const group of projection.groups) {
+      for (const conv of group.conversations) {
+        convProjMap.set(conv.conversationKey, conv);
+      }
+    }
+  }
+  const taskProjMap = new Map();
+  if (projection.tasks) {
+    for (const task of projection.tasks) {
+      taskProjMap.set(task.taskKey, task);
+      for (const conv of task.conversations) {
+        convProjMap.set(conv.conversationKey, conv);
+      }
+    }
+  }
+
+  // Update controls
+  updateTraceViewModeControls();
 
   const traceNodes = buildTraceNodes();
 
   for (const node of traceNodes) {
     if (node.isGroup) {
-      // Group header (visual separator)
       const gHdr = document.createElement('div');
       gHdr.className = 'turn-group-hdr';
       gHdr.textContent = node.label;
       list.appendChild(gHdr);
     } else if (node.nodeType === 'snapshot') {
-      // Snapshot node
       const isSelected = selectedTraceNodeKey === node.key && selectedTraceNodeType === 'snapshot';
 
       const snapshotCard = document.createElement('div');
@@ -2232,6 +2485,9 @@ function renderTraceTree() {
       const isExpanded = expandedTaskKeys.has(node.key);
       const isSelected = selectedTraceNodeKey === node.key && selectedTraceNodeType === 'task';
 
+      const taskProj = taskProjMap.get(node.key);
+      const visibleCount = taskProj ? (traceViewMode === 'default' ? taskProj.primaryCount : taskProj.primaryCount + taskProj.internalCount) : node.turnCount;
+
       const taskCard = document.createElement('div');
       taskCard.className = 'trace-conversation-card' + (isSelected ? ' selected' : '');
       taskCard.dataset.taskKey = node.key;
@@ -2247,7 +2503,7 @@ function renderTraceTree() {
           <span style="font-size:10px;margin-left:6px;">
             <span class="task-badge ${typeBadgeClass}">${esc(node.taskType || 'unknown')}</span>
           </span>
-          <span class="trace-turn-count">${node.conversationCount} 会话, ${node.turnCount} turns</span>
+          <span class="trace-turn-count">${node.conversationCount} 会话, ${visibleCount} ${traceViewMode === 'default' ? 'steps' : 'turns'}</span>
         </div>
         ${node.title ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;padding-left:22px;">${esc(trunc(node.title, 60))}</div>` : ''}
       `;
@@ -2265,6 +2521,10 @@ function renderTraceTree() {
       // Render conversations under task if expanded
       if (isExpanded && node.conversations) {
         for (const convNode of node.conversations) {
+          const convProj = convProjMap.get(convNode.key);
+          const projAllNodes = convProj?.nodes || [];
+          const projVisibleNodes = projAllNodes.filter(n => nodeMatchesDebugFilter(n));
+          const projNodeCount = projVisibleNodes.length;
           const isConvExpanded = expandedConversationKeys.has(convNode.key);
           const isConvSelected = selectedTraceNodeKey === convNode.key && selectedTraceNodeType === 'conversation';
 
@@ -2279,7 +2539,7 @@ function renderTraceTree() {
               <span class="trace-arrow">${convArrow}</span>
               <span class="trace-conversation-label">${esc(convNode.label)}</span>
               <span class="trace-conversation-summary">${esc(convNode.summary || '')}</span>
-              <span class="trace-turn-count">${convNode.turnCount} turns</span>
+              <span class="trace-turn-count">${projNodeCount} ${traceViewMode === 'default' ? 'steps' : 'turns'}</span>
             </div>
           `;
 
@@ -2293,42 +2553,39 @@ function renderTraceTree() {
 
           list.appendChild(convCard);
 
-          // Render turns if expanded
-          if (isConvExpanded && convNode.turns) {
-            const turnsContainer = document.createElement('div');
-            turnsContainer.className = 'trace-turns-container';
+          // Render steps/turns from projection if expanded
+          if (isConvExpanded) {
+            const nodesContainer = document.createElement('div');
+            nodesContainer.className = 'trace-turns-container';
 
-            for (const turnNode of convNode.turns) {
-              const turnCard = document.createElement('div');
-              const isTurnSelected = selectedTraceNodeKey === turnNode.key && selectedTraceNodeType === 'turn';
-
-              turnCard.className = 'trace-turn-card' + (isTurnSelected ? ' selected' : '');
-              turnCard.dataset.turnKey = turnNode.key;
-              turnCard.style.paddingLeft = '44px';
-
-              const kindBadge = `<span class="turn-kind-badge kind-${esc(turnNode.kind)}">${esc(kindLabel(turnNode.kind))}</span>`;
-
-              turnCard.innerHTML = `
-                <div class="trace-turn-hdr">
-                  <span class="trace-turn-label">${esc(turnNode.label)}</span>
-                  ${kindBadge}
-                </div>
-                <div class="trace-turn-summary">${esc(turnNode.summary || '—')}</div>
-              `;
-
-              turnCard.addEventListener('click', () => {
-                selectTraceNode('turn', turnNode.key, turnNode.groupId, turnNode.conversationKey, turnNode.turnKey);
-              });
-
-              turnsContainer.appendChild(turnCard);
+            if (projVisibleNodes.length > 0) {
+              for (const projNode of projVisibleNodes) {
+                nodesContainer.appendChild(renderProjectionNodeCard(projNode, 'task-conv-turn', true));
+              }
+            } else {
+              const emptyDiv = document.createElement('div');
+              emptyDiv.className = 'trace-turn-card';
+              emptyDiv.style.paddingLeft = '44px';
+              emptyDiv.style.color = 'var(--text-tertiary)';
+              emptyDiv.style.fontSize = '11px';
+              emptyDiv.style.fontStyle = 'italic';
+              emptyDiv.textContent = traceViewMode === 'default'
+                ? '默认视图无主执行 Step，切换调试视图查看完整 Turn'
+                : '当前筛选条件没有可见 Turn';
+              nodesContainer.appendChild(emptyDiv);
             }
 
-            list.appendChild(turnsContainer);
+            list.appendChild(nodesContainer);
           }
         }
       }
     } else if (node.nodeType === 'conversation') {
-      // Conversation node (standalone, not under task)
+      // Standalone conversation node
+      const convProj = convProjMap.get(node.key)
+        || (node.conversation ? buildConversationProjection(traceViewMode, node.conversation, node.groupId) : null);
+      const projAllNodes = convProj?.nodes || [];
+      const projVisibleNodes = projAllNodes.filter(n => nodeMatchesDebugFilter(n));
+      const projNodeCount = projVisibleNodes.length;
       const isExpanded = expandedConversationKeys.has(node.key);
       const isSelected = selectedTraceNodeKey === node.key && selectedTraceNodeType === 'conversation';
 
@@ -2337,19 +2594,17 @@ function renderTraceTree() {
         + (isSelected ? ' selected' : '');
       convCard.dataset.conversationKey = node.key;
 
-      // Conversation header with expand/collapse arrow
       const arrow = isExpanded ? '▼' : '▶';
       convCard.innerHTML = `
         <div class="trace-conversation-hdr">
           <span class="trace-arrow">${arrow}</span>
           <span class="trace-conversation-label">${esc(node.label)}</span>
           <span class="trace-conversation-summary">${esc(node.summary || '')}</span>
-          <span class="trace-turn-count">${node.turnCount} turns</span>
+          <span class="trace-turn-count">${projNodeCount} ${traceViewMode === 'default' ? 'steps' : 'turns'}</span>
         </div>
       `;
 
       convCard.addEventListener('click', (e) => {
-        // Toggle expand if clicking the arrow area, else select
         if (e.target.closest('.trace-arrow')) {
           toggleConversation(node.key);
         } else {
@@ -2359,50 +2614,29 @@ function renderTraceTree() {
 
       list.appendChild(convCard);
 
-      // Render turns if expanded
-      if (isExpanded && node.turns) {
-        const turnsContainer = document.createElement('div');
-        turnsContainer.className = 'trace-turns-container';
+      // Render steps/turns from projection if expanded
+      if (isExpanded) {
+        const nodesContainer = document.createElement('div');
+        nodesContainer.className = 'trace-turns-container';
 
-        for (const turnNode of node.turns) {
-          const turnCard = document.createElement('div');
-          const isTurnSelected = selectedTraceNodeKey === turnNode.key && selectedTraceNodeType === 'turn';
-
-          turnCard.className = 'trace-turn-card'
-            + (isTurnSelected ? ' selected' : '');
-          turnCard.dataset.turnKey = turnNode.key;
-
-          const kindBadge = `<span class="turn-kind-badge kind-${esc(turnNode.kind)}">${esc(kindLabel(turnNode.kind))}</span>`;
-
-          // Task badges - only show in unconfirmed state
-          // In confirmed state, Task ownership is expressed by tree hierarchy, not badges
-          const turn = turnNode.turn;
-          const isTaskTraceConfirmed = confirmedState?.confirmed === true;
-          const taskBadgeHtml = (!isTaskTraceConfirmed && (turn.kind === 'user_message' || turn.kind === 'tool_use'))
-            ? (turn.taskIds || []).map(tid => {
-                const n = taskIndex[tid];
-                const display = n ? `Task ${n}` : esc(tid.slice(0, 8));
-                return `<span class="turn-task-badge" data-task-id="${esc(tid)}" onclick="event.stopPropagation();navigateToPage('tasks');selectTaskSegment('${escRaw(tid)}','${escRaw(sid)}')">${display}</span>`;
-              }).join('')
-            : '';
-
-          turnCard.innerHTML = `
-            <div class="trace-turn-hdr">
-              <span class="trace-turn-label">${esc(turnNode.label)}</span>
-              ${kindBadge}
-              ${taskBadgeHtml}
-            </div>
-            <div class="trace-turn-summary">${esc(turnNode.summary || '—')}</div>
-          `;
-
-          turnCard.addEventListener('click', () => {
-            selectTraceNode('turn', turnNode.key, turnNode.groupId, turnNode.conversationKey, turnNode.turnKey);
-          });
-
-          turnsContainer.appendChild(turnCard);
+        if (projVisibleNodes.length > 0) {
+          for (const projNode of projVisibleNodes) {
+            nodesContainer.appendChild(renderProjectionNodeCard(projNode, '', false));
+          }
+        } else {
+          const emptyDiv = document.createElement('div');
+          emptyDiv.className = 'trace-turn-card';
+          emptyDiv.style.paddingLeft = '24px';
+          emptyDiv.style.color = 'var(--text-tertiary)';
+          emptyDiv.style.fontSize = '11px';
+          emptyDiv.style.fontStyle = 'italic';
+          emptyDiv.textContent = traceViewMode === 'default'
+            ? '默认视图无主执行 Step，切换调试视图查看完整 Turn'
+            : '当前筛选条件没有可见 Turn';
+          nodesContainer.appendChild(emptyDiv);
         }
 
-        list.appendChild(turnsContainer);
+        list.appendChild(nodesContainer);
       }
     }
   }
@@ -2619,31 +2853,141 @@ function buildTurnDetailHtml(groupId, turn) {
   if (turn._isMinimalTurn) return buildMinimalTurnDetailHtml(groupId, turn);
   // Legacy path for old-style turns (raw events view)
   const allTurnEntries = getTurnEntries(turn);
-  const visibleTurnEntries = getVisibleTurnEntries(turn);
-  const hiddenCount = allTurnEntries.length - visibleTurnEntries.length;
   let html = `<div class="turn-detail">`;
   html += `<div class="turn-detail-hdr">
     <span class="turn-detail-title">${esc(turn.label)}</span>
     <span class="turn-detail-group">${esc(groupId)}</span></div>`;
-  if (hiddenCount > 0)
-    html += `<div class="turn-detail-hint">当前筛选隐藏了 ${hiddenCount} 条事件</div>`;
-  if (visibleTurnEntries.length === 0)
-    html += `<div class="turn-detail-section"><div class="turn-detail-empty">当前筛选隐藏了该 Turn 的全部事件</div></div>`;
   const userText = turn.root ? extractFullText(turn.root) : '';
   if (userText) html += `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div><div class="turn-detail-text">${esc(userText)}</div></div>`;
-  const asstTexts = visibleTurnEntries.filter(e => e.type === 'assistant').map(extractFullText).filter(Boolean);
+  const asstTexts = allTurnEntries.filter(e => e.type === 'assistant').map(extractFullText).filter(Boolean);
   if (asstTexts.length) html += `<div class="turn-detail-section"><div class="turn-detail-label">助手回复</div><div class="turn-detail-text">${esc(asstTexts.join('\n\n'))}</div></div>`;
   html += `<div class="turn-detail-section"><details class="turn-raw-details">
     <summary>原始 JSON (${allTurnEntries.length} entries)</summary>
-    <pre>${esc(JSON.stringify(allTurnEntries.map(e => ({ type: e.type, _fileLine: e._fileLine, _idx: e._idx })), null, 2))}</pre>
+    <pre>${esc(JSON.stringify(allTurnEntries, null, 2))}</pre>
   </details></div></div>`;
   return html;
 }
 
-// Kind-specific detail for minimal Turns (simplified: only 'Agent 响应' and '原始 JSON')
+function getTurnContentBlock(entry, turn) {
+  if (!entry || turn.contentIndex == null) return null;
+  const content = entry.message?.content ?? entry.content;
+  return Array.isArray(content) ? content[turn.contentIndex] : null;
+}
+
+function fullBlockText(block) {
+  if (!block) return '';
+  const content = block.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map(item => {
+      if (typeof item === 'string') return item;
+      if (item?.text != null) return String(item.text);
+      return JSON.stringify(item);
+    }).join('\n');
+  }
+  if (content != null) return JSON.stringify(content, null, 2);
+  return block.text || block.thinking || block.reasoning || '';
+}
+
+function buildTurnEvidenceModel(turn, entry) {
+  const block = getTurnContentBlock(entry, turn);
+  return {
+    turn,
+    entry,
+    block,
+    anchors: {
+      entryIndex: turn.sourceEntryIdx,
+      fileLine: entry?._fileLine ?? null,
+      eventId: entry?._eventId ?? null,
+      uuid: entry?.uuid ?? null,
+      messageId: entry?.message?.id ?? null,
+      blockAnchor: turn.blockAnchor ?? null,
+      contentIndex: turn.contentIndex ?? null,
+      groupId: turn.groupId,
+      conversationKey: turn.conversationKey,
+    },
+  };
+}
+
+function renderEvidencePre(value, maxHeight = 260) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
+  return `<pre style="font-size:10px;font-family:var(--font-mono);background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;overflow:auto;max-height:${maxHeight}px;white-space:pre-wrap;word-break:break-word;margin:0;">${esc(text || '—')}</pre>`;
+}
+
+function renderRawEvidenceJson(model) {
+  return `<div class="turn-detail-section"><details class="turn-raw-details">
+    <summary>原始 JSON (entry #${model.anchors.entryIndex}${model.anchors.contentIndex != null ? `, content:${model.anchors.contentIndex}` : ''})</summary>
+    <pre>${esc(JSON.stringify({
+      anchors: model.anchors,
+      turn: model.turn,
+      contentBlock: model.block,
+      entry: model.entry,
+    }, null, 2))}</pre>
+  </details></div>`;
+}
+
+function renderTurnEvidenceSections(model) {
+  const { turn, entry, block } = model;
+  switch (turn.kind) {
+    case 'user_message':
+      return `<div class="turn-detail-section"><div class="turn-detail-label">用户消息</div>${renderEvidencePre(turn.text || extractFullText(entry) || fullBlockText(block), 320)}</div>`;
+
+    case 'assistant_text':
+      return `<div class="turn-detail-section"><div class="turn-detail-label">Agent 文本</div>${renderEvidencePre(turn.text || fullBlockText(block), 320)}</div>`;
+
+    case 'thinking':
+      return `<div class="turn-detail-section"><div class="turn-detail-label">Thinking / Reasoning</div>${renderEvidencePre(turn.text || fullBlockText(block), 360)}</div>`;
+
+    case 'tool_use': {
+      const toolName = block?.name || turn.toolName || '?';
+      const toolId = block?.id || turn.toolUseId || '';
+      const input = block?.input ?? {};
+      return `<div class="turn-detail-section">
+        <div class="turn-detail-label">工具调用</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="turn-meta-badge">${esc(toolName)}</span>
+          ${toolId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">${esc(toolId)}</span>` : ''}
+        </div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:4px;">Input JSON</div>
+        ${renderEvidencePre(input, 360)}
+      </div>`;
+    }
+
+    case 'tool_result': {
+      const resultStr = fullBlockText(block) || turn.resultSummary || '';
+      return `<div class="turn-detail-section">
+        <div class="turn-detail-label">工具结果</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          ${turn.toolUseId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">tool_use_id: ${esc(turn.toolUseId)}</span>` : ''}
+          <span class="turn-meta-badge" style="${turn.isError ? 'color:var(--danger);border-color:var(--danger);' : ''}">is_error: ${esc(String(!!turn.isError))}</span>
+        </div>
+        ${renderEvidencePre(resultStr, 420)}
+      </div>`;
+    }
+
+    case 'context':
+    case 'system':
+    case 'unknown':
+    default: {
+      const text = turn.text || extractFullText(entry) || fullBlockText(block);
+      const structured = text ? text : JSON.stringify(entry, null, 2);
+      return `<div class="turn-detail-section">
+        <div class="turn-detail-label">内部事件 / 上下文</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="turn-meta-badge">${esc(entry?.type || turn.kind)}</span>
+          ${entry?.subtype ? `<span class="turn-meta-badge">${esc(entry.subtype)}</span>` : ''}
+        </div>
+        ${renderEvidencePre(structured, 360)}
+      </div>`;
+    }
+  }
+}
+
+// Kind-specific detail for minimal Turns with complete evidence.
 function buildMinimalTurnDetailHtml(groupId, turn) {
   const e = allEntries[turn.sourceEntryIdx];
   const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:11px;padding:2px 8px">${esc(kindLabel(turn.kind))}</span>`;
+  const model = buildTurnEvidenceModel(turn, e);
   let html = `<div class="turn-detail">`;
   html += `<div class="turn-detail-hdr">
     <span class="turn-detail-title">${esc(turn.label)}</span>
@@ -2657,27 +3001,18 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
     html += '</div>'; return html;
   }
 
-  // Filter hint: when the source entry is hidden by current type filter
-  const entryHidden = !entryMatchesFilter(e);
-  if (entryHidden) {
-    html += `<div class="turn-detail-section"><div class="turn-detail-empty">当前筛选隐藏了该 Turn 的全部事件。调整上方类型筛选可查看内容。</div></div>`;
-    html += `<div class="turn-detail-section"><details class="turn-raw-details">
-      <summary>原始 JSON (entry #${turn.sourceEntryIdx})</summary>
-      <pre>${esc(JSON.stringify({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, kind: turn.kind }, null, 2))}</pre>
-    </details></div></div>`;
-    return html;
-  }
+  html += `<div class="turn-detail-section"><div class="turn-detail-label">定位信息</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <span class="turn-meta-badge">entry: ${esc(String(model.anchors.entryIndex))}</span>
+      ${model.anchors.fileLine != null ? `<span class="turn-meta-badge">line: ${esc(String(model.anchors.fileLine))}</span>` : ''}
+      ${model.anchors.eventId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">event: ${esc(model.anchors.eventId)}</span>` : ''}
+      ${model.anchors.messageId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">message: ${esc(model.anchors.messageId)}</span>` : ''}
+      ${model.anchors.contentIndex != null ? `<span class="turn-meta-badge">content: ${esc(String(model.anchors.contentIndex))}</span>` : ''}
+    </div>
+  </div>`;
 
-  // Section 1: Agent 响应 (render based on turn kind)
-  html += `<div class="turn-detail-section"><div class="turn-detail-label">Agent 响应</div>`;
-  html += renderAgentResponseContent(turn, e);
-  html += `</div>`;
-
-  // Section 2: 原始 JSON (collapsed)
-  html += `<div class="turn-detail-section"><details class="turn-raw-details">
-    <summary>原始 JSON (entry #${turn.sourceEntryIdx}${turn.contentIndex != null ? `, content:${turn.contentIndex}` : ''})</summary>
-    <pre>${esc(JSON.stringify({ type: e.type, _fileLine: e._fileLine, _idx: e._idx, contentIndex: turn.contentIndex, message: e.message }, null, 2))}</pre>
-  </details></div>`;
+  html += renderTurnEvidenceSections(model);
+  html += renderRawEvidenceJson(model);
 
   html += '</div>';
   return html;
@@ -2709,7 +3044,7 @@ function renderAgentResponseContent(turn, entry) {
     case 'tool_result': {
       const c = Array.isArray(entry.message?.content) ? entry.message.content[turn.contentIndex] : null;
       const resultStr = c ? (Array.isArray(c.content) ? c.content.map(x => x.text||'').join('\n') : String(c.content||'')) : (turn.resultSummary || '');
-      return `<div class="turn-detail-text${turn.isError ? '" style="border-color:var(--danger);color:var(--danger)' : ''}">${esc(trunc(resultStr, 1000) || '—')}</div>
+      return `<div class="turn-detail-text${turn.isError ? '" style="border-color:var(--danger);color:var(--danger)' : ''}">${esc(resultStr || '—')}</div>
         ${turn.toolUseId ? `<div style="font-size:10px;color:var(--text-tertiary);margin-top:4px;">tool_use_id: ${esc(turn.toolUseId)}</div>` : ''}`;
     }
 
@@ -3011,10 +3346,9 @@ function navigateOnLoad(pageId) {
 // Global search handler — delegates to active page
 function onSearchInput() {
   const q = document.getElementById('searchBox').value.trim().toLowerCase();
-  // Update raw-events filter
   renderList();
-  // Re-render current page if it supports search
   const active = workbenchState.activeView;
+  if (active === 'sessions') renderSessionPage();
   if (active === 'tasks') renderTasksPage();
   if (active === 'overview') renderOverviewPage();
 }
@@ -3241,6 +3575,8 @@ let selectedTraceNodeKey = null;  // currently selected trace node key (conversa
 let selectedTraceNodeType = null; // 'snapshot' | 'task' | 'conversation' | 'turn'
 let expandedConversationKeys = new Set(); // Set of conversationKeys that are expanded
 let expandedTaskKeys = new Set(); // Set of taskKeys that are expanded (for Task-first view)
+let traceViewMode = 'default'; // 'default' | 'debug' — current Trace display mode
+let traceDebugFiltersTouched = false; // Debug filters default to full timeline until user edits them
 window.expandedTaskKeys = expandedTaskKeys;
 
 // Task Trace confirmation state: sessionId -> { confirmed: boolean, taskSegments: object, confirmedAt: timestamp }
@@ -3457,9 +3793,9 @@ function mapTaskSegmentsToTraceNodes(taskData) {
 }
 
 // Build trace nodes from allGroupConversations for tree rendering
-// Supports two modes based on Task Trace confirmation status:
-// - Unconfirmed: Snapshot -> Group -> Conversation -> Turn
-// - Confirmed: Snapshot -> Task -> Conversation -> Turn (Task becomes first-level node)
+// Supports two modes based on active Task Trace availability:
+// - No active task data: Snapshot -> Group -> Conversation -> Turn
+// - Active task data: Snapshot -> Task -> Conversation -> Turn (Task becomes first-level node)
 function buildTraceNodes() {
   const nodes = [];
   const sid = document.getElementById('sessionSel').value;
@@ -3477,13 +3813,13 @@ function buildTraceNodes() {
     });
   }
 
-  // Check if Task Trace is confirmed for current session
-  const confirmedState = sid ? taskTraceConfirmedBySession[sid] : null;
-  const isTaskTraceConfirmed = confirmedState?.confirmed === true;
-  const taskData = isTaskTraceConfirmed ? confirmedState.taskSegments : null;
+  // Check if Task Trace is available for current session.
+  // Confirmation changes trust state, not whether Task-first can be previewed.
+  const activeTaskState = getActiveTaskTraceState(sid);
+  const taskData = activeTaskState?.taskSegments || null;
 
-  if (isTaskTraceConfirmed && taskData?.tasks?.length > 0) {
-    // Confirmed: Snapshot -> Task -> Conversation -> Turn
+  if (taskData?.tasks?.length > 0) {
+    // Active task data: Snapshot -> Task -> Conversation -> Turn
     // Task becomes first-level node, no Group layer between Snapshot and Task
     const { taskNodes, unassignedConversations } = mapTaskSegmentsToTraceNodes(taskData);
 
@@ -3671,9 +4007,16 @@ function fmtTs(ts) {
 function trunc(s, n) { s = String(s??''); return s.length>n ? s.slice(0,n)+'…' : s; }
 
 // ── Type filter checkboxes ────────────────────────────────────────────────
+document.getElementById('traceViewModeControls').addEventListener('click', e => {
+  const btn = e.target.closest('.trace-view-btn');
+  if (!btn) return;
+  setTraceViewMode(btn.dataset.traceView);
+});
+
 document.getElementById('typeFilters').addEventListener('click', e => {
   const label = e.target.closest('label');
   if (!label) return;
+    traceDebugFiltersTouched = true;
     // Toggle checkbox (click on label already toggles it, but we need to update style)
     // Use setTimeout 0 so checkbox state is updated before we read it
     setTimeout(() => {
@@ -3755,11 +4098,7 @@ function confirmTaskTraceForSession(sessionId) {
   };
 
   // Expand all tasks by default when confirmed
-  if (data.tasks) {
-    for (let i = 0; i < data.tasks.length; i++) {
-      expandedTaskKeys.add(`task:${data.tasks[i].taskId}`);
-    }
-  }
+  expandTaskTraceNodes(data);
 
   // Refresh the Tasks page UI
   renderTaskSegments(data, sessionId);
@@ -3833,10 +4172,12 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
     const data = await requestTaskSegments(sessionId);
     taskSegmentReports[sessionId] = data;
     rebuildTurnTaskAssociation(data);
+    expandTaskTraceNodes(data);
     const currentSession = document.getElementById('sessionSel').value;
     if (currentSession !== sessionId) return;
     selectedTaskSegmentId = data.tasks && data.tasks.length ? data.tasks[0].taskId : null;
     renderTaskSegments(data, sessionId);
+    if (workbenchState.activeView === 'sessions') renderTraceTree();
   } catch (e) {
     const currentSession = document.getElementById('sessionSel').value;
     if (currentSession !== sessionId) return;
@@ -4270,7 +4611,8 @@ function navigateToTurn(groupId, turnKey) {
   requestAnimationFrame(() => {
     const list = document.getElementById('entryList');
     if (!list) return;
-    const card = list.querySelector(`.trace-turn-card[data-turn-key="${CSS.escape(turnKey)}"]`);
+    const card = list.querySelector(`.trace-turn-card[data-turn-key="${CSS.escape(turnKey)}"]`)
+              || list.querySelector(`.trace-step-card[data-turn-key="${CSS.escape(turnKey)}"]`);
     if (card) {
       card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       card.classList.add('nav-flash');

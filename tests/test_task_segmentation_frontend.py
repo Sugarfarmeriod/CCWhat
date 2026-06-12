@@ -647,11 +647,11 @@ class TestTurnFirstSessionNavigation(unittest.TestCase):
         self.assertIn(".turn-detail-section", _HTML)
 
     # Session page now renders Turn list
-    def test_render_session_page_calls_render_turn_list(self):
+    def test_render_session_page_calls_render_trace_tree(self):
         fn_start = _HTML.index("function renderSessionPage()")
         fn_end = fn_start + 900
         snippet = _HTML[fn_start:fn_end]
-        self.assertIn("renderTurnList()", snippet)
+        self.assertIn("renderTraceTree()", snippet)
 
     # rebuild called in loadSession
     def test_load_session_calls_rebuild_all_group_turns(self):
@@ -669,12 +669,12 @@ class TestTurnFirstSessionNavigation(unittest.TestCase):
     # navigateToTurn switches to sessions page
     def test_navigate_to_turn_switches_to_sessions(self):
         fn_start = _HTML.index("function navigateToTurn")
-        snippet = _HTML[fn_start:fn_start + 400]
+        snippet = _HTML[fn_start:fn_start + 2500]
         self.assertIn("navigateToPage('sessions')", snippet)
 
     def test_navigate_to_turn_triggers_scroll(self):
         fn_start = _HTML.index("function navigateToTurn")
-        snippet = _HTML[fn_start:fn_start + 600]
+        snippet = _HTML[fn_start:fn_start + 2500]
         self.assertIn("scrollIntoView", snippet)
 
     # makeNavTurnBtn disabled when Turn not found
@@ -732,7 +732,7 @@ class TestStrictTurnRootDetection(unittest.TestCase):
     def test_type_filter_handler_calls_render_page(self):
         # find the actual typeFilters listener block
         type_filters_add_evt = _HTML.index("getElementById('typeFilters').addEventListener('click'")
-        listener_snippet = _HTML[type_filters_add_evt:type_filters_add_evt + 600]
+        listener_snippet = _HTML[type_filters_add_evt:type_filters_add_evt + 800]
         self.assertIn("renderPage(workbenchState.activeView)", listener_snippet)
         self.assertNotIn("renderList()", listener_snippet)
 
@@ -745,10 +745,12 @@ class TestStrictTurnRootDetection(unittest.TestCase):
         after_rebuild = snippet[rebuild_idx:rebuild_idx + 200]
         self.assertNotIn("renderList()", after_rebuild)
 
-    def test_build_turn_detail_has_filter_hint(self):
+    def test_build_turn_detail_uses_complete_raw_entries(self):
         fn_start = _HTML.index("function buildTurnDetailHtml")
         snippet = _HTML[fn_start:fn_start + 1200]
-        self.assertIn("turn-detail-hint", snippet)
+        self.assertIn("const allTurnEntries", snippet)
+        self.assertIn("JSON.stringify(allTurnEntries", snippet)
+        self.assertNotIn("turn-detail-hint", snippet)
 
 
 class TestTurnFilterInteractions(unittest.TestCase):
@@ -765,12 +767,12 @@ class TestTurnFilterInteractions(unittest.TestCase):
         self.assertIn("visibleEntries.length", snippet)
         self.assertIn("hiddenCount", snippet)
 
-    def test_build_turn_detail_uses_visible_entries_for_body(self):
+    def test_build_turn_detail_does_not_crop_body_to_visible_entries(self):
         fn_start = _HTML.index("function buildTurnDetailHtml")
         snippet = _HTML[fn_start:fn_start + 2500]
-        self.assertIn("const visibleTurnEntries", snippet)
-        self.assertIn("visibleTurnEntries.length === 0", snippet)
-        self.assertIn("visibleTurnEntries", snippet)
+        self.assertNotIn("const visibleTurnEntries", snippet)
+        self.assertIn("allTurnEntries.filter", snippet)
+        self.assertIn("buildTurnEvidenceModel", snippet)
 
 
 class TestConversationMinimalTurnDataLayer(unittest.TestCase):
@@ -908,14 +910,15 @@ class TestConversationMinimalTurnDataLayer(unittest.TestCase):
     def test_build_minimal_turn_detail_html_exists(self):
         self.assertIn("function buildMinimalTurnDetailHtml", _HTML)
 
-    def test_minimal_turn_detail_shows_filter_hint(self):
+    def test_minimal_turn_detail_does_not_show_filter_hidden_placeholder(self):
         fn = _HTML.index("function buildMinimalTurnDetailHtml")
         snippet = _HTML[fn:fn + 2000]
-        self.assertIn("当前筛选隐藏了该 Turn 的全部事件", snippet)
+        self.assertNotIn("当前筛选隐藏了该 Turn 的全部事件", snippet)
+        self.assertNotIn("entryMatchesFilter", snippet)
 
     def test_minimal_turn_detail_has_tool_use_section(self):
         fn = _HTML.index("function buildMinimalTurnDetailHtml")
-        snippet = _HTML[fn:fn + 3500]
+        snippet = _HTML[fn:fn + 5200]
         self.assertIn("case 'tool_use':", snippet)
         self.assertIn("case 'tool_result':", snippet)
 
@@ -986,7 +989,7 @@ class TestConversationBugFixes(unittest.TestCase):
     def test_build_minimal_turns_unknown_entry_fallback_is_else_not_elif(self):
         """buildMinimalTurns must use 'else' (not 'else if (type !== unknown)') as final fallback."""
         fn = _HTML.index("function buildMinimalTurns")
-        snippet = _HTML[fn:fn + 4500]
+        snippet = _HTML[fn:fn + 5600]
         # Must NOT have the broken condition
         self.assertNotIn("e.type !== 'unknown'", snippet)
         # Must have a plain else branch that adds unknown Turn
@@ -995,3 +998,110 @@ class TestConversationBugFixes(unittest.TestCase):
         else_pos = snippet.rfind("} else {")
         after_else = snippet[else_pos:else_pos + 100]
         self.assertIn("addTurn('unknown'", after_else)
+
+
+class TestTraceTreeDualViewUI(unittest.TestCase):
+    """trace-tree-dual-view-ui: view mode state, controls, projection consumption."""
+
+    def test_trace_view_mode_state_exists(self):
+        self.assertIn("let traceViewMode", _HTML)
+
+    def test_trace_view_mode_controls_html_exists(self):
+        self.assertIn('id="traceViewModeControls"', _HTML)
+        self.assertIn('data-trace-view="default"', _HTML)
+        self.assertIn('data-trace-view="debug"', _HTML)
+
+    def test_set_trace_view_mode_function_exists(self):
+        self.assertIn("function setTraceViewMode", _HTML)
+
+    def test_update_trace_view_mode_controls_function_exists(self):
+        self.assertIn("function updateTraceViewModeControls", _HTML)
+
+    def test_debug_filters_default_to_full_timeline_until_touched(self):
+        self.assertIn("let traceDebugFiltersTouched = false", _HTML)
+        self.assertIn("function setAllTraceTypeFiltersChecked", _HTML)
+        fn_start = _HTML.index("function setTraceViewMode")
+        snippet = _HTML[fn_start:fn_start + 600]
+        self.assertIn("mode === 'debug' && !traceDebugFiltersTouched", snippet)
+        self.assertIn("setAllTraceTypeFiltersChecked(true)", snippet)
+
+    def test_type_filter_click_marks_debug_filters_touched(self):
+        fn_start = _HTML.index("document.getElementById('typeFilters').addEventListener")
+        snippet = _HTML[fn_start:fn_start + 400]
+        self.assertIn("traceDebugFiltersTouched = true", snippet)
+
+    def test_display_kind_label_function_exists(self):
+        self.assertIn("function displayKindLabel", _HTML)
+
+    def test_render_trace_tree_uses_projection(self):
+        fn_start = _HTML.index("function renderTraceTree()")
+        snippet = _HTML[fn_start:fn_start + 4000]
+        self.assertIn("buildTurnViewProjection", snippet)
+
+    def test_default_mode_hides_type_filters(self):
+        fn_start = _HTML.index("function updateTraceViewModeControls")
+        snippet = _HTML[fn_start:fn_start + 800]
+        self.assertIn("typeFilters", snippet)
+
+    def test_get_projection_source_function_exists(self):
+        self.assertIn("function getProjectionSource", _HTML)
+
+    def test_active_task_trace_source_function_exists(self):
+        self.assertIn("function getActiveTaskTraceState", _HTML)
+        self.assertIn("function expandTaskTraceNodes", _HTML)
+
+    def test_projection_source_uses_active_task_state(self):
+        fn_start = _HTML.index("function getProjectionSource")
+        snippet = _HTML[fn_start:fn_start + 600]
+        self.assertIn("getActiveTaskTraceState", snippet)
+        self.assertNotIn("isTaskTraceConfirmed", snippet)
+
+    def test_build_trace_nodes_uses_active_task_state(self):
+        fn_start = _HTML.index("function buildTraceNodes")
+        snippet = _HTML[fn_start:fn_start + 1400]
+        self.assertIn("getActiveTaskTraceState", snippet)
+        self.assertNotIn("isTaskTraceConfirmed", snippet)
+
+    def test_render_projection_node_card_function_exists(self):
+        self.assertIn("function renderProjectionNodeCard", _HTML)
+
+    def test_node_matches_debug_filter_function_exists(self):
+        self.assertIn("function nodeMatchesDebugFilter", _HTML)
+
+    def test_step_kind_badge_css_exists(self):
+        self.assertIn("step-kind-badge", _HTML)
+        self.assertIn("step-user_request", _HTML)
+        self.assertIn("step-thinking", _HTML)
+        self.assertIn("step-error_signal", _HTML)
+
+    def test_trace_step_card_css_exists(self):
+        self.assertIn("trace-step-card", _HTML)
+
+
+class TestTurnDetailCompleteEvidence(unittest.TestCase):
+    """turn-detail-complete-evidence: Detail keeps full evidence independent of filters."""
+
+    def test_evidence_helpers_exist(self):
+        self.assertIn("function buildTurnEvidenceModel", _HTML)
+        self.assertIn("function renderTurnEvidenceSections", _HTML)
+        self.assertIn("function renderRawEvidenceJson", _HTML)
+
+    def test_minimal_detail_does_not_return_filter_hidden_placeholder(self):
+        fn_start = _HTML.index("function buildMinimalTurnDetailHtml")
+        fn_end = _HTML.index("function renderAgentResponseContent", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertNotIn("entryMatchesFilter", snippet)
+        self.assertNotIn("当前筛选隐藏了该 Turn 的全部事件", snippet)
+
+    def test_tool_result_detail_does_not_truncate_result(self):
+        fn_start = _HTML.index("function renderTurnEvidenceSections")
+        snippet = _HTML[fn_start:fn_start + 4000]
+        self.assertIn("renderEvidencePre(resultStr", snippet)
+        self.assertNotIn("trunc(resultStr", snippet)
+
+    def test_raw_evidence_includes_entry_and_content_block(self):
+        fn_start = _HTML.index("function renderRawEvidenceJson")
+        snippet = _HTML[fn_start:fn_start + 900]
+        self.assertIn("contentBlock", snippet)
+        self.assertIn("entry", snippet)
+        self.assertIn("anchors", snippet)
