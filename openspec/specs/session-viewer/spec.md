@@ -1238,3 +1238,224 @@ This change SHALL only introduce projection data and tests; it SHALL NOT replace
 - **WHEN** this change is implemented
 - **THEN** right-side Detail behavior SHALL remain unchanged
 - **AND** full Detail evidence behavior SHALL be handled by a later change
+
+### Requirement: Session Trace 双视图切换
+Claude Log Viewer SHALL 在 Session Trace 中提供 `默认视图` 和 `调试视图` 两种左侧树展示模式。
+
+#### Scenario: 默认进入默认视图
+- **WHEN** 用户加载 viewer 并选择一个 session
+- **THEN** Session Trace SHALL 默认使用 `默认视图`
+- **AND** 左侧树 SHALL 展示主执行链路 Step
+- **AND** 页面 SHALL NOT 展示完整内部事件列表作为默认体验
+
+#### Scenario: 用户切换到调试视图
+- **WHEN** 用户点击 `调试视图`
+- **THEN** Session Trace SHALL 切换到 `debug` 模式
+- **AND** 左侧树 SHALL 展示完整 Turn 时间线
+- **AND** Turn 的顺序 SHALL 与底层 Minimal Turn 原始顺序一致
+
+#### Scenario: 用户切回默认视图
+- **WHEN** 用户从 `调试视图` 点击 `默认视图`
+- **THEN** Session Trace SHALL 切回 `default` 模式
+- **AND** 左侧树 SHALL 重新展示 primary Step projection
+- **AND** 主工作区 SHALL NOT 变成空白
+
+### Requirement: Trace 树消费 View Projection
+Session Trace 树 SHALL 使用 `buildTurnViewProjection(mode, source)` 的投影结果渲染 Turn/Step 节点，而不是直接展示完整 Minimal Turn 列表。
+
+#### Scenario: 默认视图渲染 Step projection
+- **WHEN** `traceViewMode` 为 `default`
+- **THEN** Trace 树 SHALL 使用 default projection
+- **AND** 子节点 SHALL 使用 `Step N` label
+- **AND** Step 编号 SHALL 连续，不因隐藏 internal Turn 产生断号
+
+#### Scenario: 调试视图渲染 Turn projection
+- **WHEN** `traceViewMode` 为 `debug`
+- **THEN** Trace 树 SHALL 使用 debug projection
+- **AND** 子节点 SHALL 使用底层 `Turn N` label
+- **AND** ordinary internal Turn SHALL 仍按原始时序显示在其真实位置
+
+#### Scenario: Task-first 树保持层级
+- **WHEN** 当前 session 已确认或已有 Task Trace 数据
+- **THEN** projection 渲染 SHALL 保留 `Task -> 会话 -> Step/Turn` 层级
+- **AND** 切换视图 SHALL NOT 改变 Task 起止锚点或 Task 归属
+
+#### Scenario: Conversation-first 树保持层级
+- **WHEN** 当前 session 没有 Task Trace 数据
+- **THEN** projection 渲染 SHALL 保留 `会话 -> Step/Turn` 层级
+- **AND** 切换视图 SHALL NOT 改变 Conversation 或 Turn 的底层锚点
+
+### Requirement: 默认视图降噪
+默认视图 SHALL 隐藏普通 internal Turn，只保留 primary Step。
+
+#### Scenario: 普通内部事件默认隐藏
+- **WHEN** session 包含 ordinary `permission-mode`、`last-prompt`、`PostToolUse`、`file-history-snapshot`、`queue-operation`、system/context 注入或 attachment metadata
+- **THEN** 默认视图 SHALL NOT 在左侧树中展示这些 ordinary internal Turn
+- **AND** 调试视图 SHALL 仍展示这些 Turn
+
+#### Scenario: thinking 默认可见
+- **WHEN** session 包含 thinking 或 reasoning Turn
+- **THEN** 默认视图 SHALL 将其作为 primary Step 展示
+- **AND** thinking 内容 SHALL NOT 因默认视图被隐藏
+
+#### Scenario: 异常内部事件默认可见
+- **WHEN** ordinary internal Turn 包含 error、warning、failed、denied、rejected、blocked 或 permission-impacting 内容
+- **THEN** 默认视图 SHALL 将其作为 primary Step 展示
+- **AND** 该 Step SHALL 保留 underlying Turn 锚点
+
+### Requirement: 类型筛选降级为调试筛选
+底层类型筛选 SHALL 只作为调试视图下的高级筛选展示。
+
+#### Scenario: 默认视图隐藏类型筛选
+- **WHEN** `traceViewMode` 为 `default`
+- **THEN** `user / assistant / system / attachment / perm / fhs / queue / other` 类型筛选 SHALL 隐藏或弱化为不可见高级控件
+- **AND** 默认视图主入口 SHALL 只突出 `默认视图 / 调试视图`
+
+#### Scenario: 调试视图显示类型筛选
+- **WHEN** `traceViewMode` 为 `debug`
+- **THEN** 类型筛选 SHALL 可见
+- **AND** 类型筛选 SHALL 只影响左侧 Trace 树的可见节点
+- **AND** 类型筛选 SHALL NOT 修改底层 Turn、Task 或 Conversation 数据
+
+#### Scenario: 筛选为空时显示明确状态
+- **WHEN** 调试视图类型筛选或搜索导致某 Conversation 没有可见 Turn
+- **THEN** Trace 树 SHALL 显示明确空状态
+- **AND** SHALL NOT 直接渲染空白区域
+
+### Requirement: 视图切换选择状态
+Session Trace SHALL 在默认视图和调试视图之间切换时保持稳定选择状态，或给出明确回退提示。
+
+#### Scenario: 可见节点保持选中
+- **WHEN** 当前选中的 Step/Turn 在目标视图中仍可见
+- **THEN** 切换视图后 SHALL 保持该节点选中
+- **AND** 右侧 Detail SHALL NOT 被清空
+
+#### Scenario: internal Turn 在默认视图不可见
+- **WHEN** 当前选中普通 internal Turn
+- **AND** 用户切换到默认视图
+- **THEN** Trace 树 SHALL 回退选中最近可见父节点或清晰提示该 Turn 已在默认视图隐藏
+- **AND** 页面 SHALL 提供切回调试视图查看完整 Turn 的提示
+- **AND** 主工作区 SHALL NOT 变成空白
+
+#### Scenario: 空 projection 范围
+- **WHEN** 某 Task 或 Conversation 在默认视图中没有 primary Step
+- **THEN** Trace 树 SHALL 保留 Task 或 Conversation 节点
+- **AND** 子区域 SHALL 显示“默认视图无主执行 Step，切换调试视图查看完整 Turn”或等价提示
+
+## ADDED Requirements
+
+### Requirement: Task-first Trace 闭环
+Claude Log Viewer SHALL 在当前 session 有 task segmentation 结果后，将 Session Trace 渲染为 `Task -> 会话 -> Step/Turn` 结构。
+
+#### Scenario: 任务切分后立即进入 Task-first
+- **WHEN** 用户对当前 session 成功运行任务切分
+- **THEN** Session Trace SHALL 使用该 task segmentation result 作为 active task source
+- **AND** 左侧 Trace 树 SHALL 以 Task 作为 Snapshot 后的一级节点
+- **AND** SHALL NOT 要求用户额外点击确认后才进入 Task-first
+
+#### Scenario: 确认状态不决定 Task-first 结构
+- **WHEN** 当前 session 有 task segmentation result 但尚未确认
+- **THEN** Session Trace SHALL 仍展示 `Task -> 会话 -> Step/Turn`
+- **AND** Tasks 页面 SHALL 可以继续显示 `预览中`
+- **AND** 用户点击确认后 SHALL 只更新确认状态，不改变 Task-first 数据来源
+
+#### Scenario: 未归类会话可见
+- **WHEN** 当前 session 有 task segmentation result
+- **AND** 某些 Conversation 或 Turn 不属于任何 Task range
+- **THEN** Session Trace SHALL 在 Task-first 结构后展示 `Unassigned`
+- **AND** Unassigned 下的会话 SHALL 继续支持默认视图 Step 和调试视图 Turn
+
+#### Scenario: 重新切分刷新 active task source
+- **WHEN** 用户重新切分当前 session
+- **THEN** 新结果 SHALL 替换 active task source
+- **AND** Session Trace SHALL 立即刷新为新的 Task-first 结构
+- **AND** 旧确认状态 SHALL 被清除或降级为未确认
+
+### Requirement: Turn Detail 完整证据
+Claude Log Viewer SHALL 在右侧 Detail 中展示当前选中 Minimal Turn 的完整证据，视图模式不得裁剪 Detail 内容。
+
+#### Scenario: 默认视图 Step 展示完整 underlying Turn
+- **WHEN** 用户在默认视图点击一个 `Step`
+- **THEN** 右侧 Detail SHALL 使用该 Step 的 `underlyingTurnKey` 定位底层 Minimal Turn
+- **AND** Detail SHALL 展示该 Minimal Turn 的完整主证据
+- **AND** Detail SHALL 提供可展开的原始 JSON
+
+#### Scenario: 调试视图 Turn 展示完整内容
+- **WHEN** 用户在调试视图点击一个 `Turn`
+- **THEN** 右侧 Detail SHALL 展示该 Turn 的完整内容
+- **AND** SHALL 包含 entry/block 定位信息
+- **AND** SHALL 提供可展开的原始 JSON
+
+#### Scenario: 视图切换不清空已选证据
+- **WHEN** 用户已选中一个在目标视图仍可见的 Step 或 Turn
+- **AND** 用户切换默认视图和调试视图
+- **THEN** 右侧 Detail SHALL 保持当前底层 Turn 的证据内容
+- **AND** SHALL NOT 变成空白或只显示摘要
+
+### Requirement: 调试筛选不裁剪 Detail
+调试视图中的类型筛选 SHALL 只影响左侧 Trace 树可见节点，不得裁剪右侧 Detail 的证据内容。
+
+#### Scenario: 已选 Turn 被筛选隐藏后 Detail 保持完整
+- **WHEN** 用户在调试视图选中一个 Turn
+- **AND** 用户修改类型筛选使该 Turn 不再出现在左侧树
+- **THEN** 右侧 Detail SHALL 继续展示该 Turn 的完整证据
+- **AND** SHALL NOT 显示"当前筛选隐藏了该 Turn 的全部事件"作为替代内容
+
+#### Scenario: 默认视图不受类型筛选影响
+- **WHEN** 用户在调试视图调整类型筛选
+- **AND** 用户切回默认视图并点击任意 Step
+- **THEN** 右侧 Detail SHALL 展示该 Step underlying Turn 的完整证据
+- **AND** SHALL NOT 根据调试筛选裁剪内容
+
+### Requirement: Tool Turn 证据完整
+Claude Log Viewer SHALL 对 tool_use 和 tool_result Turn 展示完整工具证据。
+
+#### Scenario: tool_use 展示完整 input
+- **WHEN** 当前选中 Turn 的 kind 为 `tool_use`
+- **THEN** Detail SHALL 展示工具名称
+- **AND** SHALL 展示完整 tool id 或 tool_use_id
+- **AND** SHALL 展示完整 input JSON
+- **AND** SHALL 提供该 content block 和 entry 的原始 JSON
+
+#### Scenario: tool_result 展示完整 result
+- **WHEN** 当前选中 Turn 的 kind 为 `tool_result`
+- **THEN** Detail SHALL 展示完整 result content
+- **AND** SHALL 展示 `tool_use_id`
+- **AND** SHALL 展示 `is_error` 或等价错误状态
+- **AND** SHALL 提供该 content block 和 entry 的原始 JSON
+
+#### Scenario: 长工具结果不被摘要截断
+- **WHEN** tool_result content 长度超过左侧 summary 截断阈值
+- **THEN** Detail SHALL 保留完整 content
+- **AND** SHALL 使用滚动或折叠展示控制布局
+
+### Requirement: Internal Turn 证据完整
+Claude Log Viewer SHALL 对 internal Turn 展示可调试的完整证据。
+
+#### Scenario: permission-mode 展示完整状态
+- **WHEN** 当前选中 Turn 表示 `permission-mode` 或权限相关 internal event
+- **THEN** Detail SHALL 展示权限状态、相关文本或 payload
+- **AND** SHALL 提供 entry metadata 和原始 JSON
+
+#### Scenario: snapshot 和 queue 展示结构化内容
+- **WHEN** 当前选中 Turn 表示 `file-history-snapshot` 或 `queue-operation`
+- **THEN** Detail SHALL 展示可读的结构化字段
+- **AND** SHALL 提供完整原始 JSON
+
+#### Scenario: system context unknown 有 raw fallback
+- **WHEN** 当前选中 Turn 的 kind 为 `system`、`context` 或 `unknown`
+- **THEN** Detail SHALL 展示可提取文本或 structured payload
+- **AND** 如果无法识别主证据，SHALL 至少展示完整原始 JSON
+
+### Requirement: Detail 定位信息
+右侧 Detail SHALL 展示足够的定位信息，帮助用户从 Step/Turn 追溯到底层日志。
+
+#### Scenario: 显示基础锚点
+- **WHEN** Detail 展示任意 Minimal Turn
+- **THEN** Detail SHALL 显示 turn label、kind、conversation key 或 group id
+- **AND** 如果存在 SHALL 显示 file line、entry index、event id、block anchor
+
+#### Scenario: Raw JSON 包含 entry 和 content block
+- **WHEN** Detail 展示任意 Minimal Turn
+- **THEN** 原始 JSON 区域 SHALL 包含对应 entry 的核心字段
+- **AND** 如果 Turn 来自 content block，SHALL 包含该 block 的完整 JSON
