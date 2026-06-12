@@ -766,6 +766,34 @@ body {
   .task-seg-empty { text-align: center; padding: 32px 0; color: var(--text-tertiary); font-size: 13px; }
   .task-seg-error { border: 1px solid rgba(255,59,48,0.3); border-radius: var(--radius-md);
     background: rgba(255,59,48,0.05); padding: 12px 14px; color: var(--danger); font-size: 13px; }
+  .manual-seg-bar {
+    position: sticky; top: 0; z-index: 3;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated));
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .manual-seg-bar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .manual-seg-title { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+  .manual-seg-hint { font-size: 11px; color: var(--text-secondary); line-height: 1.45; }
+  .manual-seg-chip {
+    font-size: 10px; padding: 2px 7px; border-radius: 10px;
+    background: var(--bg-surface); border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .trace-conversation-card.manual-seg-candidate {
+    background: color-mix(in srgb, var(--warning) 12%, var(--bg-elevated));
+    border-left: 4px solid var(--warning);
+    padding-left: 8px;
+  }
+  .trace-conversation-card.manual-seg-assigned {
+    background: color-mix(in srgb, var(--accent) 9%, var(--bg-elevated));
+    border-left: 4px solid var(--accent);
+    padding-left: 8px;
+  }
+  .manual-task-badge {
+    font-size: 10px; padding: 1px 7px; border-radius: 8px;
+    background: var(--accent); color: #fff; font-weight: 600; white-space: nowrap;
+  }
+  .manual-task-badge.pending { background: var(--warning); }
   .nav-btn {
     font-size: 11px; padding: 3px 8px; border-radius: var(--radius-sm);
     background: var(--bg-surface); border: 1px solid var(--border);
@@ -998,6 +1026,52 @@ body {
   .task-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .task-tab-body { display: none; }
   .task-tab-body.active { display: block; }
+  .task-trace-editbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
+  }
+  .task-trace-editbar .btn { height: 26px; padding: 3px 8px; font-size: 11px; }
+  .task-trace-status {
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    white-space: nowrap;
+  }
+  .task-trace-status.dirty { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+  .task-trace-status.saved { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+  .task-trace-actionbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+  }
+  .task-trace-actionbar .btn { font-size: 11px; padding: 3px 8px; }
+  .task-trace-actionbar .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .task-trace-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 6px 0;
+    line-height: 1.5;
+  }
+  .trace-conversation-card.editing {
+    outline: 1px dashed var(--accent);
+    outline-offset: -3px;
+  }
+  .trace-step-card.edit-selected,
+  .trace-turn-card.edit-selected {
+    box-shadow: inset 3px 0 0 var(--warning);
+  }
 </style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body class="app-shell">
@@ -1025,7 +1099,7 @@ body {
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题" style="margin-left:auto">☾</button>
   <button id="exportBtn" style="display:none"></button>
   <button id="analyzeBtn" style="display:none"></button>
-  <button id="taskSegmentsBtn" style="display:none" disabled></button>
+  <button id="taskSegmentsBtn" style="display:none" onclick="onTaskSegmentsBtnClick()" disabled></button>
 </div>
 
 <!-- ── App Body ── -->
@@ -1086,7 +1160,8 @@ body {
           <div class="page-title">Task Segmentation</div>
           <div id="taskSegContent">
             <div class="task-seg-empty">选择 session 后点击"任务切分"生成任务列表<br>
-              <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">任务切分</button>
+              <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">自动切分</button>
+              <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button>
             </div>
           </div>
         </div>
@@ -1119,18 +1194,26 @@ body {
               <button class="trace-view-btn active" data-trace-view="default">默认视图</button>
               <button class="trace-view-btn" data-trace-view="debug">调试视图</button>
             </div>
-            <div class="type-filters" id="typeFilters" style="margin-left:8px">
-              <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
-              <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
+	            <div class="type-filters" id="typeFilters" style="margin-left:8px">
+	              <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
+	              <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
               <label class="type-check" data-type="system"><input type="checkbox">system</label>
               <label class="type-check" data-type="attachment"><input type="checkbox">attachment</label>
               <label class="type-check" data-type="permission-mode"><input type="checkbox">perm</label>
               <label class="type-check" data-type="file-history-snapshot"><input type="checkbox">fhs</label>
               <label class="type-check" data-type="queue-operation"><input type="checkbox">queue</label>
-              <label class="type-check checked-other" data-type="other"><input type="checkbox" checked>other</label>
-            </div>
-            <button class="btn" id="sessionAnalyzeBtn" onclick="analyzeCurrentSession()" disabled style="margin-left:auto">报告分析</button>
-          </div>
+	              <label class="type-check checked-other" data-type="other"><input type="checkbox" checked>other</label>
+	            </div>
+	            <div class="task-trace-editbar" id="taskTraceEditControls">
+	              <button class="btn" id="editTaskTraceBtn" onclick="enterTaskTraceEditMode()" disabled>编辑 Task Trace</button>
+	              <button class="btn" id="manualTaskCreateBtn" onclick="startManualTaskCreate()">手动创建 Task</button>
+	              <button class="btn" id="saveTaskTraceBtn" onclick="saveTaskTraceOverlay()" style="display:none">保存编辑</button>
+	              <button class="btn" id="undoTaskTraceBtn" onclick="undoTaskTraceOverlay()" style="display:none">撤销编辑</button>
+	              <button class="btn" id="exitTaskTraceEditBtn" onclick="exitTaskTraceEditMode()" style="display:none">退出编辑</button>
+	              <span class="task-trace-status" id="taskTraceOverlayStatus">无 overlay</span>
+	            </div>
+	            <button class="btn" id="sessionAnalyzeBtn" onclick="analyzeCurrentSession()" disabled style="margin-left:auto">报告分析</button>
+	          </div>
           <div style="flex:1;display:flex;overflow:hidden">
             <div class="list-panel" style="width:360px">
               <div class="entry-list" id="entryList">
@@ -1777,7 +1860,8 @@ function renderOverviewPage() {
 
   // Task-oriented metrics
   const taskData = taskSegmentReports[sid];
-  const tasks = taskData?.tasks || [];
+  const overlayData = activeTaskTraceData(sid);
+  const tasks = (overlayData || taskData)?.tasks || [];
   const userCount = allEntries.filter(e => e.type === 'user').length;
   const asstCount = allEntries.filter(e => e.type === 'assistant').length;
   const turnKeys = new Set(allEntries.map(e => e._turnKey).filter(Boolean));
@@ -2240,6 +2324,15 @@ function buildConversationProjection(mode, conv, groupId, taskKey = null) {
 
 function getActiveTaskTraceState(sessionId) {
   if (!sessionId) return null;
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  if (overlay?.tasks?.length > 0) {
+    return {
+      confirmed: overlay.saved === true,
+      taskSegments: taskTraceLikeData(overlay),
+      overlay,
+      source: overlay.source || 'overlay',
+    };
+  }
   const confirmedState = taskTraceConfirmedBySession[sessionId];
   if (confirmedState?.confirmed === true && confirmedState.taskSegments?.tasks?.length > 0) {
     return { confirmed: true, taskSegments: confirmedState.taskSegments, source: 'confirmed' };
@@ -2266,7 +2359,8 @@ function getProjectionSource() {
   const activeTaskState = getActiveTaskTraceState(sid);
   const taskData = activeTaskState?.taskSegments || null;
 
-  if (taskData?.tasks?.length > 0) {
+  if (taskData?.tasks?.length > 0 && !manualTaskSegmentationMode.active) {
+    if (manualTaskSegmentationMode.active) return { allGroupConversations };
     const { taskNodes } = mapTaskSegmentsToTraceNodes(taskData);
     return { taskNodes };
   }
@@ -2371,6 +2465,9 @@ function renderProjectionNodeCard(node, indentClass, isTaskNode) {
   const isNodeSelected = selectedTraceNodeKey === node.underlyingTurnKey && selectedTraceNodeType === 'turn';
   const cssClass = node.nodeType === 'step' ? 'trace-step-card' : 'trace-turn-card';
   card.className = cssClass + (isNodeSelected ? ' selected' : '');
+  if (taskTraceEditMode && selectedEditableTurnKey === node.underlyingTurnKey) {
+    card.classList.add('edit-selected');
+  }
   card.dataset.turnKey = node.underlyingTurnKey;
   if (indentClass) card.classList.add(indentClass);
 
@@ -2402,6 +2499,683 @@ function renderProjectionNodeCard(node, indentClass, isTaskNode) {
   });
 
   return card;
+}
+
+function hasDirtyTaskTraceOverlay(sessionId) {
+  return !!getActiveTaskTraceOverlay(sessionId)?.dirty;
+}
+
+function updateTaskTraceOverlayControls() {
+  const sid = document.getElementById('sessionSel')?.value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const editBtn = document.getElementById('editTaskTraceBtn');
+  const manualBtn = document.getElementById('manualTaskCreateBtn');
+  const saveBtn = document.getElementById('saveTaskTraceBtn');
+  const undoBtn = document.getElementById('undoTaskTraceBtn');
+  const exitBtn = document.getElementById('exitTaskTraceEditBtn');
+  const status = document.getElementById('taskTraceOverlayStatus');
+
+  if (editBtn) editBtn.disabled = !overlay?.tasks?.length || taskTraceEditMode || manualTaskSegmentationMode.active;
+  if (manualBtn) manualBtn.disabled = !sid || taskTraceEditMode || manualTaskSegmentationMode.active;
+  for (const btn of [saveBtn, undoBtn, exitBtn]) {
+    if (btn) btn.style.display = taskTraceEditMode ? '' : 'none';
+  }
+  if (saveBtn) saveBtn.disabled = !overlay || !overlay.dirty;
+  if (undoBtn) undoBtn.disabled = !getSavedTaskTraceOverlay(sid) && !overlay?.dirty;
+  if (status) {
+    status.classList.toggle('dirty', !!overlay?.dirty);
+    status.classList.toggle('saved', !!overlay?.saved && !overlay?.dirty);
+    if (!overlay) status.textContent = '无 overlay';
+    else {
+      const modeText = manualTaskSegmentationMode.active ? '手动切分中' : (taskTraceEditMode ? '编辑中' : (manualTaskCreateState.active ? '创建中' : '浏览'));
+      const dirtyText = overlay.dirty ? '未保存' : (overlay.saved ? '已保存' : '预览');
+      status.textContent = `${overlay.source || 'overlay'} · ${dirtyText} · ${modeText}`;
+    }
+  }
+  const exportBtn = document.getElementById('exportTaskTraceBtn');
+  if (exportBtn) exportBtn.disabled = !overlay?.tasks?.length && !(sid && taskSegmentReports[sid]?.tasks?.length);
+}
+
+function enterTaskTraceEditMode() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!overlay?.tasks?.length) {
+    showTaskTraceToast('当前 session 还没有可编辑的 Task Trace Overlay', 'warning');
+    return;
+  }
+  taskTraceEditMode = true;
+  manualTaskCreateState.active = false;
+  selectedEditableTaskId = selectedEditableTaskId || overlay.tasks[0].taskId;
+  updateTaskTraceOverlayControls();
+  renderPage(workbenchState.activeView);
+}
+
+function exitTaskTraceEditMode() {
+  const sid = document.getElementById('sessionSel').value;
+  if (hasDirtyTaskTraceOverlay(sid) && !confirm('当前 Task Trace 有未保存修改。退出会保留预览，但请记得保存或撤销。继续退出编辑模式？')) {
+    return;
+  }
+  taskTraceEditMode = false;
+  selectedEditableTaskId = null;
+  selectedEditableTurnKey = null;
+  selectedEditableConversationKey = null;
+  manualTaskCreateState.active = false;
+  manualTaskCreateState.startTurnKey = null;
+  manualTaskCreateState.endTurnKey = null;
+  manualTaskCreateState.startConversationKey = null;
+  manualTaskCreateState.endConversationKey = null;
+  updateTaskTraceOverlayControls();
+  renderPage(workbenchState.activeView);
+}
+
+function saveTaskTraceOverlay() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!overlay) return;
+  overlay.revision = (overlay.revision || 0) + 1;
+  overlay.updatedAt = isoNow();
+  overlay.saved = true;
+  overlay.dirty = false;
+  savedTaskTraceOverlayBySession[sid] = cloneJson(overlay);
+  taskTraceConfirmedBySession[sid] = {
+    confirmed: true,
+    taskSegments: taskTraceLikeData(overlay),
+    confirmedAt: Date.now(),
+  };
+  updateTaskTraceOverlayControls();
+  renderPage(workbenchState.activeView);
+  showTaskTraceToast('✓ Task Trace Overlay 已保存');
+}
+
+function undoTaskTraceOverlay() {
+  const sid = document.getElementById('sessionSel').value;
+  const saved = getSavedTaskTraceOverlay(sid);
+  if (saved) {
+    activeTaskTraceOverlayBySession[sid] = cloneJson(saved);
+  } else {
+    const data = taskSegmentReports[sid];
+    if (data?.tasks?.length) activeTaskTraceOverlayBySession[sid] = createTaskTraceOverlayFromSegments(sid, data, 'auto');
+    else delete activeTaskTraceOverlayBySession[sid];
+  }
+  selectedEditableTaskId = getActiveTaskTraceOverlay(sid)?.tasks?.[0]?.taskId || null;
+  selectedEditableTurnKey = null;
+  selectedEditableConversationKey = null;
+  manualTaskCreateState.active = false;
+  updateTaskTraceOverlayControls();
+  renderPage(workbenchState.activeView);
+  showTaskTraceToast('已撤销未保存修改', 'warning');
+}
+
+function selectedEditableTask(sessionId) {
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  if (!overlay?.tasks?.length) return null;
+  return overlay.tasks.find(t => t.taskId === selectedEditableTaskId) || overlay.tasks[0];
+}
+
+function taskIndexForConversation(overlay, conversationKey) {
+  if (!overlay?.tasks?.length || !conversationKey) return -1;
+  for (let i = 0; i < overlay.tasks.length; i++) {
+    normalizeOverlayTaskAnchors(overlay.tasks[i]);
+    const r = rangeConversationsForKeys(overlay.tasks[i].startConversationKey, overlay.tasks[i].endConversationKey);
+    if (r.ok && r.conversations.some(c => c.conversationKey === conversationKey)) return i;
+  }
+  return -1;
+}
+
+function taskIndexForTurn(overlay, turnKey) {
+  return taskIndexForConversation(overlay, conversationKeyForTurnKey(turnKey));
+}
+
+function ensureEditableTaskSelected(sessionId) {
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  if (!overlay?.tasks?.length) return null;
+  let task = overlay.tasks.find(t => t.taskId === selectedEditableTaskId);
+  if (!task && selectedEditableConversationKey) {
+    const idx = taskIndexForConversation(overlay, selectedEditableConversationKey);
+    if (idx >= 0) task = overlay.tasks[idx];
+  }
+  if (!task) task = overlay.tasks[0];
+  selectedEditableTaskId = task.taskId;
+  return task;
+}
+
+function mutateSelectedTaskBoundary(side) {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const task = ensureEditableTaskSelected(sid);
+  const selectedConversationKey = selectedEditableConversationKey || conversationKeyForTurnKey(selectedEditableTurnKey);
+  if (!overlay || !task || !selectedConversationKey) {
+    showTaskTraceToast('请先选中 Task 和会话', 'warning');
+    return;
+  }
+  normalizeOverlayTaskAnchors(task);
+  const nextStart = side === 'start' ? selectedConversationKey : task.startConversationKey;
+  const nextEnd = side === 'end' ? selectedConversationKey : task.endConversationKey;
+  const validation = validateTaskConversationRange(nextStart, nextEnd);
+  if (!validation.ok) {
+    showTaskTraceToast(validation.error, 'error');
+    return;
+  }
+  if (side === 'start') task.startConversationKey = selectedConversationKey;
+  else task.endConversationKey = selectedConversationKey;
+  normalizeOverlayTaskAnchors(task);
+  markTaskTraceOverlayEdited(sid, `set_${side}_conversation:${task.taskId}:${selectedConversationKey}`);
+  expandTaskTraceNodes(overlay);
+  renderPage(workbenchState.activeView);
+}
+
+function setSelectedConversationAsTaskStart() { mutateSelectedTaskBoundary('start'); }
+function setSelectedConversationAsTaskEnd() { mutateSelectedTaskBoundary('end'); }
+function setSelectedTurnAsTaskStart() { setSelectedConversationAsTaskStart(); }
+function setSelectedTurnAsTaskEnd() { setSelectedConversationAsTaskEnd(); }
+
+function moveSelectedConversationToAdjacentTask(direction) {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const selectedConversationKey = selectedEditableConversationKey || conversationKeyForTurnKey(selectedEditableTurnKey);
+  if (!overlay || !selectedConversationKey) return;
+  const idx = taskIndexForConversation(overlay, selectedConversationKey);
+  if (idx < 0) {
+    showTaskTraceToast('选中的会话当前不属于任何 Task', 'warning');
+    return;
+  }
+  const task = overlay.tasks[idx];
+  normalizeOverlayTaskAnchors(task);
+  const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+  if (!range.ok) {
+    showTaskTraceToast(range.error, 'error');
+    return;
+  }
+  const pos = range.conversations.findIndex(c => c.conversationKey === selectedConversationKey);
+  if (direction === 'prev') {
+    if (idx === 0 || pos !== 0 || range.conversations.length <= 1) {
+      showTaskTraceToast('只有当前 Task 的首个会话才能移到上一个 Task', 'warning');
+      return;
+    }
+    const prevTask = overlay.tasks[idx - 1];
+    prevTask.endConversationKey = selectedConversationKey;
+    task.startConversationKey = range.conversations[1].conversationKey;
+    normalizeOverlayTaskAnchors(prevTask);
+    normalizeOverlayTaskAnchors(task);
+  } else {
+    if (idx >= overlay.tasks.length - 1 || pos !== range.conversations.length - 1 || range.conversations.length <= 1) {
+      showTaskTraceToast('只有当前 Task 的最后一个会话才能移到下一个 Task', 'warning');
+      return;
+    }
+    const nextTask = overlay.tasks[idx + 1];
+    nextTask.startConversationKey = selectedConversationKey;
+    task.endConversationKey = range.conversations[range.conversations.length - 2].conversationKey;
+    normalizeOverlayTaskAnchors(task);
+    normalizeOverlayTaskAnchors(nextTask);
+  }
+  markTaskTraceOverlayEdited(sid, `move_${direction}_conversation:${selectedConversationKey}`);
+  renderPage(workbenchState.activeView);
+}
+
+function moveSelectedConversationToPreviousTask() { moveSelectedConversationToAdjacentTask('prev'); }
+function moveSelectedConversationToNextTask() { moveSelectedConversationToAdjacentTask('next'); }
+function moveSelectedTurnToPreviousTask() { moveSelectedConversationToPreviousTask(); }
+function moveSelectedTurnToNextTask() { moveSelectedConversationToNextTask(); }
+
+function splitTaskAtSelectedConversation() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const selectedConversationKey = selectedEditableConversationKey || conversationKeyForTurnKey(selectedEditableTurnKey);
+  if (!overlay || !selectedConversationKey) return;
+  const idx = taskIndexForConversation(overlay, selectedConversationKey);
+  if (idx < 0) return showTaskTraceToast('选中的会话不在 Task 内', 'warning');
+  const task = overlay.tasks[idx];
+  normalizeOverlayTaskAnchors(task);
+  const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+  const pos = range.ok ? range.conversations.findIndex(c => c.conversationKey === selectedConversationKey) : -1;
+  if (!range.ok || pos <= 0) return showTaskTraceToast('不能从 Task 的第一个会话拆分', 'warning');
+  const oldEnd = task.endConversationKey;
+  task.endConversationKey = range.conversations[pos - 1].conversationKey;
+  const newTask = cloneJson(task);
+  newTask.taskId = `task-${String(overlay.tasks.length + 1).padStart(3, '0')}`;
+  newTask.title = `任务 ${overlay.tasks.length + 1}`;
+  newTask.startConversationKey = selectedConversationKey;
+  newTask.endConversationKey = oldEnd;
+  newTask.source = 'edited';
+  newTask.editHistory = [];
+  normalizeOverlayTaskAnchors(task);
+  normalizeOverlayTaskAnchors(newTask);
+  overlay.tasks.splice(idx + 1, 0, newTask);
+  selectedEditableTaskId = newTask.taskId;
+  expandedTaskKeys.add(`task:${newTask.taskId}`);
+  markTaskTraceOverlayEdited(sid, `split_conversation:${task.taskId}:${selectedConversationKey}`);
+  renderPage(workbenchState.activeView);
+}
+
+function splitTaskAtSelectedTurn() { splitTaskAtSelectedConversation(); }
+
+function mergeSelectedTaskWithNext() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!overlay) return;
+  const idx = overlay.tasks.findIndex(t => t.taskId === selectedEditableTaskId);
+  if (idx < 0 || idx >= overlay.tasks.length - 1) return showTaskTraceToast('没有可合并的下一个 Task', 'warning');
+  const task = overlay.tasks[idx];
+  const next = overlay.tasks[idx + 1];
+  task.endConversationKey = next.endConversationKey;
+  task.endTurnKey = next.endTurnKey;
+  task.endEventId = next.endEventId;
+  task.title = task.title || next.title;
+  normalizeOverlayTaskAnchors(task);
+  overlay.tasks.splice(idx + 1, 1);
+  markTaskTraceOverlayEdited(sid, `merge_next:${task.taskId}`);
+  renderPage(workbenchState.activeView);
+}
+
+function deleteSelectedTask() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!overlay) return;
+  const idx = overlay.tasks.findIndex(t => t.taskId === selectedEditableTaskId);
+  if (idx < 0) return;
+  const [removed] = overlay.tasks.splice(idx, 1);
+  selectedEditableTaskId = overlay.tasks[Math.min(idx, overlay.tasks.length - 1)]?.taskId || null;
+  markTaskTraceOverlayEdited(sid, `delete:${removed.taskId}`);
+  renderPage(workbenchState.activeView);
+  showTaskTraceToast('Task 已删除，其会话会显示为 Unassigned', 'warning');
+}
+
+function editSelectedTaskMetadata(title, taskType) {
+  const sid = document.getElementById('sessionSel').value;
+  const task = ensureEditableTaskSelected(sid);
+  if (!task) return;
+  const nextTitle = title != null ? title : prompt('Task 标题', task.title || '');
+  if (nextTitle == null || !String(nextTitle).trim()) return;
+  const nextType = taskType != null ? taskType : prompt('Task 类型', task.taskType || 'unknown');
+  task.title = String(nextTitle).trim();
+  task.taskType = String(nextType || 'unknown').trim() || 'unknown';
+  normalizeOverlayTaskAnchors(task);
+  markTaskTraceOverlayEdited(sid, `metadata:${task.taskId}`);
+  renderPage(workbenchState.activeView);
+}
+
+function startManualTaskCreate() {
+  const sid = document.getElementById('sessionSel').value;
+  if (!sid) return;
+  if (hasDirtyTaskTraceOverlay(sid) && !confirm('当前有未保存编辑。继续手动创建会保留这些编辑并追加新 Task，是否继续？')) return;
+  taskTraceEditMode = true;
+  manualTaskCreateState.active = true;
+  manualTaskCreateState.startTurnKey = null;
+  manualTaskCreateState.endTurnKey = null;
+  manualTaskCreateState.startConversationKey = null;
+  manualTaskCreateState.endConversationKey = null;
+  if (!getActiveTaskTraceOverlay(sid)) setActiveTaskTraceOverlay(sid, createEmptyTaskTraceOverlay(sid, 'manual'));
+  updateTaskTraceOverlayControls();
+  navigateToPage('sessions');
+  showTaskTraceToast('请选择起始会话，再选择结束会话', 'warning');
+}
+
+function cancelManualTaskCreate() {
+  manualTaskCreateState.active = false;
+  manualTaskCreateState.startTurnKey = null;
+  manualTaskCreateState.endTurnKey = null;
+  manualTaskCreateState.startConversationKey = null;
+  manualTaskCreateState.endConversationKey = null;
+  updateTaskTraceOverlayControls();
+  renderPage(workbenchState.activeView);
+}
+
+function handleManualTaskConversationSelection(conversationKey) {
+  if (!manualTaskCreateState.active || !conversationKey) return;
+  selectedEditableConversationKey = conversationKey;
+  const conv = lookupConversationInfoByKey(conversationKey)?.conversation;
+  const firstTurn = firstTurnOfConversation(conv);
+  if (firstTurn) selectedEditableTurnKey = firstTurn.turnKey;
+  if (!manualTaskCreateState.startConversationKey) {
+    manualTaskCreateState.startConversationKey = conversationKey;
+    manualTaskCreateState.startTurnKey = firstTurn?.turnKey || null;
+    showTaskTraceToast('已选择起始会话，请选择结束会话', 'warning');
+  } else {
+    manualTaskCreateState.endConversationKey = conversationKey;
+    manualTaskCreateState.endTurnKey = lastTurnOfConversation(conv)?.turnKey || null;
+    const validation = validateTaskConversationRange(manualTaskCreateState.startConversationKey, manualTaskCreateState.endConversationKey);
+    if (!validation.ok) {
+      showTaskTraceToast(validation.error, 'error');
+      manualTaskCreateState.endConversationKey = null;
+      manualTaskCreateState.endTurnKey = null;
+    } else {
+      createManualTaskFromSelection();
+    }
+  }
+  renderTraceTree();
+}
+
+function handleManualTaskTurnSelection(turnKey) {
+  handleManualTaskConversationSelection(conversationKeyForTurnKey(turnKey));
+}
+
+function createManualTaskFromSelection(title, taskType) {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid) || setActiveTaskTraceOverlay(sid, createEmptyTaskTraceOverlay(sid, 'manual'));
+  const validation = validateTaskConversationRange(manualTaskCreateState.startConversationKey, manualTaskCreateState.endConversationKey);
+  if (!validation.ok) return showTaskTraceToast(validation.error, 'error');
+  const nextTitle = title != null ? title : prompt('Task 标题', `任务 ${overlay.tasks.length + 1}`);
+  if (nextTitle == null || !String(nextTitle).trim()) return;
+  const nextType = taskType != null ? taskType : prompt('Task 类型', 'manual');
+  const task = normalizeOverlayTaskAnchors({
+    taskId: `task-${String(overlay.tasks.length + 1).padStart(3, '0')}`,
+    title: String(nextTitle).trim(),
+    taskType: String(nextType || 'manual').trim() || 'manual',
+    status: 'unevaluated',
+    source: overlay.tasks.length ? 'edited' : 'manual',
+    startConversationKey: manualTaskCreateState.startConversationKey,
+    endConversationKey: manualTaskCreateState.endConversationKey,
+    startTurnKey: manualTaskCreateState.startTurnKey,
+    endTurnKey: manualTaskCreateState.endTurnKey,
+    startEventId: null,
+    endEventId: null,
+    evidence: {},
+    boundaryReasons: ['manual:create'],
+    fileWeights: {},
+    editHistory: [],
+  });
+  overlay.tasks.push(task);
+  overlay.source = overlay.source === 'auto' ? 'edited' : 'manual';
+  selectedEditableTaskId = task.taskId;
+  manualTaskCreateState.active = false;
+  manualTaskCreateState.startTurnKey = null;
+  manualTaskCreateState.endTurnKey = null;
+  manualTaskCreateState.startConversationKey = null;
+  manualTaskCreateState.endConversationKey = null;
+  markTaskTraceOverlayEdited(sid, `manual_create:${task.taskId}`);
+  expandTaskTraceNodes(overlay);
+  renderPage(workbenchState.activeView);
+}
+
+function resetManualTaskSegmentationSelection() {
+  manualTaskSegmentationMode.startConversationKey = null;
+  manualTaskSegmentationMode.endConversationKey = null;
+}
+
+function manualTaskSegmentationRange() {
+  const startKey = manualTaskSegmentationMode.startConversationKey;
+  const endKey = manualTaskSegmentationMode.endConversationKey || startKey;
+  if (!startKey || !endKey) return null;
+  let range = rangeConversationsForKeys(startKey, endKey);
+  if (!range.ok) {
+    const reverse = rangeConversationsForKeys(endKey, startKey);
+    if (reverse.ok) {
+      manualTaskSegmentationMode.startConversationKey = endKey;
+      manualTaskSegmentationMode.endConversationKey = startKey;
+      range = reverse;
+    }
+  }
+  return range;
+}
+
+function conversationKeysInTask(task) {
+  normalizeOverlayTaskAnchors(task);
+  const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+  return range.ok ? range.conversations.map(conv => conv.conversationKey) : [];
+}
+
+function manualTaskForConversation(conversationKey) {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!conversationKey || !overlay?.tasks?.length) return null;
+  const created = new Set(manualTaskSegmentationMode.createdTaskIds || []);
+  for (let idx = 0; idx < overlay.tasks.length; idx++) {
+    const task = overlay.tasks[idx];
+    if (created.size && !created.has(task.taskId)) continue;
+    if (conversationKeysInTask(task).includes(conversationKey)) {
+      return { task, index: idx };
+    }
+  }
+  return null;
+}
+
+function manualSegmentationCandidateKeys() {
+  if (!manualTaskSegmentationMode.active) return new Set();
+  const range = manualTaskSegmentationRange();
+  return new Set(range?.ok ? range.conversations.map(conv => conv.conversationKey) : []);
+}
+
+function hasManualSegmentationOverlap(range, overlay) {
+  if (!range?.ok || !overlay?.tasks?.length) return null;
+  const selected = new Set(range.conversations.map(conv => conv.conversationKey));
+  for (const task of overlay.tasks) {
+    const taskKeys = conversationKeysInTask(task);
+    if (taskKeys.some(key => selected.has(key))) return task;
+  }
+  return null;
+}
+
+function startManualTaskSegmentationFromTasks() {
+  const sid = document.getElementById('sessionSel').value;
+  if (!sid || sid !== currentLoadedSessionId) {
+    showTaskTraceToast('请先加载一个 session', 'warning');
+    return;
+  }
+  if (!allGroupConversations.length) {
+    showTaskTraceToast('当前 session 没有可切分的会话', 'warning');
+    return;
+  }
+  if (hasDirtyTaskTraceOverlay(sid) && !confirm('当前 Task Trace 有未保存编辑。进入手动切分会继续基于当前 overlay 标注，是否继续？')) {
+    return;
+  }
+  manualTaskSegmentationMode.active = true;
+  manualTaskSegmentationMode.previousOverlay = cloneJson(getActiveTaskTraceOverlay(sid));
+  manualTaskSegmentationMode.createdTaskIds = [];
+  resetManualTaskSegmentationSelection();
+  taskTraceEditMode = false;
+  manualTaskCreateState.active = false;
+  navigateToPage('sessions');
+  updateTaskTraceOverlayControls();
+  renderPage('sessions');
+  showTaskTraceToast('已进入手动切分：请选择起始会话和结束会话', 'warning');
+}
+
+function handleManualTaskSegmentationConversationSelection(conversationKey) {
+  if (!manualTaskSegmentationMode.active || !conversationKey) return false;
+  if (!manualTaskSegmentationMode.startConversationKey || manualTaskSegmentationMode.endConversationKey) {
+    manualTaskSegmentationMode.startConversationKey = conversationKey;
+    manualTaskSegmentationMode.endConversationKey = null;
+  } else {
+    manualTaskSegmentationMode.endConversationKey = conversationKey;
+    manualTaskSegmentationRange();
+  }
+  renderTraceTree();
+  return true;
+}
+
+function createManualSegmentTask() {
+  const sid = document.getElementById('sessionSel').value;
+  if (!manualTaskSegmentationMode.active || !sid) return;
+  const range = manualTaskSegmentationRange();
+  if (!range?.ok || !manualTaskSegmentationMode.startConversationKey || !manualTaskSegmentationMode.endConversationKey) {
+    showTaskTraceToast('请先选择起始会话和结束会话', 'warning');
+    return;
+  }
+  const overlay = getActiveTaskTraceOverlay(sid) || setActiveTaskTraceOverlay(sid, createEmptyTaskTraceOverlay(sid, 'manual'));
+  const overlap = hasManualSegmentationOverlap(range, overlay);
+  if (overlap) {
+    showTaskTraceToast(`所选范围与 ${overlap.title || overlap.taskId} 重叠`, 'error');
+    return;
+  }
+  const nextIndex = (overlay.tasks || []).length + 1;
+  const task = normalizeOverlayTaskAnchors({
+    taskId: `task-${String(nextIndex).padStart(3, '0')}`,
+    title: `任务 ${nextIndex}`,
+    taskType: 'manual',
+    status: 'unevaluated',
+    source: 'manual',
+    startConversationKey: manualTaskSegmentationMode.startConversationKey,
+    endConversationKey: manualTaskSegmentationMode.endConversationKey,
+    evidence: {},
+    boundaryReasons: ['manual:segment'],
+    fileWeights: {},
+    editHistory: [],
+  });
+  overlay.tasks.push(task);
+  manualTaskSegmentationMode.createdTaskIds.push(task.taskId);
+  selectedEditableTaskId = task.taskId;
+  selectedTaskSegmentId = task.taskId;
+  markTaskTraceOverlayEdited(sid, `manual_segment_create:${task.taskId}`);
+  resetManualTaskSegmentationSelection();
+  renderPage('sessions');
+}
+
+function undoLastManualSegmentTask() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const lastTaskId = manualTaskSegmentationMode.createdTaskIds.pop();
+  if (!manualTaskSegmentationMode.active || !overlay || !lastTaskId) {
+    showTaskTraceToast('没有可撤销的手动 Task', 'warning');
+    return;
+  }
+  const idx = overlay.tasks.findIndex(task => task.taskId === lastTaskId);
+  if (idx >= 0) overlay.tasks.splice(idx, 1);
+  selectedEditableTaskId = overlay.tasks[overlay.tasks.length - 1]?.taskId || null;
+  selectedTaskSegmentId = selectedEditableTaskId;
+  markTaskTraceOverlayEdited(sid, `manual_segment_undo:${lastTaskId}`);
+  resetManualTaskSegmentationSelection();
+  renderPage('sessions');
+}
+
+function completeManualTaskSegmentation() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!manualTaskSegmentationMode.active) return;
+  manualTaskSegmentationMode.active = false;
+  resetManualTaskSegmentationSelection();
+  manualTaskSegmentationMode.createdTaskIds = [];
+  manualTaskSegmentationMode.previousOverlay = null;
+  if (overlay?.tasks?.length) {
+    expandTaskTraceNodes(overlay);
+    taskTraceConfirmedBySession[sid] = {
+      confirmed: false,
+      taskSegments: taskTraceLikeData(overlay),
+      confirmedAt: Date.now(),
+    };
+  }
+  updateTaskTraceOverlayControls();
+  renderPage('sessions');
+}
+
+function cancelManualTaskSegmentation() {
+  const sid = document.getElementById('sessionSel').value;
+  if (!manualTaskSegmentationMode.active) return;
+  if (manualTaskSegmentationMode.createdTaskIds.length && !confirm('取消会丢弃本次手动切分创建的 Task，是否继续？')) {
+    return;
+  }
+  if (manualTaskSegmentationMode.previousOverlay) {
+    activeTaskTraceOverlayBySession[sid] = cloneJson(manualTaskSegmentationMode.previousOverlay);
+  } else {
+    delete activeTaskTraceOverlayBySession[sid];
+  }
+  manualTaskSegmentationMode.active = false;
+  resetManualTaskSegmentationSelection();
+  manualTaskSegmentationMode.createdTaskIds = [];
+  manualTaskSegmentationMode.previousOverlay = null;
+  updateTaskTraceOverlayControls();
+  renderPage('sessions');
+}
+
+function overlayExportPayload(overlay) {
+  const clean = cloneJson(overlay);
+  clean.tasks = (clean.tasks || []).map(task => ({
+    taskId: task.taskId,
+    title: task.title,
+    taskType: task.taskType,
+    status: task.status,
+    source: task.source,
+    startConversationKey: task.startConversationKey,
+    endConversationKey: task.endConversationKey,
+    startTurnKey: task.startTurnKey,
+    endTurnKey: task.endTurnKey,
+    startEventId: task.startEventId,
+    endEventId: task.endEventId,
+    boundaryReasons: task.boundaryReasons || [],
+    editHistory: task.editHistory || [],
+    updatedAt: task.updatedAt || null,
+  }));
+  delete clean.debugBoundaries;
+  return clean;
+}
+
+function exportTaskTraceOverlay() {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!overlay?.tasks?.length) return showTaskTraceToast('没有可导出的 Task Trace Overlay', 'warning');
+  downloadJson(overlayExportPayload(overlay), `task-trace-overlay-${sid.slice(0, 8)}.json`);
+}
+
+function renderTaskTraceActionBar(context) {
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (!taskTraceEditMode || !overlay) return '';
+  const task = selectedEditableTask(sid);
+  const hasTask = !!task;
+  const selectedConversationKey = selectedEditableConversationKey || conversationKeyForTurnKey(selectedEditableTurnKey);
+  const hasConversation = !!selectedConversationKey;
+  const manual = manualTaskCreateState.active
+    ? `<div class="task-trace-hint">手动创建：${manualTaskCreateState.startConversationKey ? '已选起始会话' : '请选择起始会话'}${manualTaskCreateState.endConversationKey ? '，已选结束会话' : '，再选择结束会话'}</div>`
+    : '';
+  return `<div class="task-trace-actionbar" id="taskTraceActionBar">
+    ${manual}
+    <button class="btn" onclick="setSelectedConversationAsTaskStart()" ${hasTask && hasConversation ? '' : 'disabled'}>设为起始会话</button>
+    <button class="btn" onclick="setSelectedConversationAsTaskEnd()" ${hasTask && hasConversation ? '' : 'disabled'}>设为结束会话</button>
+    <button class="btn" onclick="moveSelectedConversationToPreviousTask()" ${hasConversation ? '' : 'disabled'}>移到上一个 Task</button>
+    <button class="btn" onclick="moveSelectedConversationToNextTask()" ${hasConversation ? '' : 'disabled'}>移到下一个 Task</button>
+    <button class="btn" onclick="splitTaskAtSelectedConversation()" ${hasConversation ? '' : 'disabled'}>从当前会话拆分 Task</button>
+    <button class="btn" onclick="mergeSelectedTaskWithNext()" ${hasTask ? '' : 'disabled'}>合并下一个 Task</button>
+    <button class="btn" onclick="deleteSelectedTask()" ${hasTask ? '' : 'disabled'}>删除 Task</button>
+    <button class="btn" onclick="editSelectedTaskMetadata()" ${hasTask ? '' : 'disabled'}>修改标题/类型</button>
+    ${manualTaskCreateState.active ? '<button class="btn" onclick="cancelManualTaskCreate()">取消创建</button>' : ''}
+    <button class="btn" onclick="exportTaskTraceOverlay()" ${overlay.tasks.length ? '' : 'disabled'}>导出 Overlay</button>
+  </div>`;
+}
+
+function renderManualTaskSegmentationBar() {
+  if (!manualTaskSegmentationMode.active) return null;
+  const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  const createdCount = manualTaskSegmentationMode.createdTaskIds.length;
+  const startLabel = lookupConversationInfoByKey(manualTaskSegmentationMode.startConversationKey)?.conversation?.label || '未选择';
+  const endLabel = lookupConversationInfoByKey(manualTaskSegmentationMode.endConversationKey)?.conversation?.label || '未选择';
+  const bar = document.createElement('div');
+  bar.className = 'manual-seg-bar';
+  bar.innerHTML = `
+    <div class="manual-seg-bar-row">
+      <span class="manual-seg-title">手动切分模式</span>
+      <span class="manual-seg-chip">起始：${esc(startLabel)}</span>
+      <span class="manual-seg-chip">结束：${esc(endLabel)}</span>
+      <span class="manual-seg-chip">已创建 ${createdCount} 个 Task</span>
+    </div>
+    <div class="manual-seg-hint">直接在原始会话树中点击起始会话和结束会话。创建后的 Task 范围会持续高亮，确认执行后切换为正式 Task-first 结构。</div>
+    <div class="manual-seg-bar-row">
+      <button class="btn" onclick="createManualSegmentTask()" ${manualTaskSegmentationMode.startConversationKey && manualTaskSegmentationMode.endConversationKey ? '' : 'disabled'}>创建 Task</button>
+      <button class="btn" onclick="undoLastManualSegmentTask()" ${createdCount ? '' : 'disabled'}>撤销上一次</button>
+      <button class="btn" style="background:var(--success);color:#fff;border-color:transparent" onclick="completeManualTaskSegmentation()" ${overlay?.tasks?.length ? '' : 'disabled'}>确认执行这次 Task 划分</button>
+      <button class="btn" onclick="cancelManualTaskSegmentation()">取消</button>
+    </div>
+  `;
+  return bar;
+}
+
+function applyManualSegmentationClasses(card, conversationKey, countEl) {
+  if (!manualTaskSegmentationMode.active || !conversationKey) return;
+  const assigned = manualTaskForConversation(conversationKey);
+  if (assigned) {
+    card.classList.add('manual-seg-assigned');
+    if (countEl) {
+      const idx = manualTaskSegmentationMode.createdTaskIds.indexOf(assigned.task.taskId);
+      const label = idx >= 0 ? `Task ${idx + 1}` : (assigned.task.title || assigned.task.taskId);
+      countEl.insertAdjacentHTML('beforebegin', `<span class="manual-task-badge">${esc(label)}</span>`);
+    }
+  }
+  const candidateKeys = manualSegmentationCandidateKeys();
+  if (candidateKeys.has(conversationKey)) {
+    card.classList.add('manual-seg-candidate');
+    if (countEl && !assigned) {
+      countEl.insertAdjacentHTML('beforebegin', '<span class="manual-task-badge pending">候选</span>');
+    }
+  }
 }
 
 // Render the Trace Tree in the Session page
@@ -2447,6 +3221,8 @@ function renderTraceTree() {
 
   // Update controls
   updateTraceViewModeControls();
+  const manualBar = renderManualTaskSegmentationBar();
+  if (manualBar) list.appendChild(manualBar);
 
   const traceNodes = buildTraceNodes();
 
@@ -2490,7 +3266,9 @@ function renderTraceTree() {
 
       const taskCard = document.createElement('div');
       taskCard.className = 'trace-conversation-card' + (isSelected ? ' selected' : '');
+      if (taskTraceEditMode) taskCard.classList.add('editing');
       taskCard.dataset.taskKey = node.key;
+      taskCard.dataset.taskId = node.taskId;
       taskCard.style.background = 'color-mix(in srgb, var(--accent) 4%, var(--bg-elevated))';
 
       const arrow = isExpanded ? '▼' : '▶';
@@ -2530,6 +3308,9 @@ function renderTraceTree() {
 
           const convCard = document.createElement('div');
           convCard.className = 'trace-conversation-card' + (isConvSelected ? ' selected' : '');
+          if (taskTraceEditMode && selectedEditableConversationKey === convNode.key) {
+            convCard.classList.add('edit-selected');
+          }
           convCard.dataset.conversationKey = convNode.key;
           convCard.style.paddingLeft = '24px';
 
@@ -2542,6 +3323,7 @@ function renderTraceTree() {
               <span class="trace-turn-count">${projNodeCount} ${traceViewMode === 'default' ? 'steps' : 'turns'}</span>
             </div>
           `;
+          applyManualSegmentationClasses(convCard, convNode.key, convCard.querySelector('.trace-turn-count'));
 
           convCard.addEventListener('click', (e) => {
             if (e.target.closest('.trace-arrow')) {
@@ -2592,6 +3374,9 @@ function renderTraceTree() {
       const convCard = document.createElement('div');
       convCard.className = 'trace-conversation-card'
         + (isSelected ? ' selected' : '');
+      if (taskTraceEditMode && selectedEditableConversationKey === node.key) {
+        convCard.classList.add('edit-selected');
+      }
       convCard.dataset.conversationKey = node.key;
 
       const arrow = isExpanded ? '▼' : '▶';
@@ -2603,6 +3388,7 @@ function renderTraceTree() {
           <span class="trace-turn-count">${projNodeCount} ${traceViewMode === 'default' ? 'steps' : 'turns'}</span>
         </div>
       `;
+      applyManualSegmentationClasses(convCard, node.key, convCard.querySelector('.trace-turn-count'));
 
       convCard.addEventListener('click', (e) => {
         if (e.target.closest('.trace-arrow')) {
@@ -2653,7 +3439,7 @@ function selectTurn(groupId, turnKey) {
 function renderTurnDetailInPanel(groupId, turn) {
   const panel = document.getElementById('detailPanel');
   if (!panel) return;
-  panel.innerHTML = buildTurnDetailHtml(groupId, turn);
+  panel.innerHTML = renderTaskTraceActionBar({ kind: 'turn', turn }) + buildTurnDetailHtml(groupId, turn);
 }
 
 // Render conversation summary in the detail panel
@@ -2702,7 +3488,7 @@ function renderConversationDetailInPanel(groupId, conversation) {
     </div>
   `;
 
-  panel.innerHTML = html;
+  panel.innerHTML = renderTaskTraceActionBar({ kind: 'conversation', conversation }) + html;
 }
 
 // Render Tools/Skills Snapshot detail in the detail panel
@@ -2768,18 +3554,20 @@ function renderTaskTraceDetail(taskData) {
   const { task, taskIndex } = taskData;
   const ev = task.evidence || {};
 
-  // Find start and end turns
-  const startTurn = lookupTurnByEventId(task.startEventId);
-  const endTurn = lookupTurnByEventId(task.endEventId);
-  const startLabel = startTurn ? startTurn.turn.label : (task.startEventId ? '无法定位 Turn' : '—');
-  const endLabel = endTurn ? endTurn.turn.label : (task.endEventId ? '无法定位 Turn' : '—');
+  const startTurn = resolveTaskBoundaryTurn(task, 'start');
+  const endTurn = resolveTaskBoundaryTurn(task, 'end');
+  const startConversation = resolveTaskBoundaryConversation(task, 'start');
+  const endConversation = resolveTaskBoundaryConversation(task, 'end');
+  const startLabel = startConversation ? startConversation.conversation.label : (task.startEventId ? '无法定位会话' : '—');
+  const endLabel = endConversation ? endConversation.conversation.label : (task.endEventId ? '无法定位会话' : '—');
 
   const typeBadgeClass = `task-badge-type-${task.taskType || 'unknown'}`;
   const statusBadgeClass = task.status === 'success' ? 'task-badge-final-claim' : 'task-badge-unevaluated';
 
   const html = `
-    <div class="turn-detail">
-      <div class="turn-detail-hdr">
+	    <div class="turn-detail">
+	      ${renderTaskTraceActionBar({ kind: 'task', task })}
+	      <div class="turn-detail-hdr">
         <span class="turn-detail-title">${esc(taskData.label)}</span>
         <span class="turn-kind-badge kind-context">Task</span>
       </div>
@@ -2802,14 +3590,14 @@ function renderTaskTraceDetail(taskData) {
       ` : ''}
 
       <div class="turn-detail-section">
-        <div class="turn-detail-label">范围</div>
+        <div class="turn-detail-label">会话范围</div>
         <div class="task-detail-row">
-          <span class="task-detail-key">开始</span>
+          <span class="task-detail-key">起始会话</span>
           <span>${esc(startLabel)}</span>
-          ${startTurn ? `<button class="nav-btn" onclick="navigateToTurn('${escRaw(startTurn.groupId)}','${escRaw(startTurn.turn.turnKey)}')">定位</button>` : ''}
+	          ${startTurn ? `<button class="nav-btn" onclick="navigateToTurn('${escRaw(startTurn.groupId)}','${escRaw(startTurn.turn.turnKey)}')">定位</button>` : ''}
         </div>
         <div class="task-detail-row">
-          <span class="task-detail-key">结束</span>
+          <span class="task-detail-key">结束会话</span>
           <span>${esc(endLabel)}</span>
           ${endTurn ? `<button class="nav-btn" onclick="navigateToTurn('${escRaw(endTurn.groupId)}','${escRaw(endTurn.turn.turnKey)}')">定位</button>` : ''}
         </div>
@@ -3155,14 +3943,15 @@ function renderTasksPage() {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId || sessionId !== currentLoadedSessionId) {
     el.innerHTML = `<div class="placeholder">先在顶部选择 project 和 session，再进行任务切分<br>
-      <button class="btn" style="margin-top:8px" disabled>任务切分</button></div>`;
+      <button class="btn" style="margin-top:8px" disabled>自动切分</button>
+      <button class="btn" style="margin-top:8px" disabled>手动切分</button></div>`;
     return;
   }
   if (taskSegmentsInFlight) {
     el.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
     return;
   }
-  const cached = taskSegmentReports[sessionId];
+  const cached = activeTaskTraceData(sessionId) || taskSegmentReports[sessionId];
   if (cached && cached.tasks && cached.tasks.length) {
     // Check search filter
     const q = document.getElementById('searchBox').value.trim().toLowerCase();
@@ -3179,7 +3968,8 @@ function renderTasksPage() {
     }
   } else {
     el.innerHTML = `<div class="placeholder">当前 Session 尚未生成任务切分结果<br>
-      <button class="btn" style="margin-top:8px" onclick="runTaskSegmentationForCurrentSession({ navigate: false })">任务切分</button></div>`;
+      <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">自动切分</button>
+      <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button></div>`;
   }
 }
 
@@ -3309,20 +4099,21 @@ function renderExportPage() {
   const sid = document.getElementById('sessionSel').value;
   const taskTraceBtn = document.getElementById('exportTaskTraceBtn');
   if (taskTraceBtn) {
-    const hasTasks = sid && taskSegmentReports[sid]?.tasks?.length > 0;
-    taskTraceBtn.disabled = !hasTasks;
+      const hasTasks = sid && (getActiveTaskTraceOverlay(sid)?.tasks?.length > 0 || taskSegmentReports[sid]?.tasks?.length > 0);
+      taskTraceBtn.disabled = !hasTasks;
   }
 }
 
 function exportTaskTrace() {
   const sid = document.getElementById('sessionSel').value;
+  const overlay = getActiveTaskTraceOverlay(sid);
+  if (overlay?.tasks?.length) {
+    exportTaskTraceOverlay();
+    return;
+  }
   const data = sid ? taskSegmentReports[sid] : null;
   if (!data || !data.tasks?.length) return;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `task-trace-${sid.slice(0,8)}.json`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadJson(data, `task-trace-${sid.slice(0,8)}.json`);
 }
 
 function renderSettingsPage() {
@@ -3583,6 +4374,37 @@ window.expandedTaskKeys = expandedTaskKeys;
 const taskTraceConfirmedBySession = {};
 window.taskTraceConfirmedBySession = taskTraceConfirmedBySession;
 
+// Task Trace Overlay state. Overlay is the editable task boundary layer; raw
+// trace, conversations and minimal turns stay immutable.
+const taskTraceOverlaysBySession = {};
+const activeTaskTraceOverlayBySession = {};
+const savedTaskTraceOverlayBySession = {};
+window.taskTraceOverlaysBySession = taskTraceOverlaysBySession;
+window.activeTaskTraceOverlayBySession = activeTaskTraceOverlayBySession;
+window.savedTaskTraceOverlayBySession = savedTaskTraceOverlayBySession;
+
+let taskTraceEditMode = false;
+let selectedEditableTaskId = null;
+let selectedEditableTurnKey = null;
+let selectedEditableConversationKey = null;
+const manualTaskCreateState = {
+  active: false,
+  startTurnKey: null,
+  endTurnKey: null,
+  startConversationKey: null,
+  endConversationKey: null,
+};
+window.manualTaskCreateState = manualTaskCreateState;
+
+const manualTaskSegmentationMode = {
+  active: false,
+  startConversationKey: null,
+  endConversationKey: null,
+  createdTaskIds: [],
+  previousOverlay: null,
+};
+window.manualTaskSegmentationMode = manualTaskSegmentationMode;
+
 // Tools/Skills Snapshot cache: sessionId -> { tools: [], skills: [], extractedAt: timestamp }
 const toolsSkillsSnapshotBySession = {};
 const turnNavigationIndex = {
@@ -3596,6 +4418,296 @@ const turnNavigationIndex = {
 // navTarget shape: {groupId, conversationKey, turnKey, turnIndex, entryIdx}
 
 // ── Trace Tree helpers ───────────────────────────────────────────────────
+
+function cloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function taskTraceOverlayId(sessionId) {
+  return `overlay-${String(sessionId || 'session').slice(0, 8)}-${Date.now().toString(36)}`;
+}
+
+function getActiveTaskTraceOverlay(sessionId) {
+  return sessionId ? activeTaskTraceOverlayBySession[sessionId] || null : null;
+}
+
+function getSavedTaskTraceOverlay(sessionId) {
+  return sessionId ? savedTaskTraceOverlayBySession[sessionId] || null : null;
+}
+
+function getTurnEntry(turn) {
+  return turn && turn.sourceEntryIdx != null ? allEntries[turn.sourceEntryIdx] : null;
+}
+
+function eventAnchorForTurn(turn) {
+  const entry = getTurnEntry(turn);
+  if (!entry) return null;
+  if (entry._eventId) return entry._eventId;
+  if (entry._gid === 'main' && entry._fileLine) return `main:${entry._fileLine}`;
+  if (entry._gid && entry._gid !== 'main' && entry._fileLine) {
+    const agentId = entry._gid.replace(/^sa-/, '');
+    return `agent-${agentId}:${entry._fileLine}`;
+  }
+  return entry.uuid || entry.message?.id || null;
+}
+
+function lookupTurnInfoByTurnKey(turnKey) {
+  if (!turnKey) return null;
+  const nav = turnNavigationIndex.byTurnKey.get(turnKey);
+  return nav ? { ...nav, entryIdx: nav.entryIdx ?? nav.turn?.sourceEntryIdx } : null;
+}
+
+function resolveTaskBoundaryTurn(task, side) {
+  const turnKey = side === 'start' ? task.startTurnKey : task.endTurnKey;
+  const eventId = side === 'start' ? task.startEventId : task.endEventId;
+  return lookupTurnInfoByTurnKey(turnKey) || lookupTurnByEventId(eventId);
+}
+
+function firstTurnOfConversation(conversation) {
+  return (conversation?.turns || []).find(t => !t._isPreamble) || (conversation?.turns || [])[0] || null;
+}
+
+function lastTurnOfConversation(conversation) {
+  const turns = (conversation?.turns || []).filter(t => !t._isPreamble);
+  return turns.length ? turns[turns.length - 1] : ((conversation?.turns || []).slice(-1)[0] || null);
+}
+
+function lookupConversationInfoByKey(conversationKey) {
+  if (!conversationKey) return null;
+  const nav = turnNavigationIndex.byConversationKey.get(conversationKey);
+  return nav ? { ...nav, conversationKey } : null;
+}
+
+function conversationKeyForTurnKey(turnKey) {
+  return lookupTurnInfoByTurnKey(turnKey)?.conversationKey || null;
+}
+
+function resolveTaskBoundaryConversation(task, side) {
+  const conversationKey = side === 'start' ? task.startConversationKey : task.endConversationKey;
+  const turnKey = side === 'start' ? task.startTurnKey : task.endTurnKey;
+  const eventId = side === 'start' ? task.startEventId : task.endEventId;
+  return lookupConversationInfoByKey(conversationKey)
+    || lookupConversationInfoByKey(conversationKeyForTurnKey(turnKey))
+    || lookupConversationByEventId(eventId);
+}
+
+function turnPosition(turnKey) {
+  const info = lookupTurnInfoByTurnKey(turnKey);
+  if (!info) return null;
+  const group = allGroupTurns.find(g => g.groupId === info.groupId);
+  if (!group) return null;
+  const index = group.turns.findIndex(t => t.turnKey === turnKey);
+  if (index < 0) return null;
+  return { groupId: info.groupId, conversationKey: info.conversationKey, turn: info.turn, index, groupTurns: group.turns };
+}
+
+function rangeTurnsForKeys(startTurnKey, endTurnKey) {
+  const start = turnPosition(startTurnKey);
+  const end = turnPosition(endTurnKey);
+  if (!start || !end) return { ok: false, error: '无法定位起点或终点 Turn' };
+  if (start.groupId !== end.groupId) return { ok: false, error: '第一版暂不支持跨 group 的 Task 范围' };
+  if (start.index > end.index) return { ok: false, error: 'Task 起点不能晚于终点' };
+  const turns = start.groupTurns.slice(start.index, end.index + 1).filter(t => !t._isPreamble);
+  if (!turns.length) return { ok: false, error: 'Task 范围不能为空' };
+  return { ok: true, groupId: start.groupId, startIndex: start.index, endIndex: end.index, turns, groupTurns: start.groupTurns };
+}
+
+function conversationPosition(conversationKey) {
+  const info = lookupConversationInfoByKey(conversationKey);
+  if (!info) return null;
+  const group = allGroupConversations.find(g => g.groupId === info.groupId);
+  if (!group) return null;
+  const index = group.conversations.findIndex(c => c.conversationKey === conversationKey);
+  if (index < 0) return null;
+  return { groupId: info.groupId, conversationKey, conversation: info.conversation, index, groupConversations: group.conversations };
+}
+
+function rangeConversationsForKeys(startConversationKey, endConversationKey) {
+  const start = conversationPosition(startConversationKey);
+  const end = conversationPosition(endConversationKey);
+  if (!start || !end) return { ok: false, error: '无法定位起始或结束会话' };
+  if (start.groupId !== end.groupId) return { ok: false, error: '第一版暂不支持跨 group 的 Task 范围' };
+  if (start.index > end.index) return { ok: false, error: 'Task 起始会话不能晚于结束会话' };
+  const conversations = start.groupConversations.slice(start.index, end.index + 1);
+  if (!conversations.length) return { ok: false, error: 'Task 范围不能为空' };
+  const turns = conversations.flatMap(conv => (conv.turns || []).filter(t => !t._isPreamble));
+  return { ok: true, groupId: start.groupId, startIndex: start.index, endIndex: end.index, conversations, turns, groupConversations: start.groupConversations };
+}
+
+function validateTaskConversationRange(startConversationKey, endConversationKey) {
+  return rangeConversationsForKeys(startConversationKey, endConversationKey);
+}
+
+function validateTaskRange(startKey, endKey) {
+  const startConversationKey = lookupConversationInfoByKey(startKey) ? startKey : conversationKeyForTurnKey(startKey);
+  const endConversationKey = lookupConversationInfoByKey(endKey) ? endKey : conversationKeyForTurnKey(endKey);
+  return validateTaskConversationRange(startConversationKey, endConversationKey);
+}
+
+function normalizeOverlayTaskAnchors(task) {
+  const startConv = resolveTaskBoundaryConversation(task, 'start');
+  const endConv = resolveTaskBoundaryConversation(task, 'end');
+  if (startConv?.conversation) {
+    const startTurn = firstTurnOfConversation(startConv.conversation);
+    task.startConversationKey = startConv.conversation.conversationKey;
+    if (startTurn) {
+      task.startTurnKey = startTurn.turnKey;
+      task.startEventId = eventAnchorForTurn(startTurn) || task.startEventId || null;
+    }
+  }
+  if (endConv?.conversation) {
+    const endTurn = lastTurnOfConversation(endConv.conversation);
+    task.endConversationKey = endConv.conversation.conversationKey;
+    if (endTurn) {
+      task.endTurnKey = endTurn.turnKey;
+      task.endEventId = eventAnchorForTurn(endTurn) || task.endEventId || null;
+    }
+  }
+  return task;
+}
+
+function createOverlayTaskFromSegment(task, idx) {
+  const startInfo = resolveTaskBoundaryTurn(task, 'start');
+  const endInfo = resolveTaskBoundaryTurn(task, 'end');
+  const overlayTask = {
+    ...cloneJson(task),
+    taskId: task.taskId || `task-${String(idx + 1).padStart(3, '0')}`,
+    title: task.title || task.userIntent || `任务 ${idx + 1}`,
+    taskType: task.taskType || 'unknown',
+    status: task.status || 'unevaluated',
+    startConversationKey: task.startConversationKey || startInfo?.conversationKey || null,
+    endConversationKey: task.endConversationKey || endInfo?.conversationKey || null,
+    startTurnKey: task.startTurnKey || startInfo?.turn?.turnKey || null,
+    endTurnKey: task.endTurnKey || endInfo?.turn?.turnKey || null,
+    startEventId: task.startEventId || (startInfo?.turn ? eventAnchorForTurn(startInfo.turn) : null),
+    endEventId: task.endEventId || (endInfo?.turn ? eventAnchorForTurn(endInfo.turn) : null),
+    source: task.source || 'auto',
+    editHistory: task.editHistory || [],
+    updatedAt: task.updatedAt || null,
+  };
+  return normalizeOverlayTaskAnchors(overlayTask);
+}
+
+function createTaskTraceOverlayFromSegments(sessionId, taskData, source = 'auto') {
+  const now = isoNow();
+  const overlay = {
+    overlayId: taskTraceOverlayId(sessionId),
+    sessionId,
+    source,
+    baseTaskSegmentRunId: taskData?.runId || taskData?.id || null,
+    revision: 1,
+    saved: false,
+    dirty: false,
+    createdAt: now,
+    updatedAt: now,
+    summary: cloneJson(taskData?.summary || {}),
+    debugBoundaries: cloneJson(taskData?.debugBoundaries || []),
+    tasks: (taskData?.tasks || []).map((task, idx) => createOverlayTaskFromSegment(task, idx)),
+  };
+  return overlay;
+}
+
+function createEmptyTaskTraceOverlay(sessionId, source = 'manual') {
+  const now = isoNow();
+  return {
+    overlayId: taskTraceOverlayId(sessionId),
+    sessionId,
+    source,
+    baseTaskSegmentRunId: null,
+    revision: 1,
+    saved: false,
+    dirty: false,
+    createdAt: now,
+    updatedAt: now,
+    summary: {},
+    debugBoundaries: [],
+    tasks: [],
+  };
+}
+
+function setActiveTaskTraceOverlay(sessionId, overlay) {
+  if (!sessionId || !overlay) return null;
+  activeTaskTraceOverlayBySession[sessionId] = overlay;
+  if (!taskTraceOverlaysBySession[sessionId]) taskTraceOverlaysBySession[sessionId] = [];
+  if (!taskTraceOverlaysBySession[sessionId].some(o => o.overlayId === overlay.overlayId)) {
+    taskTraceOverlaysBySession[sessionId].push(overlay);
+  }
+  expandTaskTraceNodes(overlay);
+  updateTaskTraceOverlayControls();
+  updateTaskSegmentsButton();
+  return overlay;
+}
+
+function ensureTaskTraceOverlayFromSegments(sessionId, taskData, { save = false } = {}) {
+  if (!sessionId || !taskData?.tasks?.length) return null;
+  const existing = getActiveTaskTraceOverlay(sessionId);
+  if (existing?.baseTaskSegmentRunId && existing.baseTaskSegmentRunId === (taskData.runId || taskData.id || null)) {
+    return existing;
+  }
+  const overlay = createTaskTraceOverlayFromSegments(sessionId, taskData, 'auto');
+  setActiveTaskTraceOverlay(sessionId, overlay);
+  if (save) {
+    overlay.saved = true;
+    overlay.dirty = false;
+    savedTaskTraceOverlayBySession[sessionId] = cloneJson(overlay);
+  }
+  return overlay;
+}
+
+function markTaskTraceOverlayEdited(sessionId, reason) {
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  if (!overlay) return null;
+  overlay.source = overlay.source === 'manual' ? 'manual' : 'edited';
+  overlay.dirty = true;
+  overlay.saved = false;
+  overlay.updatedAt = isoNow();
+  overlay.editHistory = overlay.editHistory || [];
+  overlay.editHistory.push({ at: overlay.updatedAt, reason });
+  for (const task of overlay.tasks || []) normalizeOverlayTaskAnchors(task);
+  updateTaskTraceOverlayControls();
+  return overlay;
+}
+
+function taskTraceLikeData(overlay) {
+  if (!overlay) return null;
+  for (const task of overlay.tasks || []) normalizeOverlayTaskAnchors(task);
+  return {
+    ...overlay,
+    ok: true,
+    tasks: overlay.tasks || [],
+    summary: overlay.summary || { taskCount: (overlay.tasks || []).length },
+    debugBoundaries: overlay.debugBoundaries || [],
+    elapsedMs: overlay.elapsedMs || 0,
+  };
+}
+
+function activeTaskTraceData(sessionId) {
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  return overlay ? taskTraceLikeData(overlay) : null;
+}
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showTaskTraceToast(message, tone = 'success') {
+  const el = document.createElement('div');
+  const bg = tone === 'error' ? 'var(--danger)' : tone === 'warning' ? 'var(--warning)' : 'var(--success)';
+  el.style.cssText = `position:fixed;top:20px;right:20px;background:${bg};color:#fff;padding:10px 16px;border-radius:6px;z-index:9999;box-shadow:var(--shadow-md);`;
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2200);
+}
 
 // Extract Tools and Skills from session data for the Snapshot node
 function extractToolsSkillsSnapshot(sessionId) {
@@ -3683,48 +4795,33 @@ function mapTaskSegmentsToTraceNodes(taskData) {
     const task = taskData.tasks[taskIdx];
     const taskKey = `task:${task.taskId}`;
 
-    // Use lookupTurnByEventId to find start and end turns (supports all anchor types)
-    const startTurnInfo = lookupTurnByEventId(task.startEventId);
-    const endTurnInfo = lookupTurnByEventId(task.endEventId);
+    normalizeOverlayTaskAnchors(task);
+    // Overlay tasks use stable conversation keys as editable boundaries. Turn
+    // keys and event ids remain derived compatibility/export anchors.
+    const startTurnInfo = resolveTaskBoundaryTurn(task, 'start');
+    const endTurnInfo = resolveTaskBoundaryTurn(task, 'end');
+    const startConversationInfo = resolveTaskBoundaryConversation(task, 'start');
+    const endConversationInfo = resolveTaskBoundaryConversation(task, 'end');
 
-    // Collect covered conversations and turns
+    // Collect covered conversations and all turns inside them.
     const coveredConversations = new Map(); // conversationKey -> { conv, turns: [] }
-    let isMappable = !!(startTurnInfo && endTurnInfo);
+    let isMappable = !!(startConversationInfo && endConversationInfo);
 
     if (isMappable) {
-      // Check if start and end are in the same group
-      if (startTurnInfo.groupId === endTurnInfo.groupId) {
-        const groupId = startTurnInfo.groupId;
-        // Find the group's turns
-        const groupData = allGroupTurns.find(g => g.groupId === groupId);
-        if (groupData) {
-          // Find the indices within this group's flat turn list
-          const startIdx = groupData.turns.findIndex(t => t.turnKey === startTurnInfo.turn.turnKey);
-          const endIdx = groupData.turns.findIndex(t => t.turnKey === endTurnInfo.turn.turnKey);
-
-          if (startIdx >= 0 && endIdx >= 0 && startIdx <= endIdx) {
-            // Collect turns in range
-            for (let i = startIdx; i <= endIdx; i++) {
-              const turn = groupData.turns[i];
-              const convKey = turn.conversationKey;
-
-              if (!coveredConversations.has(convKey)) {
-                const convData = convIndex.get(convKey);
-                if (convData) {
-                  coveredConversations.set(convKey, { ...convData, turns: [] });
-                }
-              }
-              const convData = coveredConversations.get(convKey);
-              if (convData) {
-                convData.turns.push(turn);
-              }
-            }
+      const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+      if (range.ok) {
+        for (const conv of range.conversations) {
+          const convKey = conv.conversationKey;
+          const convData = convIndex.get(convKey);
+          if (convData) {
+            coveredConversations.set(convKey, {
+              ...convData,
+              turns: (conv.turns || []).filter(turn => !turn._isPreamble),
+            });
           }
         }
       } else {
-        // Cross-group task - mark as degraded but still try to show what we can
-        // For now, include turns from both groups at the boundaries
-        isMappable = false; // Mark as degraded since cross-group is complex
+        isMappable = false;
       }
     }
 
@@ -3744,13 +4841,21 @@ function mapTaskSegmentsToTraceNodes(taskData) {
       taskType: task.taskType || 'unknown',
       status: task.status || 'unevaluated',
       confidence: task.confidence,
+      source: task.source || taskData.source || 'auto',
+      dirty: taskData.dirty === true,
+      startConversationKey: task.startConversationKey || startConversationInfo?.conversation?.conversationKey || null,
+      endConversationKey: task.endConversationKey || endConversationInfo?.conversation?.conversationKey || null,
+      startTurnKey: task.startTurnKey || startTurnInfo?.turn?.turnKey || null,
+      endTurnKey: task.endTurnKey || endTurnInfo?.turn?.turnKey || null,
       startEventId: task.startEventId,
       endEventId: task.endEventId,
+      startConversationInfo,
+      endConversationInfo,
       startTurnInfo,
       endTurnInfo,
       boundaryReasons: task.boundaryReasons || [],
       isMappable,
-      degradedReason: isMappable ? null : (startTurnInfo && endTurnInfo ? 'Cross-group task range' : 'Cannot map start/end event to Turn'),
+      degradedReason: isMappable ? null : (startConversationInfo && endConversationInfo ? 'Cross-group task range' : 'Cannot map start/end event to Conversation'),
       conversationCount: coveredConversations.size,
       turnCount: Array.from(coveredConversations.values()).reduce((sum, c) => sum + c.turns.length, 0),
       conversations: Array.from(coveredConversations.entries()).map(([convKey, data]) => ({
@@ -3818,7 +4923,7 @@ function buildTraceNodes() {
   const activeTaskState = getActiveTaskTraceState(sid);
   const taskData = activeTaskState?.taskSegments || null;
 
-  if (taskData?.tasks?.length > 0) {
+  if (taskData?.tasks?.length > 0 && !manualTaskSegmentationMode.active) {
     // Active task data: Snapshot -> Task -> Conversation -> Turn
     // Task becomes first-level node, no Group layer between Snapshot and Task
     const { taskNodes, unassignedConversations } = mapTaskSegmentsToTraceNodes(taskData);
@@ -3933,11 +5038,20 @@ function selectTraceNode(nodeType, key, groupId, conversationKey, turnKey, taskD
 
   if (nodeType === 'turn') {
     selectedTurnKey = turnKey;
+    selectedEditableTurnKey = turnKey;
+    selectedEditableConversationKey = conversationKey || conversationKeyForTurnKey(turnKey);
+    if (manualTaskCreateState.active) handleManualTaskTurnSelection(turnKey);
     const found = lookupTurnByKey(turnKey);
     if (found) {
       renderTurnDetailInPanel(found.groupId, found.turn);
     }
   } else if (nodeType === 'conversation') {
+    selectedEditableConversationKey = conversationKey || key;
+    const conv = lookupConversationInfoByKey(selectedEditableConversationKey)?.conversation;
+    const firstTurn = firstTurnOfConversation(conv);
+    selectedEditableTurnKey = firstTurn?.turnKey || null;
+    if (manualTaskSegmentationMode.active) handleManualTaskSegmentationConversationSelection(selectedEditableConversationKey);
+    if (manualTaskCreateState.active) handleManualTaskConversationSelection(selectedEditableConversationKey);
     // For conversation, show conversation summary
     const convData = turnNavigationIndex.byConversationKey.get(conversationKey);
     if (convData) {
@@ -3948,9 +5062,11 @@ function selectTraceNode(nodeType, key, groupId, conversationKey, turnKey, taskD
     renderToolsSkillsSnapshotDetail();
   } else if (nodeType === 'task' && taskData) {
     // For task, show task trace detail
+    selectedEditableTaskId = taskData.taskId;
     renderTaskTraceDetail(taskData);
   }
 
+  updateTaskTraceOverlayControls();
   renderTraceTree();
 }
 
@@ -4091,17 +5207,19 @@ function confirmTaskTraceForSession(sessionId) {
     return;
   }
 
+  const overlay = ensureTaskTraceOverlayFromSegments(sessionId, data, { save: true });
+  const taskData = overlay ? taskTraceLikeData(overlay) : data;
   taskTraceConfirmedBySession[sessionId] = {
     confirmed: true,
-    taskSegments: data,
+    taskSegments: taskData,
     confirmedAt: Date.now(),
   };
 
   // Expand all tasks by default when confirmed
-  expandTaskTraceNodes(data);
+  expandTaskTraceNodes(taskData);
 
   // Refresh the Tasks page UI
-  renderTaskSegments(data, sessionId);
+  renderTaskSegments(taskData, sessionId);
 
   // Refresh Trace Tree if on Session page
   if (workbenchState.activeView === 'sessions') {
@@ -4113,7 +5231,7 @@ function confirmTaskTraceForSession(sessionId) {
   if (panel) {
     const confirmMsg = document.createElement('div');
     confirmMsg.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--success);color:#fff;padding:10px 16px;border-radius:6px;z-index:9999;box-shadow:var(--shadow-md);';
-    confirmMsg.textContent = '✓ Task Trace 已确认并注入 Trace 树';
+    confirmMsg.textContent = '✓ Task Trace Overlay 已确认并注入 Trace 树';
     document.body.appendChild(confirmMsg);
     setTimeout(() => confirmMsg.remove(), 2000);
   }
@@ -4149,7 +5267,7 @@ function showCachedTaskSegments() {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId) return;
   navigateToPage('tasks');
-  const cached = taskSegmentReports[sessionId];
+  const cached = activeTaskTraceData(sessionId) || taskSegmentReports[sessionId];
   if (cached) { renderTaskSegments(cached, sessionId); } else { runTaskSegmentationForCurrentSession(); }
   updateTaskSegmentsButton();
 }
@@ -4159,8 +5277,13 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId || taskSegmentsInFlight) return;
 
+  if (hasDirtyTaskTraceOverlay(sessionId) && !confirm('当前 Task Trace 有未保存编辑。重新切分会替换当前 overlay，是否继续？')) {
+    return;
+  }
+
   // Unconfirm previous Task Trace when re-segmenting
   unconfirmTaskTraceForSession(sessionId);
+  delete activeTaskTraceOverlayBySession[sessionId];
 
   const previous = taskSegmentReports[sessionId] || null;
   taskSegmentsInFlight = true;
@@ -4172,11 +5295,14 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
     const data = await requestTaskSegments(sessionId);
     taskSegmentReports[sessionId] = data;
     rebuildTurnTaskAssociation(data);
-    expandTaskTraceNodes(data);
+    const overlay = ensureTaskTraceOverlayFromSegments(sessionId, data);
+    const taskData = overlay ? taskTraceLikeData(overlay) : data;
+    expandTaskTraceNodes(taskData);
     const currentSession = document.getElementById('sessionSel').value;
     if (currentSession !== sessionId) return;
     selectedTaskSegmentId = data.tasks && data.tasks.length ? data.tasks[0].taskId : null;
-    renderTaskSegments(data, sessionId);
+    selectedEditableTaskId = selectedTaskSegmentId;
+    renderTaskSegments(taskData, sessionId);
     if (workbenchState.activeView === 'sessions') renderTraceTree();
   } catch (e) {
     const currentSession = document.getElementById('sessionSel').value;
@@ -4202,11 +5328,11 @@ function renderTaskSegments(data, sessionId) {
   const summary = data.summary || {};
   const elapsedMs = data.elapsedMs || 0;
   const isAmbiguous = data.isAmbiguous || false;
-  const selId = selectedTaskSegmentId || (tasks.length ? tasks[0].taskId : null);
+  const selId = selectedTaskSegmentId || selectedEditableTaskId || (tasks.length ? tasks[0].taskId : null);
 
   // Check confirmation status
-  const confirmedState = taskTraceConfirmedBySession[sessionId];
-  const isConfirmed = confirmedState?.confirmed === true && confirmedState?.taskSegments === data;
+  const overlay = getActiveTaskTraceOverlay(sessionId);
+  const isConfirmed = !!overlay ? overlay.saved === true : (taskTraceConfirmedBySession[sessionId]?.confirmed === true);
 
   const ambiguousBadge = isAmbiguous
     ? `<span class="task-badge task-badge-ambiguous">⚠ ambiguous</span>` : '';
@@ -4224,10 +5350,10 @@ function renderTaskSegments(data, sessionId) {
   // Confirmation status badge
   const confirmStatusBadge = isConfirmed
     ? `<span class="task-badge task-badge-final-claim">✓ 已确认</span>`
-    : `<span class="task-badge task-badge-unevaluated">预览中</span>`;
+    : `<span class="task-badge task-badge-unevaluated">${overlay?.dirty ? '未保存编辑' : '预览中'}</span>`;
 
   // Confirm button (only show if not confirmed)
-  const confirmBtn = !isConfirmed
+  const confirmBtn = !isConfirmed && taskSegmentReports[sessionId]?.tasks?.length
     ? `<button class="btn" style="background:var(--success);color:#fff;border-color:transparent;margin-right:6px;" onclick="confirmTaskTraceForSession('${escRaw(sessionId)}')">确认切分</button>`
     : '';
 
@@ -4235,7 +5361,7 @@ function renderTaskSegments(data, sessionId) {
   let leftHtml = `<div class="task-seg-header" style="padding:8px 10px;margin:0;border-bottom:1px solid var(--border)">
     <div class="task-seg-title" style="font-size:13px">${tasks.length} 个任务 ${isAmbiguous ? '⚠' : ''} ${confirmStatusBadge}</div>
     <div class="task-seg-meta" style="display:flex;gap:4px;flex-wrap:wrap">${ambiguousBadge}${flipsTxt}${elapsedTxt}</div>
-    <div style="margin-top:4px">${confirmBtn}<button class="btn" onclick="runTaskSegmentationForCurrentSession()">重新切分</button></div>
+	    <div style="margin-top:4px">${confirmBtn}<button class="btn" onclick="runTaskSegmentationForCurrentSession()">自动切分</button><button class="btn" style="margin-left:4px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button><button class="btn" style="margin-left:4px" onclick="exportTaskTraceOverlay()" ${overlay?.tasks?.length ? '' : 'disabled'}>导出 Overlay</button></div>
   </div>`;
   leftHtml += '<div class="task-seg-cards" id="taskSegCards">';
   for (const [taskIdx, t] of tasks.entries()) {
@@ -4287,11 +5413,12 @@ function renderTaskSegments(data, sessionId) {
 }
 
 function selectTaskSegment(taskId, sessionId) {
-  const cached = taskSegmentReports[sessionId];
+  const cached = activeTaskTraceData(sessionId) || taskSegmentReports[sessionId];
   if (!cached) return;
   const task = (cached.tasks || []).find(t => t.taskId === taskId);
   if (!task) return;
   selectedTaskSegmentId = taskId;
+  selectedEditableTaskId = taskId;
   renderTaskSegments(cached, sessionId);
 }
 
@@ -4333,13 +5460,15 @@ function renderTaskDetailWithTabs(task, debugBoundaries) {
 }
 
 function renderTabOverview(task) {
-  const startTurn = lookupTurnByEventId(task.startEventId);
-  const endTurn = lookupTurnByEventId(task.endEventId);
-  const startLabel = startTurn ? startTurn.turn.label : (task.startEventId ? '无法定位 Turn' : '—');
-  const endLabel = endTurn ? endTurn.turn.label : (task.endEventId ? '无法定位 Turn' : '—');
+  const startTurn = resolveTaskBoundaryTurn(task, 'start');
+  const endTurn = resolveTaskBoundaryTurn(task, 'end');
+  const startConversation = resolveTaskBoundaryConversation(task, 'start');
+  const endConversation = resolveTaskBoundaryConversation(task, 'end');
+  const startLabel = startConversation ? startConversation.conversation.label : (task.startEventId ? '无法定位会话' : '—');
+  const endLabel = endConversation ? endConversation.conversation.label : (task.endEventId ? '无法定位会话' : '—');
   const overviewRows = [
-    ['开始', startLabel],
-    ['结束', endLabel],
+    ['起始会话', startLabel],
+    ['结束会话', endLabel],
     ['类型', task.taskType],
     ['状态', task.status],
   ];
@@ -4347,8 +5476,8 @@ function renderTabOverview(task) {
     `<div class="task-detail-row"><span class="task-detail-key">${esc(k)}</span>
      <span>${esc(String(v || '—'))}</span></div>`
   ).join('');
-  const startNav = makeNavTurnBtn('定位开始 Turn', task.startEventId);
-  const endNav = makeNavTurnBtn('定位结束 Turn', task.endEventId);
+  const startNav = makeNavTurnBtn('定位起始会话', task.startEventId);
+  const endNav = makeNavTurnBtn('定位结束会话', task.endEventId);
   const fwEntries = Object.entries(task.fileWeights || {}).sort((a, b) => b[1] - a[1]);
   const maxW = fwEntries.length ? fwEntries[0][1] : 1;
   const fwHtml = fwEntries.length === 0 ? '<span class="evidence-empty">无</span>' :
@@ -4396,24 +5525,24 @@ function renderTabEvidence(task) {
 }
 
 function renderTabTurns(task) {
-  const startTurn = lookupTurnByEventId(task.startEventId);
-  const endTurn = lookupTurnByEventId(task.endEventId);
-  const startLabel = startTurn ? startTurn.turn.label : (task.startEventId ? '无法定位 Turn' : '—');
-  const endLabel = endTurn ? endTurn.turn.label : (task.endEventId ? '无法定位 Turn' : '—');
-  const startNav = makeNavTurnBtn('定位开始 Turn', task.startEventId);
-  const endNav = makeNavTurnBtn('定位结束 Turn', task.endEventId);
+  const startTurn = resolveTaskBoundaryTurn(task, 'start');
+  const endTurn = resolveTaskBoundaryTurn(task, 'end');
+  const startConversation = resolveTaskBoundaryConversation(task, 'start');
+  const endConversation = resolveTaskBoundaryConversation(task, 'end');
+  const startLabel = startConversation ? startConversation.conversation.label : (task.startEventId ? '无法定位会话' : '—');
+  const endLabel = endConversation ? endConversation.conversation.label : (task.endEventId ? '无法定位会话' : '—');
+  const startNav = makeNavTurnBtn('定位起始会话', task.startEventId);
+  const endNav = makeNavTurnBtn('定位结束会话', task.endEventId);
 
-  let html = '<div class="task-detail-section"><div class="task-detail-label">Turn 范围</div>';
-  html += `<div class="task-detail-row"><span class="task-detail-key">开始</span><span>${esc(startLabel)}</span>${startNav}</div>`;
-  html += `<div class="task-detail-row"><span class="task-detail-key">结束</span><span>${esc(endLabel)}</span>${endNav}</div>`;
+  let html = '<div class="task-detail-section"><div class="task-detail-label">会话范围</div>';
+  html += `<div class="task-detail-row"><span class="task-detail-key">起始会话</span><span>${esc(startLabel)}</span>${startNav}</div>`;
+  html += `<div class="task-detail-row"><span class="task-detail-key">结束会话</span><span>${esc(endLabel)}</span>${endNav}</div>`;
 
   // Show Turn list for this task's range
-  const startTIdx = startTurn?.turn._turnIdx ?? -1;
-  const endTIdx = endTurn?.turn._turnIdx ?? -1;
-  const groupId = startTurn?.groupId ?? endTurn?.groupId;
-  const grp = groupId ? allGroupTurns.find(g => g.groupId === groupId) : null;
-  if (grp && startTIdx >= 0 && endTIdx >= 0) {
-    const rangeTurns = grp.turns.filter(t => !t._isPreamble && t._turnIdx >= startTIdx && t._turnIdx <= endTIdx);
+  const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+  const groupId = startConversation?.groupId ?? endConversation?.groupId;
+  if (range.ok) {
+    const rangeTurns = range.turns;
     if (rangeTurns.length) {
       html += `<div style="margin-top:8px"><div class="task-detail-label">包含 Turns (${rangeTurns.length})</div>`;
       for (const t of rangeTurns) {
@@ -4581,24 +5710,20 @@ function navigateToTurn(groupId, turnKey) {
   // Expand the conversation containing this turn
   expandConversationForTurn(turnKey);
 
-  // If Task Trace is confirmed, also expand the containing Task
+  // If Task Trace overlay is active, also expand the containing Task
   const sid = document.getElementById('sessionSel').value;
-  const confirmedState = sid ? taskTraceConfirmedBySession[sid] : null;
-  if (confirmedState?.confirmed && confirmedState?.taskSegments?.tasks) {
+  const activeTaskData = sid ? activeTaskTraceData(sid) : null;
+  if (activeTaskData?.tasks?.length) {
     // Find which task contains this turn
-    const turn = turnNavigationIndex.byTurnKey.get(turnKey)?.turn;
-    if (turn) {
-      const turnIdx = turn.index;
-      for (const task of confirmedState.taskSegments.tasks) {
-        const startTurn = lookupTurnByEventId(task.startEventId);
-        const endTurn = lookupTurnByEventId(task.endEventId);
-        if (startTurn && endTurn) {
-          const startIdx = startTurn.turn.index;
-          const endIdx = endTurn.turn.index;
-          if (turnIdx >= startIdx && turnIdx <= endIdx) {
-            expandedTaskKeys.add(`task:${task.taskId}`);
-            break;
-          }
+    const turnInfo = turnNavigationIndex.byTurnKey.get(turnKey);
+    const conversationKey = turnInfo?.conversationKey;
+    if (conversationKey) {
+      for (const task of activeTaskData.tasks) {
+        normalizeOverlayTaskAnchors(task);
+        const range = rangeConversationsForKeys(task.startConversationKey, task.endConversationKey);
+        if (range.ok && range.conversations.some(conv => conv.conversationKey === conversationKey)) {
+          expandedTaskKeys.add(`task:${task.taskId}`);
+          break;
         }
       }
     }
@@ -4873,6 +5998,13 @@ async function loadSession() {
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId) return;
 
+  if (currentLoadedSessionId && currentLoadedSessionId !== sessionId && hasDirtyTaskTraceOverlay(currentLoadedSessionId)) {
+    if (!confirm('当前 session 有未保存的 Task Trace 编辑。切换 session 会保留内存预览，但请记得保存或撤销。继续切换？')) {
+      document.getElementById('sessionSel').value = currentLoadedSessionId;
+      return;
+    }
+  }
+
   resetAnalysisState();
 
   // Reset Trace Tree selection state for new session
@@ -4968,12 +6100,14 @@ async function loadSession() {
     currentLoadedSessionId = sessionId;   // mark session as fully loaded
     updateAnalyzeButton();
     updateTaskSegmentsButton();
+    updateTaskTraceOverlayControls();
     // Refresh whichever workbench page is currently active so it shows the
     // new session data immediately (sessions/overview/tasks all depend on it).
     renderPage(workbenchState.activeView);
   } catch(e) {
     document.getElementById('entryList').innerHTML =
       `<div class="placeholder" style="color:#f85149">加载失败: ${esc(e.message)}</div>`;
+    updateTaskTraceOverlayControls();
   }
 }
 
@@ -4991,6 +6125,7 @@ function resetAnalysisState() {
   allGroupTurns = [];
   allGroupConversations = [];
   updateTaskSegmentsButton();
+  updateTaskTraceOverlayControls();
 }
 
 function currentAnalysisSessionId() {

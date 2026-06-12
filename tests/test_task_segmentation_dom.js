@@ -39,6 +39,27 @@ const MOCK_SESSION = {
   subagents: [],
 };
 
+const MOCK_SESSION_THREE_CONVERSATIONS = {
+  sessionId: 'test-session-001',
+  projectDir: 'test-project',
+  agent: 'claude',
+  main: [
+    { type: 'user', _fileLine: 1, timestamp: '2025-01-01T00:01:00Z',
+      message: { content: [{ type: 'text', text: 'Fix the login bug' }] } },
+    { type: 'assistant', _fileLine: 2, timestamp: '2025-01-01T00:02:00Z',
+      message: { content: [{ type: 'text', text: 'Login fixed.' }] } },
+    { type: 'user', _fileLine: 3, timestamp: '2025-01-01T00:03:00Z',
+      message: { content: [{ type: 'text', text: 'Add register feature' }] } },
+    { type: 'assistant', _fileLine: 4, timestamp: '2025-01-01T00:04:00Z',
+      message: { content: [{ type: 'text', text: 'Register added.' }] } },
+    { type: 'user', _fileLine: 5, timestamp: '2025-01-01T00:05:00Z',
+      message: { content: [{ type: 'text', text: 'Write release notes' }] } },
+    { type: 'assistant', _fileLine: 6, timestamp: '2025-01-01T00:06:00Z',
+      message: { content: [{ type: 'text', text: 'Release notes done.' }] } },
+  ],
+  subagents: [],
+};
+
 const MOCK_TASK_SEGMENTS = {
   ok: true,
   sessionId: 'test-session-001',
@@ -452,8 +473,8 @@ async function test_tasks_page_waits_for_manual_segmentation() {
   assert.ok(doc.getElementById('taskSegContent').textContent.includes('尚未生成任务切分结果'));
 
   const taskButton = Array.from(doc.querySelectorAll('#taskSegContent button'))
-    .find(btn => btn.textContent.includes('任务切分'));
-  assert.ok(taskButton, 'manual task segmentation button should be visible');
+    .find(btn => btn.textContent.includes('自动切分'));
+  assert.ok(taskButton, 'automatic task segmentation button should be visible');
   taskButton.click();
   await flushAsync();
 
@@ -461,6 +482,47 @@ async function test_tasks_page_waits_for_manual_segmentation() {
   assert.deepStrictEqual(win.__taskSegmentRequests[0], { sessionId: 'test-session-001' });
   assert.ok(doc.getElementById('taskSegContent').textContent.includes('Fix the login bug'));
   console.log('  ✓ Tasks page waits for manual segmentation');
+}
+
+async function test_manual_task_segmentation_from_tasks_page() {
+  const dom = makeDOM();
+  await loadTestSession(dom);
+
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  win.navigateToPage('tasks');
+  await flushAsync();
+
+  const manualButton = Array.from(doc.querySelectorAll('#taskSegContent button'))
+    .find(btn => btn.textContent.includes('手动切分'));
+  assert.ok(manualButton, 'manual segmentation button should be visible');
+  manualButton.click();
+  await flushAsync();
+
+  assert.strictEqual(doc.querySelector('.page.active').dataset.page, 'sessions');
+  assert.strictEqual(win.manualTaskSegmentationMode.active, true, 'manual segmentation mode should be active');
+  assert.ok(doc.querySelector('.manual-seg-bar'), 'manual segmentation toolbar should render');
+
+  const convs = win.allGroupConversations[0].conversations;
+  win.selectTraceNode('conversation', convs[0].conversationKey, 'main', convs[0].conversationKey, null);
+  win.selectTraceNode('conversation', convs[1].conversationKey, 'main', convs[1].conversationKey, null);
+  win.createManualSegmentTask();
+  win.renderTraceTree();
+  await flushAsync();
+
+  let overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay?.tasks?.length === 1, 'manual segmentation should create one task');
+  assert.strictEqual(overlay.tasks[0].title, '任务 1');
+  assert.strictEqual(overlay.tasks[0].startConversationKey, convs[0].conversationKey);
+  assert.strictEqual(overlay.tasks[0].endConversationKey, convs[1].conversationKey);
+  assert.ok(doc.querySelector('.manual-seg-assigned'), 'created task range should stay highlighted');
+
+  win.undoLastManualSegmentTask();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.strictEqual(overlay.tasks.length, 0, 'undo should remove the latest manual task');
+
+  console.log('  ✓ manual segmentation from Tasks page creates and undoes a task');
 }
 
 // ---------------------------------------------------------------------------
@@ -927,6 +989,68 @@ const MOCK_TASK_SEGMENTS_CONFIRMED = {
   elapsedMs: 5,
 };
 
+const MOCK_TWO_TASK_SEGMENTS = {
+  ok: true,
+  sessionId: 'test-session-001',
+  tasks: [
+    {
+      taskId: 'task-1',
+      title: 'Fix the login bug',
+      taskType: 'bugfix',
+      status: 'unevaluated',
+      startEventId: 'main:1',
+      endEventId: 'main:2',
+      evidence: { commands: [], filesRead: [], filesChanged: [], errors: [] },
+      boundaryReasons: [],
+      fileWeights: {},
+    },
+    {
+      taskId: 'task-2',
+      title: 'Add register feature',
+      taskType: 'feature',
+      status: 'unevaluated',
+      startEventId: 'main:3',
+      endEventId: 'main:4',
+      evidence: { commands: [], filesRead: [], filesChanged: [], errors: [] },
+      boundaryReasons: [],
+      fileWeights: {},
+    },
+  ],
+  summary: { taskCount: 2 },
+  elapsedMs: 5,
+};
+
+const MOCK_THREE_CONVERSATION_TWO_TASK_SEGMENTS = {
+  ok: true,
+  sessionId: 'test-session-001',
+  tasks: [
+    {
+      taskId: 'task-1',
+      title: 'Fix the login bug',
+      taskType: 'bugfix',
+      status: 'unevaluated',
+      startEventId: 'main:1',
+      endEventId: 'main:2',
+      evidence: { commands: [], filesRead: [], filesChanged: [], errors: [] },
+      boundaryReasons: [],
+      fileWeights: {},
+    },
+    {
+      taskId: 'task-2',
+      title: 'Register and release',
+      taskType: 'feature',
+      status: 'unevaluated',
+      startEventId: 'main:3',
+      endEventId: 'main:6',
+      evidence: { commands: [], filesRead: [], filesChanged: [], errors: [] },
+      boundaryReasons: [],
+      fileWeights: {},
+    },
+  ],
+  summary: { taskCount: 2 },
+  elapsedMs: 5,
+};
+
 async function test_confirmed_task_trace_shows_task_as_first_level_node() {
   const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
   const win = dom.window;
@@ -1142,6 +1266,122 @@ async function test_task_navigation_expands_task_and_conversation() {
   }
 
   console.log('  ✓ Task navigation expands Task and Conversation');
+}
+
+async function test_auto_confirm_creates_saved_overlay() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_TASK_SEGMENTS_CONFIRMED;
+  win.confirmTaskTraceForSession('test-session-001');
+
+  const overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay, 'confirm should create an active overlay');
+  assert.strictEqual(overlay.source, 'auto');
+  assert.strictEqual(overlay.saved, true);
+  assert.strictEqual(overlay.dirty, false);
+  assert.ok(overlay.tasks[0].startConversationKey, 'overlay task should use startConversationKey');
+  assert.ok(overlay.tasks[0].endConversationKey, 'overlay task should use endConversationKey');
+  assert.ok(overlay.tasks[0].startTurnKey, 'overlay task should use startTurnKey');
+  assert.ok(overlay.tasks[0].endTurnKey, 'overlay task should use endTurnKey');
+
+  console.log('  ✓ auto confirmation creates saved Task Trace overlay');
+}
+
+async function test_edit_boundary_marks_overlay_dirty() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_TASK_SEGMENTS_CONFIRMED;
+  win.confirmTaskTraceForSession('test-session-001');
+  win.enterTaskTraceEditMode();
+  win.selectTaskSegment('task-1', 'test-session-001');
+  const turnInfo = win.lookupTurnByEventId('main:3');
+  win.selectTraceNode('conversation', turnInfo.conversationKey, turnInfo.groupId, turnInfo.conversationKey, null);
+  win.setSelectedConversationAsTaskStart();
+
+  const overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.strictEqual(overlay.dirty, true);
+  assert.strictEqual(overlay.source, 'edited');
+  assert.strictEqual(overlay.tasks[0].startConversationKey, turnInfo.conversationKey);
+  assert.strictEqual(overlay.tasks[0].startTurnKey, turnInfo.turn.turnKey);
+
+  console.log('  ✓ setting task boundary marks overlay dirty');
+}
+
+async function test_move_split_merge_delete_overlay_tasks() {
+  const dom = makeDOM(MOCK_SESSION_THREE_CONVERSATIONS, MOCK_THREE_CONVERSATION_TWO_TASK_SEGMENTS);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_THREE_CONVERSATION_TWO_TASK_SEGMENTS;
+  win.confirmTaskTraceForSession('test-session-001');
+  win.enterTaskTraceEditMode();
+
+  const task2Start = win.lookupTurnByEventId('main:3');
+  win.selectTaskSegment('task-2', 'test-session-001');
+  win.selectTraceNode('conversation', task2Start.conversationKey, task2Start.groupId, task2Start.conversationKey, null);
+  win.moveSelectedConversationToPreviousTask();
+  let overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.strictEqual(overlay.tasks[0].endConversationKey, task2Start.conversationKey, 'selected boundary conversation should move to previous task');
+  assert.strictEqual(overlay.tasks[0].endTurnKey, 'main:conversation:1:turn:1', 'moving a conversation should include its final turn');
+
+  win.selectTaskSegment('task-1', 'test-session-001');
+  win.selectTraceNode('conversation', task2Start.conversationKey, task2Start.groupId, task2Start.conversationKey, null);
+  win.splitTaskAtSelectedConversation();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay.tasks.length >= 3, 'split should add a task');
+
+  win.mergeSelectedTaskWithNext();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay.tasks.length >= 2, 'merge should remove next task');
+
+  win.deleteSelectedTask();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay.tasks.length >= 1, 'delete should remove selected task without clearing overlay');
+
+  console.log('  ✓ move / split / merge / delete update overlay tasks');
+}
+
+async function test_manual_create_save_undo_and_export_payload() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.startManualTaskCreate();
+  const start = win.lookupTurnByEventId('main:1');
+  const end = win.lookupTurnByEventId('main:2');
+  win.manualTaskCreateState.startConversationKey = start.conversationKey;
+  win.manualTaskCreateState.endConversationKey = end.conversationKey;
+  win.manualTaskCreateState.startTurnKey = start.turn.turnKey;
+  win.manualTaskCreateState.endTurnKey = end.turn.turnKey;
+  win.createManualTaskFromSelection('Manual Task', 'manual');
+
+  let overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.ok(overlay.tasks.length === 1, 'manual create should create one task');
+  assert.strictEqual(overlay.source, 'manual');
+  assert.strictEqual(overlay.dirty, true);
+
+  win.saveTaskTraceOverlay();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.strictEqual(overlay.saved, true);
+  assert.strictEqual(overlay.dirty, false);
+
+  win.editSelectedTaskMetadata('Edited Title', 'bugfix');
+  assert.strictEqual(win.activeTaskTraceOverlayBySession['test-session-001'].dirty, true);
+  win.undoTaskTraceOverlay();
+  overlay = win.activeTaskTraceOverlayBySession['test-session-001'];
+  assert.strictEqual(overlay.tasks[0].title, 'Manual Task', 'undo should restore saved overlay');
+
+  const payload = win.overlayExportPayload(overlay);
+  assert.ok(payload.tasks[0].startConversationKey);
+  assert.ok(payload.tasks[0].startTurnKey);
+  assert.ok(payload.tasks[0].startEventId);
+  assert.ok(!JSON.stringify(payload).includes('"raw"'), 'overlay export payload should not include raw trace');
+
+  console.log('  ✓ manual create / save / undo / export payload work');
 }
 
 // ---------------------------------------------------------------------------
@@ -1571,6 +1811,7 @@ const tests = [
   test_make_nav_btn_disabled_for_unknown_event,
   test_show_nav_hint,
   test_tasks_page_waits_for_manual_segmentation,
+  test_manual_task_segmentation_from_tasks_page,
   test_session_tasks_session_roundtrip_keeps_logs_visible,
   test_missing_page_falls_back_to_session,
   // Bug fix regression tests
@@ -1590,6 +1831,10 @@ const tests = [
   test_confirmed_task_covers_turns_under_task_node,
   test_confirmed_task_no_badge_on_covered_turns,
   test_task_navigation_expands_task_and_conversation,
+  test_auto_confirm_creates_saved_overlay,
+  test_edit_boundary_marks_overlay_dirty,
+  test_move_split_merge_delete_overlay_tasks,
+  test_manual_create_save_undo_and_export_payload,
   // Turn View Mode Projection tests
   test_classifyTurnForDefaultView_exists,
   test_buildTurnViewProjection_exists,

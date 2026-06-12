@@ -1,6 +1,6 @@
 ## Why
 
-当前 Task Trace 已经支持自动切分并注入 Trace 树，但纯规则算法不可能总是准确。真实使用中，用户会发现某些会话或 Turn 应该属于相邻 Task，或者算法漏切、误切。
+当前 Task Trace 已经支持自动切分并注入 Trace 树，但纯规则算法不可能总是准确。真实使用中，用户会发现某些会话应该属于相邻 Task，或者算法漏切、误切。
 
 如果平台只允许“接受/不接受算法结果”，它仍然只是一个自动分析工具；如果允许用户校正和手动划分 Task，它就开始具备数据标注能力，能为后续 Dataset Builder、Offline Eval 和失败诊断沉淀更可靠的人工确认 Task Trace。
 
@@ -11,15 +11,15 @@
 - 引入前端 Task Trace Overlay 状态，用于表示当前 session 的 active Task 划分。
 - 自动切分结果确认后先生成 `auto overlay`。
 - 用户可以进入编辑模式，对 overlay 做人工校正：
-  - 调整 Task 起始 Turn / 结束 Turn。
-  - 将 Turn 移到上一个或下一个 Task。
-  - 从某个 Turn 拆分新 Task。
+  - 调整 Task 起始会话 / 结束会话。
+  - 将完整会话移到上一个或下一个 Task。
+  - 从某个会话拆分新 Task。
   - 合并相邻 Task。
   - 删除 Task。
   - 修改 Task 标题和类型。
 - 用户可以不运行自动切分，直接手动创建 Task：
-  - 选择起始 Turn。
-  - 选择结束 Turn。
+  - 选择起始会话。
+  - 选择结束会话。
   - 输入标题和类型。
   - 保存为 manual overlay。
 - Trace 树展示当前 active overlay，而不是只展示算法原始结果。
@@ -33,6 +33,7 @@
 - 不重新设计 task segmentation 算法。
 - 不实现复杂评测状态编辑。
 - 不改变原始 Trace、Conversation 或 Turn 派生数据。
+- 不支持把单个会话内部的 Step/Turn 拆到不同 Task；Step/Turn 只作为详情展示和导出锚点。
 
 ## Capabilities
 
