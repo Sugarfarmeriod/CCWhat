@@ -678,6 +678,121 @@ async function test_entry_anchor_and_block_anchor_locate_conversation_and_turn()
 }
 
 // ---------------------------------------------------------------------------
+// Fix 1: duplicate consecutive user messages → only 1 Conversation
+// ---------------------------------------------------------------------------
+
+async function test_duplicate_consecutive_user_messages_do_not_split_conversation() {
+  const dupSession = {
+    sessionId: 'test-dup-user',
+    projectDir: 'test-project',
+    agent: 'claude',
+    main: [
+      // Two identical real user messages back-to-back, no assistant between them
+      { type: 'user', _fileLine: 1, timestamp: '2025-01-01T00:01:00Z',
+        message: { content: [{ type: 'text', text: 'Fix the login bug' }] } },
+      { type: 'user', _fileLine: 2, timestamp: '2025-01-01T00:02:00Z',
+        message: { content: [{ type: 'text', text: 'Fix the login bug' }] } },
+      { type: 'assistant', _fileLine: 3, timestamp: '2025-01-01T00:03:00Z',
+        message: { content: [{ type: 'text', text: 'Done.' }] } },
+    ],
+    subagents: [],
+  };
+
+  const dom = makeDOM(dupSession);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  const projSel = doc.getElementById('projectSel');
+  const sessSel = doc.getElementById('sessionSel');
+  const pOpt = doc.createElement('option'); pOpt.value = 'test-project'; projSel.appendChild(pOpt); projSel.value = 'test-project';
+  const sOpt = doc.createElement('option'); sOpt.value = 'test-dup-user'; sessSel.appendChild(sOpt); sessSel.value = 'test-dup-user';
+  await win.loadSession();
+  await flushAsync();
+
+  const convHdrs = doc.querySelectorAll('.conv-hdr');
+  assert.strictEqual(convHdrs.length, 1,
+    `two consecutive identical user messages must produce exactly 1 Conversation, got ${convHdrs.length}`);
+
+  console.log('  ✓ duplicate consecutive user messages produce only 1 Conversation');
+}
+
+// ---------------------------------------------------------------------------
+// Fix 2: reasoning event → thinking Turn via eventsToEntries
+// ---------------------------------------------------------------------------
+
+async function test_reasoning_event_produces_thinking_turn() {
+  // Session that uses the events path (no main entries, only events)
+  const reasoningSession = {
+    sessionId: 'test-reasoning',
+    projectDir: 'test-project',
+    agent: 'opencode',
+    // No main — loadSession will call eventsToEntries
+    events: [
+      { id: 'ev1', role: 'user', kind: 'message', timestamp: '2025-01-01T00:01:00Z', content: 'Fix the bug' },
+      { id: 'ev2', kind: 'reasoning', timestamp: '2025-01-01T00:02:00Z', summary: 'I will read the file first' },
+      { id: 'ev3', role: 'assistant', kind: 'message', timestamp: '2025-01-01T00:03:00Z', content: 'Fixed.' },
+    ],
+    subagents: [],
+  };
+
+  const dom = makeDOM(reasoningSession);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  const projSel = doc.getElementById('projectSel');
+  const sessSel = doc.getElementById('sessionSel');
+  const pOpt = doc.createElement('option'); pOpt.value = 'test-project'; projSel.appendChild(pOpt); projSel.value = 'test-project';
+  const sOpt = doc.createElement('option'); sOpt.value = 'test-reasoning'; sessSel.appendChild(sOpt); sessSel.value = 'test-reasoning';
+  await win.loadSession();
+  await flushAsync();
+
+  const thinkingCards = doc.querySelectorAll('.turn-card .kind-thinking');
+  assert.ok(thinkingCards.length > 0,
+    `reasoning event should produce a 'kind-thinking' Turn card, found ${thinkingCards.length}`);
+
+  console.log('  ✓ reasoning event from eventsToEntries produces a thinking Turn');
+}
+
+// ---------------------------------------------------------------------------
+// Fix 3: unknown-type entry produces kind-unknown Turn (not silently dropped)
+// ---------------------------------------------------------------------------
+
+async function test_unknown_entry_produces_kind_unknown_turn() {
+  const unknownSession = {
+    sessionId: 'test-unknown',
+    projectDir: 'test-project',
+    agent: 'claude',
+    main: [
+      { type: 'user', _fileLine: 1, timestamp: '2025-01-01T00:01:00Z',
+        message: { content: [{ type: 'text', text: 'Hello' }] } },
+      // An entry with an unknown type
+      { type: 'unknown', _fileLine: 2, timestamp: '2025-01-01T00:02:00Z',
+        message: { content: [] } },
+      { type: 'assistant', _fileLine: 3, timestamp: '2025-01-01T00:03:00Z',
+        message: { content: [{ type: 'text', text: 'Hi.' }] } },
+    ],
+    subagents: [],
+  };
+
+  const dom = makeDOM(unknownSession);
+  const win = dom.window;
+  const doc = dom.window.document;
+
+  const projSel = doc.getElementById('projectSel');
+  const sessSel = doc.getElementById('sessionSel');
+  const pOpt = doc.createElement('option'); pOpt.value = 'test-project'; projSel.appendChild(pOpt); projSel.value = 'test-project';
+  const sOpt = doc.createElement('option'); sOpt.value = 'test-unknown'; sessSel.appendChild(sOpt); sessSel.value = 'test-unknown';
+  await win.loadSession();
+  await flushAsync();
+
+  const unknownCards = doc.querySelectorAll('.turn-card .kind-unknown');
+  assert.ok(unknownCards.length > 0,
+    `unknown entry must produce a 'kind-unknown' Turn card, found ${unknownCards.length}`);
+
+  console.log('  ✓ unknown-type entry produces a kind-unknown Turn (not silently dropped)');
+}
+
+// ---------------------------------------------------------------------------
 // Run all tests
 // ---------------------------------------------------------------------------
 
@@ -693,6 +808,10 @@ const tests = [
   test_tasks_page_waits_for_manual_segmentation,
   test_session_tasks_session_roundtrip_keeps_logs_visible,
   test_missing_page_falls_back_to_session,
+  // Bug fix regression tests
+  test_duplicate_consecutive_user_messages_do_not_split_conversation,
+  test_reasoning_event_produces_thinking_turn,
+  test_unknown_entry_produces_kind_unknown_turn,
   // Conversation / minimal Turn tests (task 6.2-6.6)
   test_one_user_request_creates_one_conversation,
   test_multiblock_assistant_creates_multiple_tool_turns,

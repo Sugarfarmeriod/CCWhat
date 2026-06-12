@@ -1260,18 +1260,17 @@ function rebuildCanonicalNavIndex() {
 
 // Determine if an entry represents a real user request (opens a new Conversation).
 // Delegates to the stricter isUserTurnRoot once it is defined below.
-function isRealUserRequest(entry, prevConversation) {
+// Determine if entry opens a new Conversation.
+// currentConversation is the conversation being built (may have no assistant yet).
+// Passes it to isUserTurnRoot to detect duplicate/mirror user messages.
+function isRealUserRequest(entry, currentConversation) {
   if (entry.type !== 'user') return false;
-  // Build a fake "previousTurn" compatible with isUserTurnRoot's signature
-  // by extracting the last real-user entry from prevConversation.
   let prevTurnCompat = null;
-  if (prevConversation && !prevConversation._isPreamble) {
-    const entries = prevConversation.entries || [];
-    const lastAsst = [...entries].reverse().find(e => e.type === 'assistant');
+  if (currentConversation && !currentConversation._isPreamble) {
+    const entries = currentConversation.entries || [];
     prevTurnCompat = {
-      root: prevConversation.entries[0] || null,
+      root: entries[0] || null,
       children: entries.slice(1),
-      _hadAssistant: !!lastAsst,
     };
   }
   return isUserTurnRoot(entry, prevTurnCompat);
@@ -1284,11 +1283,9 @@ function buildConversations(entries, groupId) {
   let preamble = null;
   let current = null;
   let convIdx = 0;
-  let prevConversation = null;
 
   for (const e of entries) {
-    if (isRealUserRequest(e, prevConversation)) {
-      prevConversation = current;
+    if (isRealUserRequest(e, current)) {
       current = {
         conversationKey: `${groupId}:conversation:${convIdx}`,
         groupId,
@@ -1433,7 +1430,7 @@ function buildMinimalTurns(conversation) {
       addTurn('system', e, null, { text: e.subtype || e.type });
     } else if (e.type === 'attachment' || e.type === 'file-history-snapshot') {
       addTurn('context', e, null, { text: e.type });
-    } else if (e.type !== 'unknown') {
+    } else {
       addTurn('unknown', e, null, { text: e.type || 'unknown' });
     }
   }
@@ -3148,7 +3145,7 @@ function eventsToEntries(events) {
         sessionId: ev.sessionId,
         _fileLine: 0,
         _eventId,
-        message: { content: [{ type: 'text', text: ev.summary || ev.content || '(reasoning)' }] },
+        message: { content: [{ type: 'thinking', thinking: ev.summary || ev.content || '(reasoning)' }] },
       });
       pushed = true;
     } else if (kind === 'metadata' || kind === 'step' || kind === 'unknown') {

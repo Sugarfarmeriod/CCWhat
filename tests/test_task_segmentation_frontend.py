@@ -938,3 +938,60 @@ class TestConversationMinimalTurnDataLayer(unittest.TestCase):
         self.assertIn(".kind-tool_use", _HTML)
         self.assertIn(".kind-tool_result", _HTML)
         self.assertIn(".kind-user_message", _HTML)
+
+
+class TestConversationBugFixes(unittest.TestCase):
+    """Regression tests for three bug fixes in conversation-minimal-turn-data-layer."""
+
+    # Fix 1: isRealUserRequest uses currentConversation, not prevConversation
+    def test_is_real_user_request_accepts_current_conversation(self):
+        """isRealUserRequest must accept currentConversation, not prevConversation."""
+        fn = _HTML.index("function isRealUserRequest")
+        snippet = _HTML[fn:fn + 400]
+        # Must use currentConversation parameter (not prevConversation)
+        self.assertNotIn("prevConversation", snippet)
+        self.assertIn("currentConversation", snippet)
+
+    def test_build_conversations_passes_current_not_prev(self):
+        """buildConversations must pass current (not a prevConversation variable) to isRealUserRequest."""
+        fn = _HTML.index("function buildConversations")
+        snippet = _HTML[fn:fn + 1200]
+        # Must not have a prevConversation variable
+        self.assertNotIn("prevConversation", snippet)
+        # Must call isRealUserRequest with current
+        self.assertIn("isRealUserRequest(e, current)", snippet)
+
+    def test_is_real_user_request_builds_prev_compat_from_current_entries(self):
+        """isRealUserRequest must build prevTurnCompat from currentConversation.entries."""
+        fn = _HTML.index("function isRealUserRequest")
+        snippet = _HTML[fn:fn + 500]
+        self.assertIn("currentConversation.entries", snippet)
+
+    # Fix 2: eventsToEntries reasoning → thinking type
+    def test_events_to_entries_reasoning_uses_thinking_block_type(self):
+        """reasoning kind must produce type:'thinking' content block, not type:'text'."""
+        fn = _HTML.index("function eventsToEntries")
+        fn_end = _HTML.index("function ", fn + 10)
+        snippet = _HTML[fn:fn_end]
+        # Must use type:'thinking' for reasoning events
+        self.assertIn("type: 'thinking'", snippet)
+        # Must use `thinking:` field
+        self.assertIn("thinking:", snippet)
+        # Must NOT use type:'text' for reasoning (regression check)
+        reasoning_idx = snippet.index("kind === 'reasoning'")
+        after_reasoning = snippet[reasoning_idx:reasoning_idx + 300]
+        self.assertNotIn("type: 'text'", after_reasoning)
+
+    # Fix 3: unknown entry fallback always generates Turn
+    def test_build_minimal_turns_unknown_entry_fallback_is_else_not_elif(self):
+        """buildMinimalTurns must use 'else' (not 'else if (type !== unknown)') as final fallback."""
+        fn = _HTML.index("function buildMinimalTurns")
+        snippet = _HTML[fn:fn + 4500]
+        # Must NOT have the broken condition
+        self.assertNotIn("e.type !== 'unknown'", snippet)
+        # Must have a plain else branch that adds unknown Turn
+        self.assertIn("} else {", snippet)
+        # That else branch must call addTurn with 'unknown'
+        else_pos = snippet.rfind("} else {")
+        after_else = snippet[else_pos:else_pos + 100]
+        self.assertIn("addTurn('unknown'", after_else)
