@@ -77,4 +77,4 @@
 - [x] 9.8 更新 DOM 测试：导出 overlay JSON 不包含完整 Raw Trace，但包含必要锚点。
 - [x] 9.9 运行 `openspec validate editable-task-trace-overlay --strict` 并修复所有规格问题。
 - [x] 9.10 运行前端 DOM 测试和项目全量测试，并记录结果。
-- [ ] 9.11 用真实 session 手动验收：自动切分后校正、纯手动创建、保存、撤销、导出都符合预期。
+- [x] 9.11 用真实 session 手动验收：自动切分后校正、纯手动创建、保存、撤销、导出都符合预期。

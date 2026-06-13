@@ -2,11 +2,11 @@
 
 [中文](README.md) | English
 
-Current version: `v1.0.0` · [Changelog](CHANGELOG.md)
+Current version: `v1.1.0` · [Changelog](CHANGELOG.md)
 
 ## Current Status
 
-`v1.0.0` adds the Task Trace Workbench and first rule-based task segmentation. **codelenagent can now identify multiple coding tasks inside a long session while continuing to support Claude Code (VS Code), Codex, and OpenCode.** Log viewing, task segmentation, evidence navigation, analysis reports, timelines, tool timing, and agent summaries work across all three.
+`v1.1.0` adds **manual task segmentation alongside auto-segmentation, with human fine-tuning**. Auto-segment with one click, manually select conversation ranges to create tasks, or fine-tune auto results (adjust boundaries, split, merge, delete, edit metadata). Save, undo, or export the overlay as JSON. **Supports Claude Code, Codex, and OpenCode for log viewing, task segmentation, evidence navigation, and analysis reports.**
 
 **Your AI being sneaky again? See see what it's actually doing.**
 

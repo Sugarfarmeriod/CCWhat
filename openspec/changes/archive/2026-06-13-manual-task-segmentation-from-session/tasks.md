@@ -40,4 +40,4 @@
 - [x] 5.4 更新 DOM 冒烟测试：撤销上一次会移除最近创建的 manual Task。
 - [x] 5.5 运行 `openspec validate manual-task-segmentation-from-session --strict`。
 - [x] 5.6 运行最小相关前端测试；全量测试视改动范围决定。
-- [ ] 5.7 手动验收：真实 session 中连续创建多个 Task、持续高亮、撤销上一次、确认执行、Task-first 展示、Unassigned 展示。
+- [x] 5.7 手动验收：真实 session 中连续创建多个 Task、持续高亮、撤销上一次、确认执行、Task-first 展示、Unassigned 展示。
