@@ -45,3 +45,5 @@
 
 - [x] 6.1 Validator 必须补齐 Dataset v1 基础 schema / 必填字段校验：`manifest.json` 需校验 `created_at`、`tool == "ccwhat"`、`session`、`counts`；`dataset.jsonl` 每行需校验 `id`、`input.instruction`、`input.repo`、`input.base_commit`、`expected.success_criteria`、`expected.tests`、`metadata.agent`、`metadata.session_id`、`metadata.task_source`、`metadata.trace_id`、`metadata.trace_path`、`metadata.start_event_id`、`metadata.end_event_id` 等稳定字段存在；`traces/*.json` 需校验 `trace_id`、`task_id`、`session_id`、`agent`、`boundary`、`events`、`commands`、`test_commands`、`files.read`、`files.changed`、`changes`、`patches`、`errors`、`final_claim`、`repo_state` 等稳定字段存在。
 - [x] 6.2 新增 validator 负向测试：构造 counts 和 trace 引用都一致、但删除 Dataset v1 必填字段的数据包，必须返回失败并报告对应路径/字段；至少覆盖 manifest、dataset row、trace 三类文件。
+- [x] 6.3 Validator 必须对包内所有 `traces/*.json` 执行基础 schema / 必填字段校验，不能只校验被 `dataset.jsonl` 引用到的 trace；当存在未引用但格式合法 JSON、schema 缺字段的 trace 文件且 manifest trace count 一致时，也必须返回失败并报告该 trace path/field。
+- [x] 6.4 新增 validator 负向测试：构造一个 Dataset，其中正常 dataset row 引用的 trace 合法，同时额外放入一个 `traces/extra.json` 并更新 `manifest.counts.traces` 使 count 一致；`traces/extra.json` 缺少 `events`、`files` 或 `repo_state` 等必填字段时，validator 必须失败。

@@ -62,6 +62,8 @@ def validate_dataset(
     if isinstance(manifest, dict):
         _validate_manifest(manifest, counts, errors)
 
+    _validate_all_traces(traces, errors)
+
     for row in dataset_rows:
         _validate_dataset_row_trace(row, traces, errors)
 
@@ -285,9 +287,7 @@ def _validate_dataset_row_trace(
         )
         return
     if not isinstance(trace, dict):
-        errors.append(ValidationIssue(trace_path, "Trace JSON must be an object."))
         return
-    _validate_trace_schema(trace, trace_path, errors)
     if trace.get("task_id") != item_id:
         errors.append(
             ValidationIssue(
@@ -296,6 +296,17 @@ def _validate_dataset_row_trace(
                 field="task_id",
             )
         )
+
+
+def _validate_all_traces(
+    traces: dict[str, Any],
+    errors: list[ValidationIssue],
+) -> None:
+    for trace_path, trace in traces.items():
+        if isinstance(trace, dict):
+            _validate_trace_schema(trace, trace_path, errors)
+        elif trace is not None:
+            errors.append(ValidationIssue(trace_path, "Trace JSON must be an object."))
 
 
 def _validate_dataset_row_schema(
