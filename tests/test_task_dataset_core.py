@@ -32,6 +32,8 @@ def _event(
     command: str | None = None,
     files: list[str] | None = None,
     turn_index: int = 1,
+    raw_ref: dict | None = None,
+    metadata: dict | None = None,
 ) -> NormalizedEvent:
     return NormalizedEvent(
         event_id=event_id,
@@ -44,6 +46,8 @@ def _event(
         command=command,
         files=files or [],
         timestamp=f"2026-01-01T00:00:{turn_index:02d}Z",
+        raw_ref=raw_ref or {},
+        metadata=metadata or {},
     )
 
 
@@ -120,7 +124,10 @@ class TestTaskDatasetBuilder(unittest.TestCase):
         self.assertEqual(trace["test_commands"], ["pytest tests/test_app.py"])
         self.assertEqual(trace["files"]["read"], ["src/app.py"])
         self.assertEqual(trace["files"]["changed"], ["src/app.py"])
-        self.assertEqual(trace["changes"], [])
+        self.assertEqual(len(trace["changes"]), 1)
+        self.assertEqual(trace["changes"][0]["kind"], "command")
+        self.assertEqual(trace["changes"][0]["source"], "bash_command")
+        self.assertEqual(trace["changes"][0]["patch_id"], None)
         self.assertEqual(trace["patches"], [])
         self.assertEqual(trace["repo_state"]["base_commit"], None)
         self.assertEqual(trace["repo_state"]["head_commit"], None)
@@ -279,6 +286,73 @@ class TestTaskDatasetValidator(unittest.TestCase):
             ),
             result.errors,
         )
+
+    def test_change_missing_required_field(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["changes"][0].pop("change_id")
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.field == "changes[0].change_id" for issue in result.errors), result.errors)
+
+    def test_change_invalid_enum(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["changes"][0]["kind"] = "magic"
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.field == "changes[0].kind" for issue in result.errors), result.errors)
+
+    def test_patch_missing_required_field(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["patches"] = [{
+            "patch_id": "patch-001",
+            "scope": "step",
+            "file": "src/app.py",
+            "source": "codex_patch_apply_end",
+            "format": "unified_diff",
+            "confidence": "high",
+        }]
+        trace["changes"][0]["patch_id"] = "patch-001"
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.field == "patches[0].patch" for issue in result.errors), result.errors)
+
+    def test_patch_invalid_enum(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["patches"] = [{
+            "patch_id": "patch-001",
+            "scope": "step",
+            "file": "src/app.py",
+            "source": "codex_patch_apply_end",
+            "format": "invented",
+            "confidence": "high",
+            "patch": "@@\n-old\n+new\n",
+        }]
+        trace["changes"][0]["patch_id"] = "patch-001"
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.field == "patches[0].format" for issue in result.errors), result.errors)
+
+    def test_patch_id_reference_missing(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["changes"][0]["patch_id"] = "missing-patch"
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.field == "changes[0].patch_id" for issue in result.errors), result.errors)
 
     def test_extra_unreferenced_trace_missing_required_field_fails_when_counts_match(self) -> None:
         files = _bundle().to_bytes_files()

@@ -8,9 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from .models import (
+    CHANGE_CONFIDENCES,
+    CHANGE_KINDS,
     DATASET_JSONL_PATH,
     DATASET_SCHEMA_VERSION,
     MANIFEST_PATH,
+    PATCH_CONFIDENCES,
+    PATCH_FORMATS,
     SCORES_JSONL_PATH,
     TRACES_DIR,
     ValidationIssue,
@@ -378,6 +382,101 @@ def _validate_trace_schema(
     if repo_state is not None:
         for field in ("cwd", "base_commit", "head_commit", "git_dirty_at_export"):
             _require_field(repo_state, trace_path, f"repo_state.{field}", errors, key=field)
+
+    changes = trace.get("changes") if isinstance(trace.get("changes"), list) else []
+    patches = trace.get("patches") if isinstance(trace.get("patches"), list) else []
+    _validate_patch_entries(patches, trace_path, errors)
+    _validate_change_entries(changes, patches, trace_path, errors)
+
+
+def _validate_change_entries(
+    changes: list[Any],
+    patches: list[Any],
+    trace_path: str,
+    errors: list[ValidationIssue],
+) -> None:
+    patch_ids = {
+        patch.get("patch_id")
+        for patch in patches
+        if isinstance(patch, dict) and isinstance(patch.get("patch_id"), str)
+    }
+    for index, change in enumerate(changes):
+        prefix = f"changes[{index}]"
+        if not isinstance(change, dict):
+            errors.append(ValidationIssue(trace_path, "Change entry must be an object.", field=prefix))
+            continue
+        for field in (
+            "change_id",
+            "event_id",
+            "file",
+            "kind",
+            "source",
+            "old_string",
+            "new_string",
+            "content",
+            "patch_id",
+            "confidence",
+        ):
+            _require_field(change, trace_path, f"{prefix}.{field}", errors, key=field)
+        kind = change.get("kind")
+        if kind is not None and kind not in CHANGE_KINDS:
+            errors.append(
+                ValidationIssue(
+                    trace_path,
+                    f"Unknown change kind: {kind!r}",
+                    field=f"{prefix}.kind",
+                )
+            )
+        confidence = change.get("confidence")
+        if confidence is not None and confidence not in CHANGE_CONFIDENCES:
+            errors.append(
+                ValidationIssue(
+                    trace_path,
+                    f"Unknown change confidence: {confidence!r}",
+                    field=f"{prefix}.confidence",
+                )
+            )
+        patch_id = change.get("patch_id")
+        if patch_id is not None and patch_id not in patch_ids:
+            errors.append(
+                ValidationIssue(
+                    trace_path,
+                    f"Change references missing patch_id: {patch_id!r}",
+                    field=f"{prefix}.patch_id",
+                )
+            )
+
+
+def _validate_patch_entries(
+    patches: list[Any],
+    trace_path: str,
+    errors: list[ValidationIssue],
+) -> None:
+    for index, patch in enumerate(patches):
+        prefix = f"patches[{index}]"
+        if not isinstance(patch, dict):
+            errors.append(ValidationIssue(trace_path, "Patch entry must be an object.", field=prefix))
+            continue
+        for field in ("patch_id", "scope", "file", "source", "format", "confidence", "patch"):
+            _require_field(patch, trace_path, f"{prefix}.{field}", errors, key=field)
+        patch_format = patch.get("format")
+        if patch_format is not None and patch_format not in PATCH_FORMATS:
+            errors.append(
+                ValidationIssue(
+                    trace_path,
+                    f"Unknown patch format: {patch_format!r}",
+                    field=f"{prefix}.format",
+                )
+            )
+        confidence = patch.get("confidence")
+        if confidence is not None and confidence not in PATCH_CONFIDENCES:
+            errors.append(
+                ValidationIssue(
+                    trace_path,
+                    f"Unknown patch confidence: {confidence!r}",
+                    field=f"{prefix}.confidence",
+                )
+            )
 
 
 def _require_field(

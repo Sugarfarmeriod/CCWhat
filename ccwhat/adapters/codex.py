@@ -526,6 +526,23 @@ class CodexAdapter(AgentAdapter):
                         "usage": _normalize_usage_helper(total_usage),
                         "raw": raw_entry,
                     })
+            elif etype == "patch_apply_end":
+                events.append({
+                    "id": _codex_event_id(raw_entry, session_id, "patch_apply_end"),
+                    "agent": "codex",
+                    "sessionId": session_id,
+                    "turnId": None,
+                    "timestamp": ts,
+                    "role": None,
+                    "kind": "metadata",
+                    "content": payload,
+                    "summary": "patch_apply_end",
+                    "toolName": None,
+                    "toolCallId": None,
+                    "parentId": None,
+                    "usage": _normalize_usage_helper(None),
+                    "raw": raw_entry,
+                })
 
         elif typ == "turn_context":
             cwd = payload.get("cwd", "")

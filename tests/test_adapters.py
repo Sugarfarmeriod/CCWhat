@@ -921,6 +921,24 @@ class TestCodexAdapter(unittest.TestCase):
         ev = events[0]
         self.assertEqual(ev["kind"], "metadata")
 
+    def test_patch_apply_end_event_preserves_payload(self) -> None:
+        entry = {
+            "type": "event_msg",
+            "timestamp": "2025-06-01T10:00:00Z",
+            "payload": {
+                "type": "patch_apply_end",
+                "changes": {
+                    "src/app.py": {"unified_diff": "@@\n-old\n+new\n"},
+                    "src/new.py": {"content": "new file"},
+                },
+            },
+        }
+        events = CodexAdapter().raw_to_normalized_events(entry, "sid")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["kind"], "metadata")
+        self.assertEqual(events[0]["summary"], "patch_apply_end")
+        self.assertEqual(events[0]["content"]["changes"]["src/new.py"]["content"], "new file")
+
     def test_events_have_required_fields(self) -> None:
         events = CodexAdapter().raw_to_normalized_events(self.CODEX_USER, "sid")
         ev = events[0]
