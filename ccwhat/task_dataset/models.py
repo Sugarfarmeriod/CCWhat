@@ -13,6 +13,10 @@ MANIFEST_PATH = "manifest.json"
 DATASET_JSONL_PATH = "dataset.jsonl"
 SCORES_JSONL_PATH = "scores.jsonl"
 TRACES_DIR = "traces"
+CHANGE_KINDS = {"edit", "write", "patch", "command", "git_diff"}
+CHANGE_CONFIDENCES = {"high", "medium", "low"}
+PATCH_FORMATS = {"unified_diff", "apply_patch", "git_diff", "opencode_diff"}
+PATCH_CONFIDENCES = {"high", "medium"}
 
 
 class DatasetManifest(TypedDict):
@@ -72,6 +76,29 @@ class DatasetTraceRepoState(TypedDict):
     git_dirty_at_export: bool | None
 
 
+class DatasetChangeEvidence(TypedDict):
+    change_id: str
+    event_id: str
+    file: str | None
+    kind: str
+    source: str
+    old_string: str | None
+    new_string: str | None
+    content: str | None
+    patch_id: str | None
+    confidence: str
+
+
+class DatasetPatchEvidence(TypedDict):
+    patch_id: str
+    scope: str
+    file: str | None
+    source: str
+    format: str
+    confidence: str
+    patch: str
+
+
 class DatasetTrace(TypedDict):
     trace_id: str
     task_id: str
@@ -82,8 +109,8 @@ class DatasetTrace(TypedDict):
     commands: list[str]
     test_commands: list[str]
     files: DatasetTraceFiles
-    changes: list[dict[str, Any]]
-    patches: list[dict[str, Any]]
+    changes: list[DatasetChangeEvidence]
+    patches: list[DatasetPatchEvidence]
     errors: list[str]
     final_claim: str | None
     repo_state: DatasetTraceRepoState

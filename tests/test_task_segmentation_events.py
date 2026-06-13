@@ -125,6 +125,15 @@ class TestNormalizeMainEntries(unittest.TestCase):
         ev = normalize_main_entries(entries, "sess1")[0]
         self.assertIn("/some/file.py", ev.files)
 
+    def test_tool_call_preserves_minimal_tool_input_for_dataset_evidence(self):
+        inp = {
+            "file_path": "src/app.py",
+            "old_string": "old",
+            "new_string": "new",
+        }
+        events = normalize_main_entries([self._make_tool_call("Edit", "tu-edit", inp)], "sess1")
+        self.assertEqual(events[0].raw_ref["tool_input"], inp)
+
     def test_multiple_tool_use_blocks_produce_multiple_events(self):
         entry = {
             "type": "assistant",
@@ -215,6 +224,31 @@ class TestToolCallAssociation(unittest.TestCase):
         events = normalize_main_entries(entries, "sess1")
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].event_type, "tool_result")
+
+
+class TestAdapterEventEvidencePreservation(unittest.TestCase):
+    def test_adapter_event_content_and_raw_event_are_preserved(self):
+        session = {
+            "sessionId": "opencode-session",
+            "events": [{
+                "id": "ev-opencode-edit",
+                "agent": "opencode",
+                "role": "assistant",
+                "kind": "tool_call",
+                "content": {
+                    "file": "src/app.py",
+                    "oldString": "old",
+                    "newString": "new",
+                    "metadata": {"diff": "@@\n-old\n+new\n"},
+                },
+                "summary": "Tool: edit",
+                "toolName": "edit",
+                "toolCallId": "call-edit",
+            }],
+        }
+        events = normalize_session_events(session)
+        self.assertEqual(events[0].raw_ref["content"]["metadata"]["diff"], "@@\n-old\n+new\n")
+        self.assertEqual(events[0].raw_ref["raw_event"]["agent"], "opencode")
 
     def test_multiple_tool_calls_associated_independently(self):
         entries = [

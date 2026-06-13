@@ -15,6 +15,7 @@ from ccwhat.task_segments.models import (
     TaskSegmentationResult,
 )
 
+from .change_evidence import extract_change_evidence
 from .models import DATASET_SCHEMA_VERSION, DatasetBundle
 
 
@@ -92,6 +93,7 @@ def build_dataset_bundle_from_segments(
         trace_path = f"traces/{trace_id}.json"
         task_events = _slice_events(events, event_index, task)
         evidence = _merge_evidence(task.evidence, task_events, repo_root=str(project_dir) if project_dir else None)
+        changes, patches = extract_change_evidence(task_events, agent=agent)
 
         dataset_rows.append(
             {
@@ -137,8 +139,8 @@ def build_dataset_bundle_from_segments(
                 "read": list(evidence.files_read),
                 "changed": list(evidence.files_changed),
             },
-            "changes": [],
-            "patches": [],
+            "changes": changes,
+            "patches": patches,
             "errors": list(evidence.errors),
             "final_claim": task.final_claim or (evidence.final_claims[0] if evidence.final_claims else None),
             "repo_state": {

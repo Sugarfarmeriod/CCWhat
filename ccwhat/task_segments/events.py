@@ -157,6 +157,9 @@ def normalize_main_entries(
                     inp = tu_block.get("input", {})
                     files = _extract_files_from_input(inp)
                     command = inp.get("command") if isinstance(inp, dict) else None
+                    tool_raw_ref = dict(raw_ref)
+                    if isinstance(inp, dict):
+                        tool_raw_ref["tool_input"] = inp
                     ev = NormalizedEvent(
                         event_id=event_id,
                         source="main",
@@ -169,7 +172,7 @@ def normalize_main_entries(
                         files=files,
                         command=command,
                         timestamp=timestamp,
-                        raw_ref=raw_ref,
+                        raw_ref=tool_raw_ref,
                     )
                     events.append(ev)
                     # Track for task 2.2 association
@@ -310,7 +313,13 @@ def _normalize_from_events(
             files=files,
             command=command,
             timestamp=timestamp,
-            raw_ref={"eventId": event_id},
+            raw_ref={
+                "eventId": event_id,
+                "agent": ev.get("agent"),
+                "kind": kind,
+                "content": content_raw,
+                "raw_event": ev,
+            },
         ))
     return result
 
