@@ -280,6 +280,29 @@ class TestTaskDatasetValidator(unittest.TestCase):
             result.errors,
         )
 
+    def test_extra_unreferenced_trace_missing_required_field_fails_when_counts_match(self) -> None:
+        files = _bundle().to_bytes_files()
+        manifest = json.loads(files["manifest.json"])
+        manifest["counts"]["traces"] = 2
+        files["manifest.json"] = json.dumps(manifest).encode("utf-8")
+
+        extra_trace = json.loads(files["traces/trace-task-001.json"])
+        extra_trace["trace_id"] = "extra"
+        extra_trace["task_id"] = "extra-task"
+        extra_trace.pop("repo_state")
+        files["traces/extra.json"] = json.dumps(extra_trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(
+            any(
+                issue.path == "traces/extra.json"
+                and issue.field == "repo_state"
+                for issue in result.errors
+            ),
+            result.errors,
+        )
+
 
 class TestTaskDatasetScopeGuard(unittest.TestCase):
     def test_no_viewer_save_api_or_evaluator_behavior_added(self) -> None:
