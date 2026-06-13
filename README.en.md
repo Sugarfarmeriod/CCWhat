@@ -6,9 +6,18 @@ Current version: `v1.1.0` · [Changelog](CHANGELOG.md)
 
 ## Current Status
 
-`v1.1.0` adds **manual task segmentation alongside auto-segmentation, with human fine-tuning**. Auto-segment with one click, manually select conversation ranges to create tasks, or fine-tune auto results (adjust boundaries, split, merge, delete, edit metadata). Save, undo, or export the overlay as JSON. **Supports Claude Code, Codex, and OpenCode for log viewing, task segmentation, evidence navigation, and analysis reports.**
+### v1.1.0 — Manual + Auto Task Segmentation with Human Fine-Tuning
 
-**Your AI being sneaky again? See see what it's actually doing.**
+Building on v1.0.0 auto-segmentation:
+- **Manual task segmentation**: "Manual" entry on Tasks page — select conversation ranges in the Session tree to create tasks. Supports sequential creation, undo last, and one-click commit to Task-first Trace tree.
+- **Task Trace editing**: Fine-tune auto-segmentation results — adjust boundaries, split, merge, delete tasks, edit title/type. Save, undo, or export as JSON overlay.
+
+### v1.0.0 — Session Trace Dual View + Auto Task Segmentation
+
+- **Dual-view Trace**: Default view shows only primary execution Steps (user request, thinking, agent reply, tool call/result); Debug view shows the full Turn timeline (including system/context/permission/snapshot/queue internal events).
+- **Auto task segmentation**: Automatically identifies multiple coding tasks from long sessions. After segmentation, the Session Trace switches to a `Task → Conversation → Step/Turn` tree.
+- **Complete Turn Detail**: Right panel shows full tool input/output, thinking content, structured internal event fields, expandable raw JSON, and entry/block anchors.
+- **Three-agent support**: Full coverage for Claude Code (VS Code), Codex, and OpenCode — log viewing, task segmentation, evidence navigation, and analysis reports.
 
 ---
 

@@ -6,9 +6,18 @@
 
 ## 当前版本状态
 
-`v1.1.0` 新增**手动任务切分 + 自动任务切分，支持人为微调**。既有一键自动切分，也支持在 Session 会话树上手动框选范围创建 Task，自动切分的结果还可人为微调（调整边界、拆分、合并、删除、修改元数据），编辑后可保存、撤销或导出。**同时支持 Claude Code、Codex 和 OpenCode 三类 Agent 的日志查看、任务切分、证据定位和分析报告。**
+### v1.1.0 — 新增手动任务切分 + 自动任务切分，支持人为微调
 
-**你的 AI 又嘴硬了？see see what！看看他在做什么。**
+在 v1.0.0 的自动切分基础上新增：
+- **手动任务切分**：Tasks 页面提供「手动切分」入口，在 Session 会话树上框选连续会话范围创建 Task，支持连续创建、撤销上一次、确认后自动切换 Task-first Trace 树。
+- **Task Trace 编辑校正**：对自动切分结果可人为微调——调整起止边界、拆分、合并、删除 Task、修改标题和类型。编辑后可保存、撤销或导出 Overlay JSON。
+
+### v1.0.0 — Session Trace 双视图 + 自动任务切分闭环
+
+- **Session Trace 双视图**：默认视图只展示主执行 Step（用户请求、思考过程、Agent 回复、工具调用/结果），调试视图展示完整 Turn 时间线（含 system/context/permission/snapshot/queue 等内部事件）。
+- **自动任务切分**：从长 Session 中自动识别多个 Coding Task，切分后 Session Trace 自动切换为 `Task → 会话 → Step/Turn` 树形结构。
+- **Turn Detail 完整证据**：右侧详情区展示当前选中 Turn 的完整 tool input/output、thinking 全文、internal event 结构化字段、可展开 raw JSON 和定位信息。
+- **三 Agent 支持**：Claude Code（VS Code）、Codex、OpenCode 三类 Agent 的日志查看、任务切分、证据定位和分析报告完整覆盖。
 
 ---
 
