@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import io
 import json
 import tarfile
@@ -233,6 +232,53 @@ class TestTaskDatasetValidator(unittest.TestCase):
         result = validate_dataset(files)
         self.assertFalse(result.ok)
         self.assertTrue(any(issue.field == "counts.dataset_items" for issue in result.errors))
+
+    def test_manifest_missing_required_field_fails_even_when_counts_match(self) -> None:
+        files = _bundle().to_bytes_files()
+        manifest = json.loads(files["manifest.json"])
+        manifest.pop("created_at")
+        files["manifest.json"] = json.dumps(manifest).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(
+            any(issue.path == "manifest.json" and issue.field == "created_at" for issue in result.errors),
+            result.errors,
+        )
+
+    def test_dataset_row_missing_required_field_fails_even_when_trace_matches(self) -> None:
+        files = _bundle().to_bytes_files()
+        row = json.loads(files["dataset.jsonl"])
+        row["expected"].pop("success_criteria")
+        files["dataset.jsonl"] = (json.dumps(row) + "\n").encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(
+            any(
+                issue.path == "dataset.jsonl"
+                and issue.field == "expected.success_criteria"
+                for issue in result.errors
+            ),
+            result.errors,
+        )
+
+    def test_trace_missing_required_field_fails_even_when_reference_matches(self) -> None:
+        files = _bundle().to_bytes_files()
+        trace = json.loads(files["traces/trace-task-001.json"])
+        trace["files"].pop("changed")
+        files["traces/trace-task-001.json"] = json.dumps(trace).encode("utf-8")
+
+        result = validate_dataset(files)
+        self.assertFalse(result.ok)
+        self.assertTrue(
+            any(
+                issue.path == "traces/trace-task-001.json"
+                and issue.field == "files.changed"
+                for issue in result.errors
+            ),
+            result.errors,
+        )
 
 
 class TestTaskDatasetScopeGuard(unittest.TestCase):

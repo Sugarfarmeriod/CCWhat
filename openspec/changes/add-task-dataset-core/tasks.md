@@ -40,3 +40,8 @@
 - [x] 5.2 运行现有 task segmentation 相关测试，确认 builder 输入仍与 `TaskSegmentationResult` 兼容。
 - [x] 5.3 运行 `openspec validate add-task-dataset-core --strict`。
 - [x] 5.4 更新实现交接说明，记录 Dataset v1 字段、validator 使用方式和后续 change 接入点。
+
+## 6. Review 返修项
+
+- [x] 6.1 Validator 必须补齐 Dataset v1 基础 schema / 必填字段校验：`manifest.json` 需校验 `created_at`、`tool == "ccwhat"`、`session`、`counts`；`dataset.jsonl` 每行需校验 `id`、`input.instruction`、`input.repo`、`input.base_commit`、`expected.success_criteria`、`expected.tests`、`metadata.agent`、`metadata.session_id`、`metadata.task_source`、`metadata.trace_id`、`metadata.trace_path`、`metadata.start_event_id`、`metadata.end_event_id` 等稳定字段存在；`traces/*.json` 需校验 `trace_id`、`task_id`、`session_id`、`agent`、`boundary`、`events`、`commands`、`test_commands`、`files.read`、`files.changed`、`changes`、`patches`、`errors`、`final_claim`、`repo_state` 等稳定字段存在。
+- [x] 6.2 新增 validator 负向测试：构造 counts 和 trace 引用都一致、但删除 Dataset v1 必填字段的数据包，必须返回失败并报告对应路径/字段；至少覆盖 manifest、dataset row、trace 三类文件。

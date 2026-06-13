@@ -190,6 +190,9 @@ def _validate_manifest(
     counts: dict[str, int],
     errors: list[ValidationIssue],
 ) -> None:
+    _require_field(manifest, MANIFEST_PATH, "created_at", errors)
+    has_tool = _require_field(manifest, MANIFEST_PATH, "tool", errors)
+
     if manifest.get("schema_version") != DATASET_SCHEMA_VERSION:
         errors.append(
             ValidationIssue(
@@ -198,13 +201,34 @@ def _validate_manifest(
                 field="schema_version",
             )
         )
-    manifest_counts = manifest.get("counts")
-    if not isinstance(manifest_counts, dict):
+    if has_tool and manifest.get("tool") != "ccwhat":
         errors.append(
-            ValidationIssue(MANIFEST_PATH, "manifest.counts must be an object.", field="counts")
+            ValidationIssue(
+                MANIFEST_PATH,
+                "manifest.tool must be 'ccwhat'.",
+                field="tool",
+            )
         )
+    session = _require_object(manifest, MANIFEST_PATH, "session", errors)
+    if session is not None:
+        for field in ("session_id", "agent", "project_dir"):
+            _require_field(session, MANIFEST_PATH, f"session.{field}", errors, key=field)
+
+    manifest_counts = _require_object(manifest, MANIFEST_PATH, "counts", errors)
+    if manifest_counts is None:
         return
+    for key in counts:
+        if not _require_field(
+            manifest_counts,
+            MANIFEST_PATH,
+            f"counts.{key}",
+            errors,
+            key=key,
+        ):
+            continue
     for key, actual in counts.items():
+        if key not in manifest_counts:
+            continue
         expected = manifest_counts.get(key)
         if expected != actual:
             errors.append(
@@ -224,16 +248,10 @@ def _validate_dataset_row_trace(
     if not isinstance(row, dict):
         errors.append(ValidationIssue(DATASET_JSONL_PATH, "Dataset row must be an object."))
         return
+    _validate_dataset_row_schema(row, errors)
     item_id = row.get("id")
     metadata = row.get("metadata")
     if not isinstance(metadata, dict):
-        errors.append(
-            ValidationIssue(
-                DATASET_JSONL_PATH,
-                f"Dataset item {item_id!r} metadata must be an object.",
-                field="metadata",
-            )
-        )
         return
     trace_path = metadata.get("trace_path")
     if not isinstance(trace_path, str) or not trace_path:
@@ -245,6 +263,17 @@ def _validate_dataset_row_trace(
             )
         )
         return
+    trace_id = metadata.get("trace_id")
+    if trace_id and trace_path:
+        expected_path = f"{TRACES_DIR}/{trace_id}.json"
+        if trace_path != expected_path:
+            errors.append(
+                ValidationIssue(
+                    DATASET_JSONL_PATH,
+                    f"Dataset item {item_id!r} trace_path {trace_path!r} does not match trace_id {trace_id!r}.",
+                    field="metadata.trace_path",
+                )
+            )
     trace = traces.get(trace_path)
     if trace is None:
         errors.append(
@@ -258,6 +287,7 @@ def _validate_dataset_row_trace(
     if not isinstance(trace, dict):
         errors.append(ValidationIssue(trace_path, "Trace JSON must be an object."))
         return
+    _validate_trace_schema(trace, trace_path, errors)
     if trace.get("task_id") != item_id:
         errors.append(
             ValidationIssue(
@@ -266,3 +296,143 @@ def _validate_dataset_row_trace(
                 field="task_id",
             )
         )
+
+
+def _validate_dataset_row_schema(
+    row: dict[str, Any],
+    errors: list[ValidationIssue],
+) -> None:
+    _require_field(row, DATASET_JSONL_PATH, "id", errors)
+    input_obj = _require_object(row, DATASET_JSONL_PATH, "input", errors)
+    if input_obj is not None:
+        for field in ("instruction", "repo", "base_commit"):
+            _require_field(input_obj, DATASET_JSONL_PATH, f"input.{field}", errors, key=field)
+
+    expected = _require_object(row, DATASET_JSONL_PATH, "expected", errors)
+    if expected is not None:
+        _require_field(expected, DATASET_JSONL_PATH, "expected.success_criteria", errors, key="success_criteria")
+        _require_array(expected, DATASET_JSONL_PATH, "expected.tests", errors, key="tests")
+
+    metadata = _require_object(row, DATASET_JSONL_PATH, "metadata", errors)
+    if metadata is not None:
+        for field in (
+            "agent",
+            "session_id",
+            "task_source",
+            "trace_id",
+            "trace_path",
+            "start_event_id",
+            "end_event_id",
+        ):
+            _require_field(metadata, DATASET_JSONL_PATH, f"metadata.{field}", errors, key=field)
+
+
+def _validate_trace_schema(
+    trace: dict[str, Any],
+    trace_path: str,
+    errors: list[ValidationIssue],
+) -> None:
+    for field in (
+        "trace_id",
+        "task_id",
+        "session_id",
+        "agent",
+        "boundary",
+        "events",
+        "commands",
+        "test_commands",
+        "files",
+        "changes",
+        "patches",
+        "errors",
+        "final_claim",
+        "repo_state",
+    ):
+        _require_field(trace, trace_path, field, errors)
+
+    boundary = _require_object(trace, trace_path, "boundary", errors)
+    if boundary is not None:
+        for field in ("start_event_id", "end_event_id", "start_turn", "end_turn"):
+            _require_field(boundary, trace_path, f"boundary.{field}", errors, key=field)
+
+    for field in ("events", "commands", "test_commands", "changes", "patches", "errors"):
+        _require_array(trace, trace_path, field, errors)
+
+    files = _require_object(trace, trace_path, "files", errors)
+    if files is not None:
+        _require_array(files, trace_path, "files.read", errors, key="read")
+        _require_array(files, trace_path, "files.changed", errors, key="changed")
+
+    repo_state = _require_object(trace, trace_path, "repo_state", errors)
+    if repo_state is not None:
+        for field in ("cwd", "base_commit", "head_commit", "git_dirty_at_export"):
+            _require_field(repo_state, trace_path, f"repo_state.{field}", errors, key=field)
+
+
+def _require_field(
+    obj: dict[str, Any],
+    path: str,
+    field: str,
+    errors: list[ValidationIssue],
+    *,
+    key: str | None = None,
+) -> bool:
+    lookup = key or field
+    if lookup not in obj:
+        errors.append(
+            ValidationIssue(
+                path,
+                f"Missing required field: {field}",
+                field=field,
+            )
+        )
+        return False
+    return True
+
+
+def _require_object(
+    obj: dict[str, Any],
+    path: str,
+    field: str,
+    errors: list[ValidationIssue],
+    *,
+    key: str | None = None,
+) -> dict[str, Any] | None:
+    lookup = key or field
+    if not _require_field(obj, path, field, errors, key=lookup):
+        return None
+    value = obj.get(lookup)
+    if not isinstance(value, dict):
+        errors.append(
+            ValidationIssue(
+                path,
+                f"Required field must be an object: {field}",
+                field=field,
+            )
+        )
+        return None
+    return value
+
+
+def _require_array(
+    obj: dict[str, Any],
+    path: str,
+    field: str,
+    errors: list[ValidationIssue],
+    *,
+    key: str | None = None,
+) -> list[Any] | None:
+    lookup = key or field
+    if not _require_field(obj, path, field, errors, key=lookup):
+        return None
+    value = obj.get(lookup)
+    if not isinstance(value, list):
+        errors.append(
+            ValidationIssue(
+                path,
+                f"Required field must be an array: {field}",
+                field=field,
+            )
+        )
+        return None
+    return value
