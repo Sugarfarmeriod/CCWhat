@@ -245,6 +245,36 @@ class TestTaskDatasetSaveApi(unittest.TestCase):
         self.assertIn("raw source inclusion", data["error"])
         self.assertFalse(self.registry_root.exists())
 
+    def test_raw_session_string_true_returns_400_without_saving(self) -> None:
+        _start(self.server)
+        payload = _task_segments_payload()
+        payload["includeRawSession"] = "TrUe"
+        status, data = _post(self.port, "/api/save-task-dataset", payload)
+
+        self.assertEqual(status, 400)
+        self.assertIn("raw source inclusion", data["error"])
+        self.assertFalse(self.registry_root.exists())
+
+    def test_req_resp_string_true_returns_400_without_saving(self) -> None:
+        _start(self.server)
+        payload = _task_segments_payload()
+        payload["includeReqResp"] = "true"
+        status, data = _post(self.port, "/api/save-task-dataset", payload)
+
+        self.assertEqual(status, 400)
+        self.assertIn("raw source inclusion", data["error"])
+        self.assertFalse(self.registry_root.exists())
+
+    def test_task_source_kind_mismatch_returns_400(self) -> None:
+        _start(self.server)
+        payload = _task_segments_payload()
+        payload["source"]["kind"] = "overlay"
+        status, data = _post(self.port, "/api/save-task-dataset", payload)
+
+        self.assertEqual(status, 400)
+        self.assertIn("source.kind", data["error"])
+        self.assertFalse(self.registry_root.exists())
+
     def test_provenance_session_mismatch_returns_400(self) -> None:
         _start(self.server)
         payload = _task_segments_payload()
