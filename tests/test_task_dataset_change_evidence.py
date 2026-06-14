@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import unittest
 
+from ccwhat.adapters.codex import CodexAdapter
 from ccwhat.task_dataset import build_dataset_bundle, validate_dataset
+from ccwhat.task_segments.events import normalize_session_events
 from ccwhat.task_segments.models import NormalizedEvent, TaskSegment, TaskSegmentationResult
 
 
@@ -160,6 +162,45 @@ class TestDatasetChangeEvidence(unittest.TestCase):
         self.assertEqual(trace["changes"][0]["patch_id"], "patch-001")
         self.assertIsNone(trace["changes"][1]["patch_id"])
         self.assertEqual(trace["changes"][1]["content"], "new file")
+        self.assertTrue(validate_dataset(bundle.to_bytes_files()).ok)
+
+    def test_codex_adapter_to_dataset_chain_preserves_patch_apply_end(self) -> None:
+        adapter = CodexAdapter()
+        raw_user = {
+            "type": "event_msg",
+            "timestamp": "2026-06-14T00:00:00Z",
+            "payload": {"type": "user_message", "message": "apply a patch"},
+        }
+        raw_patch = {
+            "type": "event_msg",
+            "timestamp": "2026-06-14T00:00:01Z",
+            "payload": {
+                "type": "patch_apply_end",
+                "changes": {
+                    "src/app.py": {"unified_diff": "@@\n-old\n+new\n"},
+                    "src/new.py": {"content": "new file content"},
+                },
+            },
+        }
+        adapter_events = []
+        adapter_events.extend(adapter.raw_to_normalized_events(raw_user, "codex-session"))
+        adapter_events.extend(adapter.raw_to_normalized_events(raw_patch, "codex-session"))
+
+        events = normalize_session_events({
+            "sessionId": "codex-session",
+            "events": adapter_events,
+        })
+        bundle = _bundle(agent="codex", events=events)
+        trace = bundle.traces["trace-task-001"]
+
+        self.assertEqual(len(trace["patches"]), 1)
+        self.assertEqual(trace["patches"][0]["source"], "codex_patch_apply_end")
+        self.assertEqual(trace["patches"][0]["format"], "unified_diff")
+        self.assertEqual(trace["patches"][0]["file"], "src/app.py")
+        self.assertEqual(trace["changes"][0]["source"], "codex_patch_apply_end")
+        self.assertEqual(trace["changes"][0]["patch_id"], "patch-001")
+        self.assertEqual(trace["changes"][1]["file"], "src/new.py")
+        self.assertEqual(trace["changes"][1]["content"], "new file content")
         self.assertTrue(validate_dataset(bundle.to_bytes_files()).ok)
 
     def test_task_boundary_prevents_patch_leakage(self) -> None:
