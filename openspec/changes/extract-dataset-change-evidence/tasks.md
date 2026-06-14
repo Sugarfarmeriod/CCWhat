@@ -48,3 +48,8 @@
 - [x] 6.2 运行 task segmentation 和 adapter-normalization 相关测试，确认 evidence 字段保留不破坏现有行为。
 - [x] 6.3 运行 `openspec validate extract-dataset-change-evidence --strict`。
 - [x] 6.4 更新实现交接说明，记录各 agent evidence 字段映射、confidence 规则和后续 viewer save/export change 的接入点。
+
+## 7. Review 返修项
+
+- [x] 7.1 修复真实 Codex adapter-normalized 路径下 `patch_apply_end` evidence 丢失的问题：`CodexAdapter.raw_to_normalized_events()` 产出的 event 经 `normalize_session_events()` 转成 `NormalizedEvent` 后，builder 必须能识别 `content.type == "patch_apply_end"` 或 `raw.payload.type == "patch_apply_end"`，并从 `changes[path].unified_diff` / `content` 抽取 `changes` 和 `patches`。
+- [x] 7.2 新增回归测试，使用 `CodexAdapter.raw_to_normalized_events()` 生成 `patch_apply_end` event，再经 `normalize_session_events()` 和 `build_dataset_bundle()` 构建 Dataset，断言 Codex unified diff 生成 `source = codex_patch_apply_end`、`format = unified_diff` 的 patch entry，并生成引用该 patch 的 change entry。

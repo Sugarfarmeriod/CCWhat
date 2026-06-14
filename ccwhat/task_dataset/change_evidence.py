@@ -237,7 +237,7 @@ def _extract_codex_patch_apply_end(
     event: NormalizedEvent,
     raw_event: dict[str, Any],
 ) -> None:
-    payload = raw_event.get("payload") if isinstance(raw_event.get("payload"), dict) else raw_event
+    payload = _codex_patch_payload(raw_event) or raw_event
     changes = payload.get("changes") if isinstance(payload, dict) else None
     if not isinstance(changes, dict):
         return
@@ -294,14 +294,29 @@ def _raw_event(event: NormalizedEvent) -> dict[str, Any]:
 
 
 def _is_codex_patch_apply_end(event: NormalizedEvent, raw_event: dict[str, Any]) -> bool:
+    content_type = _deep_get(raw_event, ("content", "type"))
     payload_type = _deep_get(raw_event, ("payload", "type"))
+    raw_payload_type = _deep_get(raw_event, ("raw", "payload", "type"))
     raw_type = raw_event.get("type")
     return (
-        payload_type == "patch_apply_end"
+        content_type == "patch_apply_end"
+        or payload_type == "patch_apply_end"
+        or raw_payload_type == "patch_apply_end"
         or raw_type == "patch_apply_end"
         or event.raw_ref.get("type") == "patch_apply_end"
         or event.metadata.get("type") == "patch_apply_end"
     )
+
+
+def _codex_patch_payload(raw_event: dict[str, Any]) -> dict[str, Any] | None:
+    for candidate in (
+        raw_event.get("content"),
+        raw_event.get("payload"),
+        _deep_get(raw_event, ("raw", "payload")),
+    ):
+        if isinstance(candidate, dict) and candidate.get("type") == "patch_apply_end":
+            return candidate
+    return None
 
 
 def _looks_opencode(
