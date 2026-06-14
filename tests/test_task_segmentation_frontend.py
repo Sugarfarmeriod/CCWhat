@@ -33,6 +33,63 @@ class TestTaskSegmentationButton(unittest.TestCase):
         self.assertIn("method: 'POST'", _HTML)
 
 
+class TestTaskDatasetSaveExportFrontend(unittest.TestCase):
+    """Dataset save/export viewer surface."""
+
+    def test_save_dataset_entry_and_modal_exist(self):
+        self.assertIn('id="saveTaskDatasetBtn"', _HTML)
+        self.assertIn('onclick="openDatasetSaveModal()"', _HTML)
+        self.assertIn('id="datasetSaveOverlay"', _HTML)
+        self.assertIn("保存 Dataset", _HTML)
+        self.assertIn("保存并下载 .tar.gz", _HTML)
+
+    def test_modal_lists_dataset_v1_required_files(self):
+        modal_start = _HTML.index('id="datasetSaveOverlay"')
+        modal_end = _HTML.index("<!-- Mode selection modal -->", modal_start)
+        snippet = _HTML[modal_start:modal_end]
+        for required in ["manifest.json", "dataset.jsonl", "traces/*.json", "scores.jsonl 空文件"]:
+            self.assertIn(required, snippet)
+
+    def test_dataset_modal_hides_raw_source_options(self):
+        modal_start = _HTML.index('id="datasetSaveOverlay"')
+        modal_end = _HTML.index("<!-- Mode selection modal -->", modal_start)
+        snippet = _HTML[modal_start:modal_end].lower()
+        self.assertNotIn("raw session", snippet)
+        self.assertNotIn("raw req", snippet)
+        self.assertNotIn("checkbox", snippet)
+
+    def test_dirty_overlay_blocks_dataset_save(self):
+        fn_start = _HTML.index("function buildDatasetSavePayload")
+        fn_end = _HTML.index("function openDatasetSaveModal", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("hasDirtyTaskTraceOverlay(sessionId)", snippet)
+        self.assertIn("未保存修改", snippet)
+        self.assertIn("throw new Error", snippet)
+
+    def test_saved_overlay_preferred_over_task_segments(self):
+        fn_start = _HTML.index("function buildDatasetSavePayload")
+        fn_end = _HTML.index("function openDatasetSaveModal", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("datasetSavedOverlaySource(sessionId) || datasetTaskSegmentsSource(sessionId)", snippet)
+        self.assertIn("taskSource: 'activeOverlay'", _HTML)
+        self.assertIn("taskSource: 'taskSegments'", _HTML)
+
+    def test_save_request_payload_includes_source_versions_and_provenance(self):
+        self.assertIn("DATASET_OVERLAY_VERSION", _HTML)
+        self.assertIn("DATASET_TASK_SEGMENTATION_SCHEMA_VERSION", _HTML)
+        self.assertIn("overlayVersion", _HTML)
+        self.assertIn("sourceSchemaVersion", _HTML)
+        self.assertIn("provenance", _HTML)
+        self.assertIn("sourceTrace", _HTML)
+        self.assertIn("includeRawSession: false", _HTML)
+        self.assertIn("includeReqResp: false", _HTML)
+
+    def test_save_endpoint_and_download_trigger_exist(self):
+        self.assertIn("/api/save-task-dataset", _HTML)
+        self.assertIn("function triggerDatasetDownload", _HTML)
+        self.assertIn("data.downloadUrl", _HTML)
+
+
 class TestSessionTasksWorkbenchScope(unittest.TestCase):
     """Session + Tasks scoped workbench regression tests."""
 

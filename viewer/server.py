@@ -222,6 +222,7 @@ def _make_handler(
     adapter: AgentAdapter | None = None,
     analyzer_agent: str | None = None,
     analyzer_timeout: int | None = None,
+    dataset_registry_root: Path | None = None,
 ):
     viewer_dir = Path(__file__).parent
     _adapter = adapter
@@ -301,7 +302,7 @@ def _make_handler(
             total_started = time.monotonic()
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
-            if path not in ("/api/analyze", "/api/task-segments"):
+            if path not in ("/api/analyze", "/api/task-segments", "/api/save-task-dataset"):
                 self._send_json({"ok": False, "error": "not found"}, 404)
                 return
             payload = self._read_json_body()
@@ -318,6 +319,25 @@ def _make_handler(
             session = self._get_session_data(session_id)
             if session is None:
                 self._send_json({"ok": False, "error": "session not found"}, 404)
+                return
+
+            if path == "/api/save-task-dataset":
+                from ccwhat.task_dataset import DatasetRegistryError, save_task_dataset_from_request
+                try:
+                    saved = save_task_dataset_from_request(
+                        payload=payload,
+                        session=session,
+                        registry_root=dataset_registry_root,
+                    )
+                except DatasetRegistryError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, exc.status)
+                    return
+                self._send_json({
+                    "ok": True,
+                    "datasetId": saved.dataset_id,
+                    "datasetPath": str(saved.dataset_path),
+                    "downloadUrl": saved.download_url,
+                })
                 return
 
             # ── /api/task-segments ─────────────────────────────────────────
@@ -577,6 +597,18 @@ def _make_handler(
                     self._send_json({"error": str(exc)}, 404)
                     return
                 self._send_binary(data, "application/gzip", filename)
+            elif path.startswith("/api/task-datasets/") and path.endswith("/download"):
+                dataset_id = path[len("/api/task-datasets/"):-len("/download")].strip("/")
+                from ccwhat.task_dataset import DatasetRegistryError, build_dataset_tar_gz
+                try:
+                    data, filename = build_dataset_tar_gz(
+                        dataset_id=dataset_id,
+                        registry_root=dataset_registry_root,
+                    )
+                except DatasetRegistryError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, exc.status)
+                    return
+                self._send_binary(data, "application/gzip", filename)
             elif path.startswith("/api/analysis-report/") and path.endswith("/export"):
                 report_id = path[len("/api/analysis-report/"):-len("/export")]
                 entry = report_store.get(report_id)
@@ -620,8 +652,18 @@ def create_server(
     adapter: AgentAdapter | None = None,
     analyzer_agent: str | None = None,
     analyzer_timeout: int | None = None,
+    dataset_registry_root: Path | None = None,
 ) -> HTTPServer:
-    handler = _make_handler(projects_dir, logs_dir, config_path, analyzer_cmd, adapter=adapter, analyzer_agent=analyzer_agent, analyzer_timeout=analyzer_timeout)
+    handler = _make_handler(
+        projects_dir,
+        logs_dir,
+        config_path,
+        analyzer_cmd,
+        adapter=adapter,
+        analyzer_agent=analyzer_agent,
+        analyzer_timeout=analyzer_timeout,
+        dataset_registry_root=dataset_registry_root,
+    )
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     server.daemon_threads = True
     return server
@@ -639,8 +681,18 @@ def run_server(
     adapter: AgentAdapter | None = None,
     analyzer_agent: str | None = None,
     analyzer_timeout: int | None = None,
+    dataset_registry_root: Path | None = None,
 ) -> None:
-    server = create_server(port, projects_dir, logs_dir, config_path, adapter=adapter, analyzer_agent=analyzer_agent, analyzer_timeout=analyzer_timeout)
+    server = create_server(
+        port,
+        projects_dir,
+        logs_dir,
+        config_path,
+        adapter=adapter,
+        analyzer_agent=analyzer_agent,
+        analyzer_timeout=analyzer_timeout,
+        dataset_registry_root=dataset_registry_root,
+    )
     url = viewer_url(port)
     agent_name = adapter.name if adapter is not None else "claude"
     print(f"Viewer API listening on http://127.0.0.1:{port}")

@@ -497,3 +497,13 @@ Content-Disposition: attachment; filename="dataset-20260613-aabb1122.tar.gz"
 ```
 
 本阶段只做到这 3 个 change。raw sources 和 evaluator 都是后续增强。
+
+## 实现交接：`save-and-export-task-dataset-from-viewer`
+
+Viewer server 新增 `POST /api/save-task-dataset`，请求必须包含 `sessionId`、`taskSource`、完整 `source.payload`、`source.provenance`、版本信息和 `sourceTrace`。`activeOverlay` source 使用 `overlayVersion = task-trace-overlay-v1`，`taskSegments` source 使用 `sourceSchemaVersion = task-segmentation-v1`。响应为 `{ ok, datasetId, datasetPath, downloadUrl }`，其中 `downloadUrl` 指向 `/api/task-datasets/<dataset-id>/download`。
+
+后端保存到默认 registry `~/.ccwhat/datasets/<dataset-id>/`，`datasetId` 使用 `dataset-YYYYMMDD-HHMMSS-<session-short-id>`，同秒冲突时追加数字 suffix。保存流程以请求 payload 为主数据源，server cache 只用于加载当前 session 并校验 normalized event boundary/source trace 对齐；缺 provenance、session 不一致、overlay version 不支持、dirty/未保存 overlay 或 task boundary 无法对齐都会返回 400。Dataset 写入后必须通过 Dataset validator，失败返回 500，不报告保存成功。
+
+下载 handler 只接受合法 dataset id，读取 registry 下对应目录，打包为 `dataset-*.tar.gz`，包内根目录固定 `ccwhat-dataset/`，仅包含 `manifest.json`、`dataset.jsonl`、`traces/*.json`、`scores.jsonl`，并在返回前通过 Dataset validator 校验。
+
+Tasks 页面新增“保存为 Dataset”入口和确认 modal。modal 只展示当前 session 全部 tasks、task 数量和 Dataset v1 必选文件；第一版完全隐藏 raw session / raw req-resp 选项。前端优先发送 saved Task Trace Overlay；没有 saved overlay 时发送 task segmentation result；dirty overlay 会阻止保存并提示先保存或撤销编辑。API 收到 `includeRawSession=true` 或 `includeReqResp=true` 时返回 400，不会 warning 后继续保存。

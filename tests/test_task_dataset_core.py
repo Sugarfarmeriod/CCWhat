@@ -379,17 +379,14 @@ class TestTaskDatasetValidator(unittest.TestCase):
 
 
 class TestTaskDatasetScopeGuard(unittest.TestCase):
-    def test_no_viewer_save_api_or_evaluator_behavior_added(self) -> None:
+    def test_no_evaluator_or_cli_save_behavior_added(self) -> None:
         root = Path(__file__).resolve().parents[1]
         searched_files = [
-            *Path(root, "viewer").glob("*.html"),
-            *Path(root, "viewer").glob("*.py"),
             *Path(root, "ccwhat").rglob("*.py"),
         ]
         haystack = "\n".join(path.read_text(encoding="utf-8") for path in searched_files)
-        self.assertNotIn("POST /api/save-task-dataset", haystack)
-        self.assertNotIn("save-task-dataset", haystack)
-        self.assertNotIn("保存为 Dataset", haystack)
+        self.assertNotIn("def save_dataset", haystack)
+        self.assertNotIn("evaluate_dataset", haystack)
 
         bundle = _bundle()
         self.assertEqual(bundle.scores_rows, [])
