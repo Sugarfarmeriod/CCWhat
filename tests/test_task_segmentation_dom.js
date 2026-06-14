@@ -108,6 +108,7 @@ function makeDOM(sessionData, taskSegmentData) {
         window.CSS.escape = (str) => str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
       }
       window.__taskSegmentRequests = [];
+      window.__datasetSaveRequests = [];
       // Mock fetch: /api/projects returns one project, /api/session/:id returns session
       window.fetch = (url, opts) => {
         const u = String(url);
@@ -125,6 +126,18 @@ function makeDOM(sessionData, taskSegmentData) {
         if (u.includes('/api/task-segments')) {
           window.__taskSegmentRequests.push(opts ? JSON.parse(opts.body || '{}') : {});
           return Promise.resolve({ ok: true, json: () => Promise.resolve(taskSegments) });
+        }
+        if (u.includes('/api/save-task-dataset')) {
+          window.__datasetSaveRequests.push(opts ? JSON.parse(opts.body || '{}') : {});
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              ok: true,
+              datasetId: 'dataset-20260614-000000-testsess',
+              datasetPath: '/tmp/datasets/dataset-20260614-000000-testsess',
+              downloadUrl: '/api/task-datasets/dataset-20260614-000000-testsess/download',
+            }),
+          });
         }
         return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
       };
@@ -1384,6 +1397,55 @@ async function test_manual_create_save_undo_and_export_payload() {
   console.log('  ✓ manual create / save / undo / export payload work');
 }
 
+async function test_dataset_save_uses_saved_overlay_payload() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_TASK_SEGMENTS_CONFIRMED;
+  win.confirmTaskTraceForSession('test-session-001');
+  await win.saveTaskDataset(false);
+  await flushAsync();
+
+  const request = win.__datasetSaveRequests[0];
+  assert.ok(request, 'save should send a Dataset request');
+  assert.strictEqual(request.taskSource, 'activeOverlay');
+  assert.strictEqual(request.includeRawSession, false);
+  assert.strictEqual(request.includeReqResp, false);
+  assert.strictEqual(request.source.overlayVersion, 'task-trace-overlay-v1');
+  assert.ok(request.source.payload.tasks.length === 1, 'request should include full overlay payload');
+  assert.ok(request.source.provenance.sessionId === 'test-session-001', 'request should include provenance');
+  assert.ok(request.source.sourceTrace.eventIds.includes('main:1'), 'request should include source trace');
+
+  const modalHtml = dom.window.document.getElementById('datasetSaveOverlay').innerHTML.toLowerCase();
+  assert.ok(!modalHtml.includes('raw session'), 'Dataset modal should hide raw session option');
+  assert.ok(!modalHtml.includes('raw req'), 'Dataset modal should hide raw req option');
+
+  console.log('  ✓ Dataset save uses saved overlay payload');
+}
+
+async function test_dataset_save_blocks_dirty_overlay() {
+  const dom = makeDOM(MOCK_SESSION, MOCK_TASK_SEGMENTS_CONFIRMED);
+  const win = dom.window;
+  await loadTestSession(dom);
+
+  win.taskSegmentReports['test-session-001'] = MOCK_TASK_SEGMENTS_CONFIRMED;
+  win.confirmTaskTraceForSession('test-session-001');
+  win.enterTaskTraceEditMode();
+  win.selectTaskSegment('task-1', 'test-session-001');
+  const turnInfo = win.lookupTurnByEventId('main:1');
+  win.selectTraceNode('conversation', turnInfo.conversationKey, turnInfo.groupId, turnInfo.conversationKey, null);
+  win.setSelectedConversationAsTaskStart();
+
+  await win.saveTaskDataset(false);
+  await flushAsync();
+
+  assert.strictEqual(win.__datasetSaveRequests.length, 0, 'dirty overlay should block Dataset save request');
+  assert.ok(win.datasetSaveState.error.includes('未保存修改'), 'dirty overlay should show a clear error');
+
+  console.log('  ✓ Dataset save blocks dirty overlay');
+}
+
 // ---------------------------------------------------------------------------
 // Turn View Mode Projection tests
 // ---------------------------------------------------------------------------
@@ -1835,6 +1897,8 @@ const tests = [
   test_edit_boundary_marks_overlay_dirty,
   test_move_split_merge_delete_overlay_tasks,
   test_manual_create_save_undo_and_export_payload,
+  test_dataset_save_uses_saved_overlay_payload,
+  test_dataset_save_blocks_dirty_overlay,
   // Turn View Mode Projection tests
   test_classifyTurnForDefaultView_exists,
   test_buildTurnViewProjection_exists,

@@ -952,6 +952,22 @@ body {
   .export-btn-confirm:hover { background: var(--accent-hover); }
   .export-btn-confirm:disabled { background: var(--bg-surface); color: var(--text-tertiary); cursor: default; }
   .export-status { font-size: 11px; color: var(--text-secondary); margin-top: 2px; min-height: 16px; }
+  .dataset-file-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .dataset-file-chip {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg-surface); padding: 7px 8px; font-size: 12px;
+    color: var(--text-primary); font-family: var(--font-mono);
+  }
+  .dataset-result {
+    border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+    background: color-mix(in srgb, var(--success) 8%, var(--bg-surface));
+    border-radius: var(--radius-sm); padding: 8px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .dataset-error {
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+    background: color-mix(in srgb, var(--danger) 8%, var(--bg-surface));
+    border-radius: var(--radius-sm); padding: 8px; color: var(--danger); font-size: 12px;
+  }
 
   /* ── App Shell layout ── */
   .app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -1371,6 +1387,38 @@ body {
     <div class="export-card-footer">
       <button class="export-btn-cancel" onclick="closeExportModal()">取消</button>
       <button class="export-btn-confirm" id="exportConfirmBtn" onclick="doExport()">导出并下载</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dataset save modal (portal) -->
+<div class="export-overlay" id="datasetSaveOverlay" onclick="onDatasetSaveOverlayClick(event)">
+  <div class="export-card">
+    <div class="export-card-hdr">
+      <span class="export-card-title">保存为 Dataset</span>
+      <button class="export-card-close" onclick="closeDatasetSaveModal()">✕</button>
+    </div>
+    <div class="export-card-body" id="datasetSaveBody">
+      <div>
+        <div class="export-field-label">保存范围</div>
+        <div class="export-field-value" id="datasetSaveScope">当前 session 的全部 tasks</div>
+      </div>
+      <div>
+        <div class="export-field-label">Dataset v1 内容</div>
+        <div class="dataset-file-list">
+          <div class="dataset-file-chip">manifest.json</div>
+          <div class="dataset-file-chip">dataset.jsonl</div>
+          <div class="dataset-file-chip">traces/*.json</div>
+          <div class="dataset-file-chip">scores.jsonl 空文件</div>
+        </div>
+      </div>
+      <div class="export-status" id="datasetSaveStatus"></div>
+      <div id="datasetSaveResult" style="display:none"></div>
+    </div>
+    <div class="export-card-footer">
+      <button class="export-btn-cancel" onclick="closeDatasetSaveModal()">取消</button>
+      <button class="export-btn-confirm" id="datasetSaveOnlyBtn" onclick="saveTaskDataset(false)">保存 Dataset</button>
+      <button class="export-btn-confirm" id="datasetSaveDownloadBtn" onclick="saveTaskDataset(true)">保存并下载 .tar.gz</button>
     </div>
   </div>
 </div>
@@ -3944,7 +3992,8 @@ function renderTasksPage() {
   if (!sessionId || sessionId !== currentLoadedSessionId) {
     el.innerHTML = `<div class="placeholder">先在顶部选择 project 和 session，再进行任务切分<br>
       <button class="btn" style="margin-top:8px" disabled>自动切分</button>
-      <button class="btn" style="margin-top:8px" disabled>手动切分</button></div>`;
+      <button class="btn" style="margin-top:8px" disabled>手动切分</button>
+      ${datasetSaveButton(sessionId, 'margin-top:8px')}</div>`;
     return;
   }
   if (taskSegmentsInFlight) {
@@ -3969,7 +4018,8 @@ function renderTasksPage() {
   } else {
     el.innerHTML = `<div class="placeholder">当前 Session 尚未生成任务切分结果<br>
       <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">自动切分</button>
-      <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button></div>`;
+      <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button>
+      ${datasetSaveButton(sessionId, 'margin-top:8px')}</div>`;
   }
 }
 
@@ -4383,6 +4433,16 @@ window.taskTraceOverlaysBySession = taskTraceOverlaysBySession;
 window.activeTaskTraceOverlayBySession = activeTaskTraceOverlayBySession;
 window.savedTaskTraceOverlayBySession = savedTaskTraceOverlayBySession;
 
+const DATASET_OVERLAY_VERSION = 'task-trace-overlay-v1';
+const DATASET_TASK_SEGMENTATION_SCHEMA_VERSION = 'task-segmentation-v1';
+const datasetSaveState = {
+  open: false,
+  inFlight: false,
+  result: null,
+  error: '',
+};
+window.datasetSaveState = datasetSaveState;
+
 let taskTraceEditMode = false;
 let selectedEditableTaskId = null;
 let selectedEditableTurnKey = null;
@@ -4688,6 +4748,211 @@ function taskTraceLikeData(overlay) {
 function activeTaskTraceData(sessionId) {
   const overlay = getActiveTaskTraceOverlay(sessionId);
   return overlay ? taskTraceLikeData(overlay) : null;
+}
+
+function datasetSaveButton(sessionId, extraStyle = '') {
+  const disabled = !sessionId || sessionId !== currentLoadedSessionId;
+  return `<button class="btn" id="saveTaskDatasetBtn" onclick="openDatasetSaveModal()" ${disabled ? 'disabled' : ''} style="${extraStyle}">保存为 Dataset</button>`;
+}
+
+function datasetSourceTrace(sessionId, tasks) {
+  const ids = [];
+  const seen = new Set();
+  for (const task of tasks || []) {
+    for (const eventId of [task.startEventId, task.endEventId]) {
+      if (eventId && !seen.has(eventId)) {
+        ids.push(eventId);
+        seen.add(eventId);
+      }
+    }
+  }
+  return {
+    sessionId,
+    sourceTraceId: `viewer-task-boundary-${String(sessionId || 'session').slice(0, 8)}`,
+    eventIds: ids,
+  };
+}
+
+function datasetSavedOverlaySource(sessionId) {
+  const saved = getSavedTaskTraceOverlay(sessionId);
+  if (!saved?.tasks?.length) return null;
+  const overlay = taskTraceLikeData(saved);
+  overlay.schemaVersion = DATASET_OVERLAY_VERSION;
+  overlay.provenance = {
+    source: overlay.source || 'edited',
+    sessionId,
+    sourceTraceId: `viewer-overlay-${String(overlay.overlayId || sessionId).slice(0, 12)}`,
+    saved: true,
+    savedAt: overlay.updatedAt || overlay.createdAt || isoNow(),
+  };
+  overlay.sourceTrace = datasetSourceTrace(sessionId, overlay.tasks);
+  return {
+    taskSource: 'activeOverlay',
+    source: {
+      kind: 'overlay',
+      payload: overlay,
+      overlayVersion: DATASET_OVERLAY_VERSION,
+      provenance: overlay.provenance,
+      sourceTrace: overlay.sourceTrace,
+    },
+  };
+}
+
+function datasetTaskSegmentsSource(sessionId) {
+  const taskSegments = taskSegmentReports[sessionId];
+  if (!taskSegments?.tasks?.length) return null;
+  const payload = cloneJson(taskSegments);
+  payload.sessionId = sessionId;
+  payload.schemaVersion = DATASET_TASK_SEGMENTATION_SCHEMA_VERSION;
+  payload.provenance = {
+    source: 'auto',
+    sessionId,
+    sourceTraceId: `viewer-task-segments-${String(sessionId || 'session').slice(0, 8)}`,
+  };
+  payload.sourceTrace = datasetSourceTrace(sessionId, payload.tasks);
+  return {
+    taskSource: 'taskSegments',
+    source: {
+      kind: 'taskSegments',
+      payload,
+      sourceSchemaVersion: DATASET_TASK_SEGMENTATION_SCHEMA_VERSION,
+      provenance: payload.provenance,
+      sourceTrace: payload.sourceTrace,
+    },
+  };
+}
+
+function buildDatasetSavePayload(download = false) {
+  const sessionId = document.getElementById('sessionSel').value;
+  if (!sessionId || sessionId !== currentLoadedSessionId) throw new Error('请先加载 session');
+  if (hasDirtyTaskTraceOverlay(sessionId)) throw new Error('当前 Task Trace Overlay 有未保存修改，请先保存或撤销编辑');
+  const selected = datasetSavedOverlaySource(sessionId) || datasetTaskSegmentsSource(sessionId);
+  if (!selected) throw new Error('当前 Session 尚未生成任务切分结果，请先进行任务切分');
+  return {
+    sessionId,
+    taskSource: selected.taskSource,
+    source: selected.source,
+    download: !!download,
+    includeRawSession: false,
+    includeReqResp: false,
+  };
+}
+
+function openDatasetSaveModal() {
+  datasetSaveState.result = null;
+  datasetSaveState.error = '';
+  let payload;
+  try {
+    payload = buildDatasetSavePayload(false);
+  } catch (err) {
+    showTaskTraceToast(err.message || String(err), 'warning');
+    renderTasksPage();
+    return;
+  }
+  datasetSaveState.open = true;
+  const tasks = payload.source.payload.tasks || [];
+  const sourceLabel = payload.taskSource === 'activeOverlay' ? 'saved Task Trace Overlay' : 'task segmentation result';
+  const scope = document.getElementById('datasetSaveScope');
+  if (scope) scope.textContent = `当前 session 的全部 tasks：${tasks.length} 个，来源：${sourceLabel}`;
+  renderDatasetSaveState();
+  const overlay = document.getElementById('datasetSaveOverlay');
+  if (overlay) overlay.classList.add('open');
+}
+
+function closeDatasetSaveModal() {
+  datasetSaveState.open = false;
+  const overlay = document.getElementById('datasetSaveOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+
+function onDatasetSaveOverlayClick(event) {
+  if (event.target && event.target.id === 'datasetSaveOverlay') closeDatasetSaveModal();
+}
+
+function setDatasetSaveBusy(busy) {
+  datasetSaveState.inFlight = busy;
+  const saveBtn = document.getElementById('datasetSaveOnlyBtn');
+  const downloadBtn = document.getElementById('datasetSaveDownloadBtn');
+  if (saveBtn) saveBtn.disabled = busy;
+  if (downloadBtn) downloadBtn.disabled = busy;
+}
+
+function renderDatasetSaveState() {
+  const status = document.getElementById('datasetSaveStatus');
+  const result = document.getElementById('datasetSaveResult');
+  if (status) status.textContent = datasetSaveState.inFlight ? '正在保存 Dataset…' : '';
+  if (!result) return;
+  if (datasetSaveState.error) {
+    result.style.display = 'block';
+    result.innerHTML = `<div class="dataset-error">${esc(datasetSaveState.error)}</div>`;
+    return;
+  }
+  if (datasetSaveState.result) {
+    const data = datasetSaveState.result;
+    result.style.display = 'block';
+    result.innerHTML = `<div class="dataset-result">
+      <div><strong>Dataset 已保存</strong></div>
+      <div class="export-field-value">${esc(data.datasetId || '')}</div>
+      <div class="export-field-value">${esc(data.datasetPath || '')}</div>
+    </div>`;
+    return;
+  }
+  result.style.display = 'none';
+  result.innerHTML = '';
+}
+
+async function requestSaveTaskDataset(payload) {
+  const url = `${apiBase()}/api/save-task-dataset`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || !data.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+function triggerDatasetDownload(downloadUrl) {
+  const url = downloadUrl && downloadUrl.startsWith('/') ? `${apiBase()}${downloadUrl}` : downloadUrl;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function saveTaskDataset(download = false) {
+  let payload;
+  try {
+    payload = buildDatasetSavePayload(download);
+  } catch (err) {
+    datasetSaveState.error = err.message || String(err);
+    renderDatasetSaveState();
+    return;
+  }
+  setDatasetSaveBusy(true);
+  datasetSaveState.error = '';
+  renderDatasetSaveState();
+  try {
+    const data = await requestSaveTaskDataset(payload);
+    datasetSaveState.result = data;
+    renderDatasetSaveState();
+    if (download) {
+      try {
+        triggerDatasetDownload(data.downloadUrl);
+      } catch (err) {
+        datasetSaveState.error = `Dataset 已保存，但下载触发失败：${err.message || err}`;
+        renderDatasetSaveState();
+      }
+    }
+  } catch (err) {
+    datasetSaveState.error = err.message || String(err);
+    renderDatasetSaveState();
+  } finally {
+    setDatasetSaveBusy(false);
+  }
 }
 
 function downloadJson(data, filename) {
@@ -5361,7 +5626,7 @@ function renderTaskSegments(data, sessionId) {
   let leftHtml = `<div class="task-seg-header" style="padding:8px 10px;margin:0;border-bottom:1px solid var(--border)">
     <div class="task-seg-title" style="font-size:13px">${tasks.length} 个任务 ${isAmbiguous ? '⚠' : ''} ${confirmStatusBadge}</div>
     <div class="task-seg-meta" style="display:flex;gap:4px;flex-wrap:wrap">${ambiguousBadge}${flipsTxt}${elapsedTxt}</div>
-	    <div style="margin-top:4px">${confirmBtn}<button class="btn" onclick="runTaskSegmentationForCurrentSession()">自动切分</button><button class="btn" style="margin-left:4px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button><button class="btn" style="margin-left:4px" onclick="exportTaskTraceOverlay()" ${overlay?.tasks?.length ? '' : 'disabled'}>导出 Overlay</button></div>
+	    <div style="margin-top:4px">${confirmBtn}<button class="btn" onclick="runTaskSegmentationForCurrentSession()">自动切分</button><button class="btn" style="margin-left:4px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button><button class="btn" style="margin-left:4px" onclick="exportTaskTraceOverlay()" ${overlay?.tasks?.length ? '' : 'disabled'}>导出 Overlay</button>${datasetSaveButton(sessionId, 'margin-left:4px')}</div>
   </div>`;
   leftHtml += '<div class="task-seg-cards" id="taskSegCards">';
   for (const [taskIdx, t] of tasks.entries()) {

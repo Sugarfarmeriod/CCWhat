@@ -22,6 +22,12 @@ from .models import (
     ValidationIssue,
     ValidationResult,
 )
+from .registry import (
+    DatasetRegistryError,
+    build_dataset_tar_gz,
+    default_dataset_registry_root,
+    save_task_dataset_from_request,
+)
 from .validator import validate_dataset, validate_dataset_path
 
 __all__ = [
@@ -34,6 +40,7 @@ __all__ = [
     "DatasetItemRow",
     "DatasetManifest",
     "DatasetPatchEvidence",
+    "DatasetRegistryError",
     "DatasetScoreRow",
     "DatasetTrace",
     "PATCH_CONFIDENCES",
@@ -42,7 +49,10 @@ __all__ = [
     "ValidationResult",
     "build_dataset_bundle",
     "build_dataset_bundle_from_segments",
+    "build_dataset_tar_gz",
+    "default_dataset_registry_root",
     "extract_change_evidence",
+    "save_task_dataset_from_request",
     "validate_dataset",
     "validate_dataset_path",
 ]
