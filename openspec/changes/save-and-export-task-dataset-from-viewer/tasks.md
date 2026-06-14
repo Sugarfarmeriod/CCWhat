@@ -58,3 +58,8 @@
 - [x] 6.3 运行前端静态 / DOM 冒烟相关测试。
 - [x] 6.4 运行 `openspec validate save-and-export-task-dataset-from-viewer --strict`。
 - [x] 6.5 更新实现交接说明，记录 API 请求/响应、source payload/provenance 校验、registry 路径、downloadUrl、raw 选项完全隐藏和 raw inclusion 请求返回 400 的口径。
+
+## 7. Review 返修项
+
+- [x] 7.1 后端 raw inclusion 拒绝逻辑必须覆盖显式真值请求，不只覆盖 JSON boolean `true`；例如 `includeRawSession: "true"`、`includeReqResp: "true"` 或其他可被视为启用 raw inclusion 的值，都必须返回 HTTP 400 且不得落盘。
+- [x] 7.2 新增后端负向测试，分别覆盖 `includeRawSession` / `includeReqResp` 以字符串 `"true"` 或等价显式启用值提交时返回 400，并确认 registry 未创建 Dataset。

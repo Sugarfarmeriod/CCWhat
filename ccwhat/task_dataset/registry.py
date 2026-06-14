@@ -52,7 +52,7 @@ def save_task_dataset_from_request(
     now: datetime | None = None,
 ) -> SavedDataset:
     """Validate a viewer request, build a Dataset bundle, and save it."""
-    if payload.get("includeRawSession") is True or payload.get("includeReqResp") is True:
+    if _raw_inclusion_requested(payload.get("includeRawSession")) or _raw_inclusion_requested(payload.get("includeReqResp")):
         raise DatasetRegistryError("raw source inclusion is not supported in this Dataset version")
 
     session_id = _require_nonempty_string(payload, "sessionId")
@@ -151,11 +151,30 @@ def _tasks_from_source(
     event_ids: list[str],
 ) -> list[TaskSegment]:
     kind = str(source.get("kind") or "").strip()
-    if task_source == "activeOverlay" or kind == "overlay":
+    if task_source == "activeOverlay":
+        if kind != "overlay":
+            raise DatasetRegistryError("taskSource activeOverlay must use source.kind overlay")
         return _overlay_tasks(source, request_session_id, event_ids)
-    if task_source == "taskSegments" or kind == "taskSegments":
+    if task_source == "taskSegments":
+        if kind != "taskSegments":
+            raise DatasetRegistryError("taskSource taskSegments must use source.kind taskSegments")
         return _segmentation_tasks(source, request_session_id, event_ids)
     raise DatasetRegistryError("taskSource must be activeOverlay or taskSegments")
+
+
+def _raw_inclusion_requested(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "false", "0", "no", "n", "off", "disabled", "disable"}:
+            return False
+        return normalized in {"true", "1", "yes", "y", "on", "enabled", "enable", "include", "included"}
+    if value is None:
+        return False
+    return bool(value)
 
 
 def _overlay_tasks(
