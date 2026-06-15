@@ -2,6 +2,39 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.0.0 preview - 2026-06-16
+
+### Preview：Task Dataset Builder — 数据标准化
+
+V2.0.0 preview 是 v2 系列的起点，核心变化是从"查看 Task"进入"沉淀 Task 数据"。Agent Session 中切分出的 Task 被清洗为标准格式，便于后续离线评测和诊断。
+
+### 新增
+
+- **Dataset 标准格式**：每个 Dataset 包含四层结构：
+  - `manifest.json` — 数据集元信息（schema_version、tool、session、counts）
+  - `dataset.jsonl` — 任务定义索引，每行一个 task：`id`、`input.instruction`、`input.repo`、`expected.success_criteria`、`expected.tests`、`metadata.agent/session_id/task_source/trace_path/start_event_id/end_event_id`
+  - `traces/*.json` — 执行过程详情，记录 task 边界内全部 events、commands、test_commands、files.read、files.changed、changes、patches、errors、final_claim、repo_state
+  - `scores.jsonl` — 评分占位，第一版为空文件，留给 evaluator 追加
+- **Dataset Registry**：Dataset 保存到 `~/.ccwhat/datasets/<dataset-id>/` 目录。
+- **Dataset 下载**：支持浏览器下载 `dataset-*.tar.gz` 压缩包，包内根目录 `ccwhat-dataset/`，通过 Dataset validator 校验。
+- **Source Provenance 校验**：请求携带完整 source payload、provenance、overlay version 和 source trace 信息，后端校验 session 一致性、overlay 版本和 trace 对齐后再构建 Dataset。
+- **Dirty Overlay 保护**：存在未保存 overlay 编辑时阻止保存，要求用户先保存或撤销。
+- **Dataset Core 模块**：新增 `ccwhat/task_dataset/` 模块，包含 models、builder、validator，支持 Claude Code / Codex / OpenCode 三个 Agent 的 fixture。
+- **Change Evidence 抽取**：统一提取 Claude Code / Codex / OpenCode 的文件改动证据，写入 trace `changes` 和 `patches`。
+
+### 改进
+
+- Task source 选择策略：saved overlay 优先，task segmentation result 兜底。
+- 第一版完全隐藏 raw session / raw req-resp 选项，相关请求直接返回 HTTP 400。
+
+### 限制（后续版本解决）
+
+- 不支持 evaluator score 自动评分。
+- 不支持 Dataset 列表、删除、重命名等 registry 管理页面。
+- 不支持拖拽调整 Task 边界（仅按钮操作）。
+
+---
+
 ## v1.1.0 - 2026-06-13
 
 ### 新增手动任务切分 + 自动任务切分，支持人为微调
