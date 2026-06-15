@@ -331,12 +331,6 @@ def _make_handler(
                     self._send_json({"ok": False, "error": "rename not supported for this agent", "code": "rename_not_supported"}, 501)
                     return
 
-                # Verify session exists
-                session_data = self._get_session_data(session_id)
-                if session_data is None:
-                    self._send_json({"ok": False, "error": "session not found", "code": "session_not_found"}, 404)
-                    return
-
                 try:
                     result = adapter.rename_session(session_id, title)
                 except SessionRenameError as exc:

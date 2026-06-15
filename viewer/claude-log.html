@@ -6225,11 +6225,26 @@ async function saveSessionRename() {
     });
     const result = await resp.json();
     if (!resp.ok || !result.ok) {
+      // Stale response guard: only show error if session still active
+      const currentSession = document.getElementById('sessionSel').value;
+      if (currentSession !== sessionId) return;
       status.textContent = result.error || '保存失败';
       status.style.color = '#f85149';
       saveBtn.disabled = false;
       return;
     }
+    // Always update allProjects cache regardless of active session
+    for (const proj of allProjects) {
+      const sess = (proj.sessions || []).find(s => (typeof s === 'object' ? s.id : s) === sessionId);
+      if (sess && typeof sess === 'object') {
+        sess.title = result.title;
+        sess.displayName = result.displayName;
+        break;
+      }
+    }
+    // Stale response guard: only update current UI if session still active
+    const currentSession = document.getElementById('sessionSel').value;
+    if (currentSession !== sessionId) return;
     // Update local state
     currentSessionTitleMeta.title = result.title;
     currentSessionTitleMeta.displayName = result.displayName;
@@ -6240,15 +6255,9 @@ async function saveSessionRename() {
     const sel = document.getElementById('sessionSel');
     for (const opt of sel.options) {
       if (opt.value === sessionId) {
-        // Find session in allProjects and update
-        for (const proj of allProjects) {
-          const sess = (proj.sessions || []).find(s => (typeof s === 'object' ? s.id : s) === sessionId);
-          if (sess && typeof sess === 'object') {
-            sess.title = result.title;
-            sess.displayName = result.displayName;
-            opt.textContent = fmtSessionLabel(sess);
-            break;
-          }
+        const sessObj = allProjects.flatMap(p => p.sessions || []).find(s => (typeof s === 'object' ? s.id : s) === sessionId);
+        if (sessObj && typeof sessObj === 'object') {
+          opt.textContent = fmtSessionLabel(sessObj);
         }
         break;
       }
@@ -6257,6 +6266,9 @@ async function saveSessionRename() {
     status.style.color = '#3fb950';
     setTimeout(() => cancelSessionRename(), 1200);
   } catch (err) {
+    // Stale response guard: only show error if session still active
+    const currentSession = document.getElementById('sessionSel').value;
+    if (currentSession !== sessionId) return;
     status.textContent = err.message || '网络错误';
     status.style.color = '#f85149';
   } finally {
