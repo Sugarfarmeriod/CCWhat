@@ -25,7 +25,15 @@ case "$OS_NAME" in
     ;;
 esac
 
-PYTHON_BIN=$(command -v python3 || command -v python || echo "")
+PYTHON_BIN=""
+for candidate in python3.13 python3.12 python3.11 python3.10 python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    if "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+      PYTHON_BIN="$(command -v "$candidate")"
+      break
+    fi
+  fi
+done
 if [ -z "$PYTHON_BIN" ]; then
   echo "Python not found. Please install Python 3.10+ first."
   exit 1
