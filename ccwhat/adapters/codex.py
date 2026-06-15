@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ccwhat.adapters.base import AgentAdapter
+from ccwhat.adapters.base import AgentAdapter, SessionRenameError
 
 
 _SESSION_ID_RE = re.compile(
@@ -318,6 +318,7 @@ class CodexAdapter(AgentAdapter):
 
     def list_projects(self) -> list[dict[str, Any]]:
         files = self._scan_rollout_files()
+        sqlite_meta = self._load_sqlite_metadata()
         proj_map: dict[str, dict[str, Any]] = {}
         for fp, sid, project_dir in files:
             if project_dir not in proj_map:
@@ -325,10 +326,16 @@ class CodexAdapter(AgentAdapter):
                     "projectDir": project_dir,
                     "sessions": [],
                 }
+            meta = sqlite_meta.get(sid, {})
+            native_title = meta.get("title", "")
+            display = native_title if native_title else sid[:8]
             proj_map[project_dir]["sessions"].append({
                 "id": sid,
                 "firstTimestamp": None,
                 "lastTimestamp": None,
+                "title": native_title,
+                "displayName": display,
+                "canRenameSession": True,
             })
         result = list(proj_map.values())
         for proj in result:
@@ -343,6 +350,74 @@ class CodexAdapter(AgentAdapter):
             for s in proj.get("sessions", []):
                 sessions.append({**s, "projectDir": proj["projectDir"]})
         return sessions
+
+    @property
+    def can_rename_session(self) -> bool:
+        return True
+
+    def rename_session(self, session_id: str, title: str) -> dict[str, Any]:
+        """Write title to Codex state_5.sqlite threads.title."""
+        title = title.strip()
+        if not title:
+            raise SessionRenameError("invalid_title", "Title must not be empty after trimming.")
+
+        sp = self._get_sqlite_path()
+        if sp is None or not sp.exists():
+            raise SessionRenameError(
+                "native_title_unavailable",
+                "Codex state_5.sqlite not found.",
+            )
+
+        try:
+            conn = sqlite3.connect(str(sp), timeout=5)
+            cur = conn.cursor()
+            # Verify schema
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='threads'")
+            if cur.fetchone() is None:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "Codex state_5.sqlite missing 'threads' table.",
+                )
+            # Check columns
+            cur.execute("PRAGMA table_info(threads)")
+            columns = {row[1] for row in cur.fetchall()}
+            if "id" not in columns or "title" not in columns:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "Codex threads table missing 'id' or 'title' column.",
+                )
+            # Perform update in transaction
+            cur.execute("UPDATE threads SET title = ? WHERE id = ?", (title, session_id))
+            if cur.rowcount == 0:
+                conn.rollback()
+                conn.close()
+                raise SessionRenameError(
+                    "session_not_found",
+                    f"No thread with id '{session_id}' found in Codex DB.",
+                )
+            conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"Codex SQLite write failed: {exc}",
+            ) from exc
+        except sqlite3.DatabaseError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"Codex SQLite error: {exc}",
+            ) from exc
+
+        # Invalidate cache so subsequent reads reflect new title
+        self._sqlite_cache = None
+
+        return {
+            "title": title,
+            "displayName": title,
+            "canRenameSession": True,
+        }
 
     def raw_to_normalized_events(self, raw_entry: dict[str, Any], session_id: str) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
@@ -720,5 +795,11 @@ class CodexAdapter(AgentAdapter):
                 }
                 if sqlite_meta:
                     result["_metadata"] = sqlite_meta
+                # Add title metadata
+                native_title = sqlite_meta.get("title", "")
+                display = native_title if native_title else session_id[:8]
+                result["title"] = native_title
+                result["displayName"] = display
+                result["canRenameSession"] = True
                 return result
         return None

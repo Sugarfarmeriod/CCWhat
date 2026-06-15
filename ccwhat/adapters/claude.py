@@ -160,6 +160,9 @@ class ClaudeAdapter(AgentAdapter):
                     "id": p.stem,
                     "firstTimestamp": first_ts,
                     "lastTimestamp": last_ts,
+                    "title": "",
+                    "displayName": p.stem[:8],
+                    "canRenameSession": False,
                 })
             session_infos.sort(key=lambda s: s["lastTimestamp"] or "", reverse=True)
             if session_infos:
@@ -519,5 +522,8 @@ class ClaudeAdapter(AgentAdapter):
                     "agent": "claude",
                     "events": events,
                     "turns": turns,
+                    "title": "",
+                    "displayName": session_id[:8],
+                    "canRenameSession": False,
                 }
         return None
