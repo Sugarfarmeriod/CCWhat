@@ -6272,7 +6272,11 @@ async function saveSessionRename() {
     status.textContent = err.message || '网络错误';
     status.style.color = '#f85149';
   } finally {
-    saveBtn.disabled = false;
+    // Stale response guard: only restore button state if session still active
+    const currentSession = document.getElementById('sessionSel').value;
+    if (currentSession === sessionId) {
+      saveBtn.disabled = false;
+    }
   }
 }
 
