@@ -100,6 +100,34 @@ def _proxy_is_running(port: int) -> bool:
     sys.exit(1)
 
 
+def _resolve_mitmdump_binary() -> str:
+    """Return the mitmdump executable that matches the current environment when possible."""
+    resolved = shutil.which("mitmdump")
+    if resolved:
+        return resolved
+
+    candidates = [
+        Path(sys.executable).resolve().parent / "mitmdump",
+        Path(sys.prefix).resolve() / "bin" / "mitmdump",
+    ]
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return "mitmdump"
+
+
+def _proxy_start_timeout_seconds() -> float:
+    raw = os.environ.get("CCWHAT_PROXY_START_TIMEOUT", "").strip()
+    if raw:
+        try:
+            parsed = float(raw)
+            if parsed > 0:
+                return parsed
+        except ValueError:
+            pass
+    return 10.0
+
+
 def _start_managed_proxy(
     port: int,
     output: Path,
@@ -115,7 +143,7 @@ def _start_managed_proxy(
     output.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "mitmdump",
+        _resolve_mitmdump_binary(),
         "--listen-host", "127.0.0.1",
         "--listen-port", str(port),
         "-s", str(addon_path),
@@ -143,10 +171,13 @@ def _start_managed_proxy(
         )
         return None
 
-    # Brief wait for proxy to bind (up to 2 s)
+    # Wait for mitmdump to bind. First-run certificate setup and cold imports can
+    # take a few seconds on slower machines.
     import time
+    timeout_seconds = _proxy_start_timeout_seconds()
+    deadline = time.monotonic() + timeout_seconds
     bound = False
-    for _ in range(20):
+    while time.monotonic() < deadline:
         # Check process is still alive
         if proc.poll() is not None:
             break
@@ -170,7 +201,7 @@ def _start_managed_proxy(
         click.echo(
             f"Error: managed proxy failed to bind on port {port}"
             + (f" (exit code {returncode})" if returncode is not None else "")
-            + ".\nCheck that mitmproxy is installed and the port is free.",
+            + f".\nWaited {timeout_seconds:g}s. Check that mitmproxy is installed and the port is free.",
             err=True,
         )
         _marker_path(port).unlink(missing_ok=True)
