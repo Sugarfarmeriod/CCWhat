@@ -882,31 +882,146 @@ class TestRenameFrontendElements(unittest.TestCase):
     def test_stale_session_guard_in_success_path(self):
         """saveSessionRename checks current session before updating UI on success."""
         fn_start = _HTML.index("async function saveSessionRename()")
-        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        fn_end = _HTML.index("function onProjectChange", fn_start)
         snippet = _HTML[fn_start:fn_end]
         # Must have stale check after fetch (currentSession !== sessionId)
         self.assertIn("currentSession !== sessionId", snippet)
 
     def test_stale_session_guard_in_error_path(self):
-        """saveSessionRename checks current session before updating UI on error."""
+        """saveSessionRename checks current session in HTTP error, catch, AND finally paths."""
         fn_start = _HTML.index("async function saveSessionRename()")
-        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        fn_end = _HTML.index("function onProjectChange", fn_start)
         snippet = _HTML[fn_start:fn_end]
-        # Must appear multiple times: success path, error resp path, catch path
-        first = snippet.index("currentSession !== sessionId")
-        second = snippet.index("currentSession !== sessionId", first + 1)
-        third = snippet.index("currentSession !== sessionId", second + 1)
-        self.assertIsNotNone(third)
+        # Must appear at least 3 times: HTTP error, catch, and finally
+        # Use currentSession !== sessionId OR currentSession === sessionId
+        import re
+        guards = re.findall(r"currentSession\s*[!=]==\s*sessionId", snippet)
+        # HTTP error guard + success guard + catch guard + finally guard = at least 4
+        self.assertGreaterEqual(len(guards), 4,
+            f"Expected ≥4 session guards (error, success, catch, finally), found {len(guards)}")
 
     def test_stale_guard_still_updates_allprojects_cache(self):
         """Even on stale session, allProjects cache is updated before guard check."""
         fn_start = _HTML.index("async function saveSessionRename()")
-        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        fn_end = _HTML.index("function onProjectChange", fn_start)
         snippet = _HTML[fn_start:fn_end]
-        # allProjects update must come before the stale guard
+        # allProjects update must come before the stale guard in success path
         cache_pos = snippet.index("sess.title = result.title")
         stale_pos = snippet.index("currentSession !== sessionId", snippet.index("sess.title"))
         self.assertLess(cache_pos, stale_pos)
+
+    def test_finally_block_guards_saveBtn_disabled(self):
+        """finally block must NOT unconditionally set saveBtn.disabled = false.
+
+        Behavioral proof: if session A's response arrives while session B is active
+        and saving, it must not re-enable B's save button. This test verifies that
+        the finally block contains a session equality check that gates the
+        saveBtn.disabled assignment.
+        """
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("function onProjectChange", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+
+        # Locate the finally block
+        finally_pos = snippet.index("} finally {")
+        # Find the closing brace of the finally block (next "}" after the content)
+        finally_body_start = finally_pos + len("} finally {")
+        # Extract finally block body (until the function closes)
+        brace_depth = 1
+        pos = finally_body_start
+        while pos < len(snippet) and brace_depth > 0:
+            if snippet[pos] == '{':
+                brace_depth += 1
+            elif snippet[pos] == '}':
+                brace_depth -= 1
+            pos += 1
+        finally_body = snippet[finally_body_start:pos]
+
+        # 1. saveBtn.disabled = false must exist inside finally
+        self.assertIn("saveBtn.disabled = false", finally_body,
+            "finally block must contain saveBtn.disabled = false")
+
+        # 2. There must be a session guard BEFORE the saveBtn assignment
+        guard_pos = finally_body.index("currentSession === sessionId")
+        btn_pos = finally_body.index("saveBtn.disabled = false")
+        self.assertLess(guard_pos, btn_pos,
+            "Session guard must come BEFORE saveBtn.disabled = false in finally")
+
+        # 3. saveBtn.disabled = false must be INSIDE a conditional (indented after if)
+        # Verify the assignment is inside an if-block, not at the top level of finally
+        lines_before_btn = finally_body[:btn_pos].split('\n')
+        # The line containing the guard should open a block
+        guard_line = [l for l in lines_before_btn if "currentSession === sessionId" in l]
+        self.assertTrue(len(guard_line) > 0)
+        # Guard line must contain an if and opening brace
+        self.assertIn("if", guard_line[0])
+
+    def test_finally_does_not_unconditionally_modify_state(self):
+        """No unconditional state mutation in finally — all mutations are guarded.
+
+        This test extracts the finally block and verifies that every line that
+        assigns to a DOM property or variable is inside a conditional block,
+        not at the top level of finally.
+        """
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("function onProjectChange", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+
+        finally_pos = snippet.index("} finally {")
+        finally_body_start = finally_pos + len("} finally {")
+        brace_depth = 1
+        pos = finally_body_start
+        while pos < len(snippet) and brace_depth > 0:
+            if snippet[pos] == '{':
+                brace_depth += 1
+            elif snippet[pos] == '}':
+                brace_depth -= 1
+            pos += 1
+        finally_body = snippet[finally_body_start:pos]
+
+        # Parse lines at brace depth 0 (top-level of finally) — these are unconditional
+        import re
+        depth = 0
+        top_level_lines = []
+        # Match actual assignments: x = y, x.prop = y — but not === or !==
+        assign_re = re.compile(r'(?<![!=<>])=(?!=)')
+        for line in finally_body.strip().split('\n'):
+            stripped = line.strip()
+            if not stripped or stripped == '}':
+                if '{' not in stripped:
+                    depth = max(0, depth - stripped.count('}'))
+                continue
+            if depth == 0 and assign_re.search(stripped) and not stripped.startswith('//'):
+                # An assignment at top level — this is unconditional
+                # But skip lines that are the guard declaration itself (const currentSession = ...)
+                if 'const currentSession' not in stripped and 'let ' not in stripped:
+                    top_level_lines.append(stripped)
+            if '{' in stripped:
+                depth += stripped.count('{') - stripped.count('}')
+            elif '}' in stripped:
+                depth -= stripped.count('}')
+
+        self.assertEqual(top_level_lines, [],
+            f"Found unconditional assignments in finally block: {top_level_lines}")
+
+    def test_success_path_early_return_prevents_btn_restore(self):
+        """On stale success, the 'return' before UI updates also skips finally btn restore.
+
+        Verify: when stale guard triggers 'return' in success path, the finally
+        guard will also block btn restoration since session still mismatches.
+        """
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("function onProjectChange", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+
+        # The success path has: if (currentSession !== sessionId) return;
+        # After this return, finally still runs. Verify finally also checks.
+        success_guard = snippet.index("currentSession !== sessionId",
+                                      snippet.index("sess.title = result.title"))
+        finally_guard = snippet.index("currentSession === sessionId",
+                                      snippet.index("} finally {"))
+        # finally guard must exist after the success guard
+        self.assertGreater(finally_guard, success_guard)
 
 
 # ---------------------------------------------------------------------------
