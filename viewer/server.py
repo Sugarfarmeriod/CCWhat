@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
+from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter, SessionRenameError
 from ccwhat.adapters.claude import ClaudeAdapter
 from ccwhat.adapters.registry import create_adapter
 from ccwhat.session_report import normalize_session_for_report
@@ -302,6 +302,65 @@ def _make_handler(
             total_started = time.monotonic()
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
+
+            # ── POST /api/session/<sessionId>/rename ──────────────────────
+            rename_prefix = "/api/session/"
+            rename_suffix = "/rename"
+            if path.startswith(rename_prefix) and path.endswith(rename_suffix):
+                session_id = path[len(rename_prefix):-len(rename_suffix)]
+                if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
+                    self._send_json({"ok": False, "error": "invalid session id", "code": "invalid_title"}, 400)
+                    return
+                payload = self._read_json_body()
+                if payload is None:
+                    self._send_json({"ok": False, "error": "invalid JSON body", "code": "invalid_title"}, 400)
+                    return
+                raw_title = payload.get("title", "")
+                title = str(raw_title).strip() if raw_title else ""
+                if not title:
+                    self._send_json({"ok": False, "error": "title is required and must not be empty", "code": "invalid_title"}, 400)
+                    return
+
+                adapter = _adapter
+                if adapter is None:
+                    # Default Claude adapter does not support rename
+                    self._send_json({"ok": False, "error": "rename not supported for this agent", "code": "rename_not_supported"}, 501)
+                    return
+
+                if not adapter.can_rename_session:
+                    self._send_json({"ok": False, "error": "rename not supported for this agent", "code": "rename_not_supported"}, 501)
+                    return
+
+                # Verify session exists
+                session_data = self._get_session_data(session_id)
+                if session_data is None:
+                    self._send_json({"ok": False, "error": "session not found", "code": "session_not_found"}, 404)
+                    return
+
+                try:
+                    result = adapter.rename_session(session_id, title)
+                except SessionRenameError as exc:
+                    status_map = {
+                        "invalid_title": 400,
+                        "session_not_found": 404,
+                        "rename_not_supported": 501,
+                        "native_title_unavailable": 500,
+                        "native_title_write_failed": 500,
+                    }
+                    http_status = status_map.get(exc.code, 500)
+                    self._send_json({"ok": False, "error": exc.message, "code": exc.code}, http_status)
+                    return
+
+                self._send_json({
+                    "ok": True,
+                    "agent": adapter.name,
+                    "sessionId": session_id,
+                    "title": result["title"],
+                    "displayName": result["displayName"],
+                    "canRenameSession": result["canRenameSession"],
+                })
+                return
+
             if path not in ("/api/analyze", "/api/task-segments", "/api/save-task-dataset"):
                 self._send_json({"ok": False, "error": "not found"}, 404)
                 return
@@ -470,7 +529,12 @@ def _make_handler(
                 except AdapterNotImplementedError as exc:
                     self._send_json({"error": str(exc), "agent": self._adapter_agent() or "claude"}, 501)
             elif path.startswith("/api/session/"):
-                session_id = path[len("/api/session/"):]
+                rest = path[len("/api/session/"):]
+                # Skip sub-routes like /api/session/<id>/rename (handled by POST)
+                if "/" in rest:
+                    self._send_json({"error": "not found"}, 404)
+                    return
+                session_id = rest
                 if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
                     self._send_json({"error": "invalid session id"}, 400)
                     return

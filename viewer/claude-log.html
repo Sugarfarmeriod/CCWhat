@@ -1204,6 +1204,18 @@ body {
       <!-- Session Page (default, migrated from the previous raw log viewer) -->
       <div class="page active" data-page="sessions">
         <div class="page-pad" id="rawEventsPage" style="padding:0;display:flex;flex-direction:column">
+          <div class="session-title-bar" id="sessionTitleBar" style="display:none;padding:4px 10px;border-bottom:1px solid var(--border);background:var(--bg-surface);font-size:13px;align-items:center;gap:6px">
+            <span id="sessionDisplayName" style="font-weight:600;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title=""></span>
+            <span id="sessionIdLabel" style="color:var(--muted);font-size:11px;font-family:monospace"></span>
+            <button class="btn" id="sessionRenameBtn" onclick="startSessionRename()" style="font-size:11px;padding:1px 6px;margin-left:4px;display:none">✏️ 重命名</button>
+            <span id="sessionRenameUnsupported" style="color:var(--muted);font-size:11px;display:none">（不支持重命名）</span>
+            <span id="sessionRenameForm" style="display:none;align-items:center;gap:4px">
+              <input id="sessionRenameInput" type="text" class="field" style="width:200px;font-size:12px;padding:2px 6px" maxlength="200">
+              <button class="btn" id="sessionRenameSaveBtn" onclick="saveSessionRename()">保存</button>
+              <button class="btn" id="sessionRenameCancelBtn" onclick="cancelSessionRename()">取消</button>
+              <span id="sessionRenameStatus" style="font-size:11px;color:var(--muted)"></span>
+            </span>
+          </div>
           <div class="ev-toolbar" style="padding:4px 10px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-surface)">
             <span class="badge" id="countBadge"></span>
             <div class="trace-view-mode-controls" id="traceViewModeControls" style="margin-left:8px">
@@ -6125,10 +6137,131 @@ async function init() {
 
 function fmtSessionLabel(s) {
   const id = typeof s === 'string' ? s : s.id;
+  const displayName = typeof s === 'object' && s.displayName ? s.displayName : '';
   const first = typeof s === 'object' && s.firstTimestamp ? fmtTs(s.firstTimestamp) : null;
   const last  = typeof s === 'object' && s.lastTimestamp  ? fmtTs(s.lastTimestamp)  : null;
   const times = first ? (last && last !== first ? `${first} ~ ${last}` : first) : '';
+  const prefix = id.slice(0, 8);
+  if (displayName && displayName !== prefix) {
+    const label = displayName.length > 32 ? displayName.slice(0, 32) + '…' : displayName;
+    return times ? `${label} [${prefix}] (${times})` : `${label} [${prefix}]`;
+  }
   return times ? `${id}  (${times})` : id;
+}
+
+// ── Session rename UI ───────────────────────────────────────────────────
+let currentSessionTitleMeta = null; // { title, displayName, canRenameSession }
+
+function updateSessionTitleBar(data) {
+  const bar = document.getElementById('sessionTitleBar');
+  const nameEl = document.getElementById('sessionDisplayName');
+  const idEl = document.getElementById('sessionIdLabel');
+  const renameBtn = document.getElementById('sessionRenameBtn');
+  const unsupported = document.getElementById('sessionRenameUnsupported');
+  const form = document.getElementById('sessionRenameForm');
+
+  if (!data || !data.sessionId) {
+    bar.style.display = 'none';
+    currentSessionTitleMeta = null;
+    return;
+  }
+
+  const title = data.title || '';
+  const displayName = data.displayName || data.sessionId.slice(0, 8);
+  const canRename = !!data.canRenameSession;
+  currentSessionTitleMeta = { title, displayName, canRenameSession: canRename, sessionId: data.sessionId };
+
+  nameEl.textContent = displayName;
+  nameEl.title = title || displayName;
+  idEl.textContent = data.sessionId;
+  renameBtn.style.display = canRename ? 'inline-block' : 'none';
+  unsupported.style.display = canRename ? 'none' : 'inline';
+  form.style.display = 'none';
+  bar.style.display = 'flex';
+}
+
+function startSessionRename() {
+  if (!currentSessionTitleMeta || !currentSessionTitleMeta.canRenameSession) return;
+  const input = document.getElementById('sessionRenameInput');
+  const form = document.getElementById('sessionRenameForm');
+  const btn = document.getElementById('sessionRenameBtn');
+  const status = document.getElementById('sessionRenameStatus');
+  input.value = currentSessionTitleMeta.title || currentSessionTitleMeta.displayName;
+  form.style.display = 'flex';
+  btn.style.display = 'none';
+  status.textContent = '';
+  input.focus();
+  input.select();
+}
+
+function cancelSessionRename() {
+  const form = document.getElementById('sessionRenameForm');
+  const btn = document.getElementById('sessionRenameBtn');
+  form.style.display = 'none';
+  if (currentSessionTitleMeta && currentSessionTitleMeta.canRenameSession) {
+    btn.style.display = 'inline-block';
+  }
+}
+
+async function saveSessionRename() {
+  const input = document.getElementById('sessionRenameInput');
+  const status = document.getElementById('sessionRenameStatus');
+  const saveBtn = document.getElementById('sessionRenameSaveBtn');
+  const title = input.value.trim();
+  if (!title) { status.textContent = '名称不能为空'; status.style.color = '#f85149'; return; }
+  if (!currentSessionTitleMeta) return;
+
+  const sessionId = currentSessionTitleMeta.sessionId;
+  saveBtn.disabled = true;
+  status.textContent = '保存中…';
+  status.style.color = 'var(--muted)';
+
+  try {
+    const url = `${apiBase()}/api/session/${encodeURIComponent(sessionId)}/rename`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    const result = await resp.json();
+    if (!resp.ok || !result.ok) {
+      status.textContent = result.error || '保存失败';
+      status.style.color = '#f85149';
+      saveBtn.disabled = false;
+      return;
+    }
+    // Update local state
+    currentSessionTitleMeta.title = result.title;
+    currentSessionTitleMeta.displayName = result.displayName;
+    document.getElementById('sessionDisplayName').textContent = result.displayName;
+    document.getElementById('sessionDisplayName').title = result.title || result.displayName;
+
+    // Update session selector option
+    const sel = document.getElementById('sessionSel');
+    for (const opt of sel.options) {
+      if (opt.value === sessionId) {
+        // Find session in allProjects and update
+        for (const proj of allProjects) {
+          const sess = (proj.sessions || []).find(s => (typeof s === 'object' ? s.id : s) === sessionId);
+          if (sess && typeof sess === 'object') {
+            sess.title = result.title;
+            sess.displayName = result.displayName;
+            opt.textContent = fmtSessionLabel(sess);
+            break;
+          }
+        }
+        break;
+      }
+    }
+    status.textContent = '✓ 已保存';
+    status.style.color = '#3fb950';
+    setTimeout(() => cancelSessionRename(), 1200);
+  } catch (err) {
+    status.textContent = err.message || '网络错误';
+    status.style.color = '#f85149';
+  } finally {
+    saveBtn.disabled = false;
+  }
 }
 
 function onProjectChange(restoreSession) {
@@ -6363,6 +6496,7 @@ async function loadSession() {
     const exportBtn = document.getElementById('exportBtn');
     if (exportBtn) exportBtn.disabled = false;
     currentLoadedSessionId = sessionId;   // mark session as fully loaded
+    updateSessionTitleBar(data);
     updateAnalyzeButton();
     updateTaskSegmentsButton();
     updateTaskTraceOverlayControls();
@@ -6386,6 +6520,7 @@ function resetAnalysisState() {
   }
   selectedTaskSegmentId = null;
   currentLoadedSessionId = null;
+  updateSessionTitleBar(null);
   selectedTurnKey = null;
   allGroupTurns = [];
   allGroupConversations = [];
