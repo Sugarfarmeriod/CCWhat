@@ -10,7 +10,7 @@
 ## 当前状态
 
 - 阶段：waiting_human_manual_test
-- 当前 change：extract-dataset-change-evidence
+- 当前 change：save-and-export-task-dataset-from-viewer
 - 当前活跃角色：orchestrator
 - 是否等待人工：true
 - heartbeat id：ccwhat-agent-loop-heartbeat
@@ -29,5 +29,5 @@
 
 ## 当前待办
 
-- Reviewer 已通过 `extract-dataset-change-evidence` 复审。
-- 等待用户按 Reviewer 给出的手测点手动测试；通过后主控应派 Executor 归档、commit、push，不通过则派 Reviewer 根据反馈更新 spec/tasks。
+- Reviewer 已通过 `save-and-export-task-dataset-from-viewer` 复审。
+- 等待用户手测；通过后主控应派 Executor 归档、commit、push，不通过则派 Reviewer 根据反馈更新 spec/tasks。
