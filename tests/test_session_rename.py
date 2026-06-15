@@ -589,6 +589,227 @@ class TestViewerRenameAPI(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertEqual(result["code"], "rename_not_supported")
 
+    def test_rename_opencode_schema_missing_returns_500(self):
+        """API returns 500 native_title_unavailable when session table lacks title column."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            db_path = pd / "opencode.db"
+            conn = sqlite3.connect(str(db_path))
+            # Session table WITHOUT title column
+            conn.execute(
+                "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, "
+                "agent TEXT, model TEXT, time_created REAL)"
+            )
+            conn.execute(
+                "CREATE TABLE project (id TEXT PRIMARY KEY, name TEXT, worktree TEXT)"
+            )
+            sid = "oc-schema-miss-0001-0000-000000000001"
+            conn.execute(
+                "INSERT INTO session (id, directory, agent, time_created) VALUES (?, ?, ?, ?)",
+                (sid, "/tmp/proj", "opencode", 1700000000),
+            )
+            conn.commit()
+            conn.close()
+            adapter = OpenCodeAdapter(pd)
+            server = self._make_server(adapter)
+            status, result = self._request(server, "POST",
+                                           f"/api/session/{sid}/rename",
+                                           {"title": "New Name"})
+            self.assertEqual(status, 500)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["code"], "native_title_unavailable")
+
+    def test_rename_codex_schema_missing_returns_500(self):
+        """API returns 500 native_title_unavailable when threads table lacks title column."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp) / "sessions"
+            pd.mkdir(parents=True)
+            sqlite_path = Path(tmp) / "state_5.sqlite"
+            conn = sqlite3.connect(str(sqlite_path))
+            # threads table WITHOUT title column
+            conn.execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, cwd TEXT)"
+            )
+            sid = "cx-schema-miss-0001-0000-000000000001"
+            conn.execute("INSERT INTO threads (id, cwd) VALUES (?, ?)", (sid, "/tmp"))
+            conn.commit()
+            conn.close()
+            adapter = CodexAdapter(pd)
+            adapter._sqlite_path = sqlite_path
+            server = self._make_server(adapter)
+            status, result = self._request(server, "POST",
+                                           f"/api/session/{sid}/rename",
+                                           {"title": "New Name"})
+            self.assertEqual(status, 500)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["code"], "native_title_unavailable")
+
+    def test_rename_opencode_write_failed_returns_500(self):
+        """API returns 500 native_title_write_failed on SQLite write failure."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            db_path = pd / "opencode.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute(
+                "CREATE TABLE session (id TEXT PRIMARY KEY, title TEXT, directory TEXT, "
+                "agent TEXT, model TEXT, time_created REAL, time_updated REAL, "
+                "tokens_input INT, tokens_output INT, tokens_reasoning INT, "
+                "tokens_cache_read INT, tokens_cache_write INT, cost REAL, project_id TEXT)"
+            )
+            sid = "oc-write-fail-0001-0000-000000000001"
+            conn.execute(
+                "INSERT INTO session (id, title, directory, agent, time_created) VALUES (?, ?, ?, ?, ?)",
+                (sid, "Old", "/tmp/proj", "opencode", 1700000000),
+            )
+            conn.commit()
+            conn.close()
+            adapter = OpenCodeAdapter(pd)
+            server = self._make_server(adapter)
+            # Patch rename_session to raise native_title_write_failed
+            def _raise_write_failed(session_id, title):
+                raise SessionRenameError("native_title_write_failed", "disk full")
+            adapter.rename_session = _raise_write_failed
+            status, result = self._request(server, "POST",
+                                           f"/api/session/{sid}/rename",
+                                           {"title": "New Name"})
+            self.assertEqual(status, 500)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["code"], "native_title_write_failed")
+
+    def test_rename_codex_readonly_returns_500_via_api(self):
+        """API returns 500 when Codex DB is read-only."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp) / "sessions"
+            pd.mkdir(parents=True)
+            sqlite_path = Path(tmp) / "state_5.sqlite"
+            conn = sqlite3.connect(str(sqlite_path))
+            conn.execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, title TEXT, cwd TEXT)"
+            )
+            sid = "cx-readonly-db-0001-0000-000000000001"
+            conn.execute("INSERT INTO threads (id, title, cwd) VALUES (?, ?, ?)",
+                         (sid, "Old", "/tmp"))
+            conn.commit()
+            conn.close()
+            sqlite_path.chmod(0o444)
+            try:
+                adapter = CodexAdapter(pd)
+                adapter._sqlite_path = sqlite_path
+                server = self._make_server(adapter)
+                status, result = self._request(server, "POST",
+                                               f"/api/session/{sid}/rename",
+                                               {"title": "New Name"})
+                self.assertEqual(status, 500)
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["code"], "native_title_write_failed")
+            finally:
+                sqlite_path.chmod(0o644)
+
+
+# ---------------------------------------------------------------------------
+# 6.4b Adapter 500-class error tests (schema missing, write failures)
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterErrorCodes(unittest.TestCase):
+    """Adapter-level tests for native_title_unavailable and write_failed codes."""
+
+    def test_opencode_title_column_missing_raises_unavailable(self):
+        """Session exists but title column missing → native_title_unavailable, not session_not_found."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            db_path = pd / "opencode.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute(
+                "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, agent TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO session (id, directory, agent) VALUES (?, ?, ?)",
+                ("existing-session-id-123456789012", "/tmp/proj", "opencode"),
+            )
+            conn.commit()
+            conn.close()
+            adapter = OpenCodeAdapter(pd)
+            with self.assertRaises(SessionRenameError) as ctx:
+                adapter.rename_session("existing-session-id-123456789012", "New Title")
+            self.assertEqual(ctx.exception.code, "native_title_unavailable")
+            self.assertIn("title", ctx.exception.message.lower())
+
+    def test_codex_title_column_missing_raises_unavailable(self):
+        """Thread exists but title column missing → native_title_unavailable."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp) / "sessions"
+            pd.mkdir(parents=True)
+            sqlite_path = Path(tmp) / "state_5.sqlite"
+            conn = sqlite3.connect(str(sqlite_path))
+            conn.execute("CREATE TABLE threads (id TEXT PRIMARY KEY, cwd TEXT)")
+            conn.execute("INSERT INTO threads (id, cwd) VALUES (?, ?)",
+                         ("existing-thread-id-123456789012", "/tmp"))
+            conn.commit()
+            conn.close()
+            adapter = CodexAdapter(pd)
+            adapter._sqlite_path = sqlite_path
+            with self.assertRaises(SessionRenameError) as ctx:
+                adapter.rename_session("existing-thread-id-123456789012", "New Title")
+            self.assertEqual(ctx.exception.code, "native_title_unavailable")
+
+    def test_opencode_readonly_db_raises_write_failed(self):
+        """OpenCode DB is read-only → native_title_write_failed."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            db_path = pd / "opencode.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute(
+                "CREATE TABLE session (id TEXT PRIMARY KEY, title TEXT, directory TEXT, "
+                "agent TEXT, time_created REAL)"
+            )
+            conn.execute(
+                "INSERT INTO session (id, title, directory, agent, time_created) VALUES (?, ?, ?, ?, ?)",
+                ("oc-ro-sess-000000000000000000001", "Old", "/tmp", "opencode", 1700000000),
+            )
+            conn.commit()
+            conn.close()
+            db_path.chmod(0o444)
+            try:
+                adapter = OpenCodeAdapter(pd)
+                with self.assertRaises(SessionRenameError) as ctx:
+                    adapter.rename_session("oc-ro-sess-000000000000000000001", "New")
+                self.assertEqual(ctx.exception.code, "native_title_write_failed")
+            finally:
+                db_path.chmod(0o644)
+
+    def test_opencode_session_table_missing_raises_unavailable(self):
+        """DB exists but session table doesn't → native_title_unavailable."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp)
+            db_path = pd / "opencode.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("CREATE TABLE something_else (id TEXT)")
+            conn.commit()
+            conn.close()
+            adapter = OpenCodeAdapter(pd)
+            with self.assertRaises(SessionRenameError) as ctx:
+                adapter.rename_session("any-session-id-0000000000001", "Title")
+            self.assertEqual(ctx.exception.code, "native_title_unavailable")
+            self.assertIn("session", ctx.exception.message.lower())
+
+    def test_codex_threads_table_missing_raises_unavailable(self):
+        """DB exists but threads table doesn't → native_title_unavailable."""
+        with TemporaryDirectory() as tmp:
+            pd = Path(tmp) / "sessions"
+            pd.mkdir(parents=True)
+            sqlite_path = Path(tmp) / "state_5.sqlite"
+            conn = sqlite3.connect(str(sqlite_path))
+            conn.execute("CREATE TABLE something_else (id TEXT)")
+            conn.commit()
+            conn.close()
+            adapter = CodexAdapter(pd)
+            adapter._sqlite_path = sqlite_path
+            with self.assertRaises(SessionRenameError) as ctx:
+                adapter.rename_session("any-id-000000000000000000001", "Title")
+            self.assertEqual(ctx.exception.code, "native_title_unavailable")
+            self.assertIn("threads", ctx.exception.message.lower())
+
 
 # ---------------------------------------------------------------------------
 # 6.5 Frontend static / DOM smoke tests
@@ -657,6 +878,35 @@ class TestRenameFrontendElements(unittest.TestCase):
         fn_end = _HTML.index("async function saveSessionRename()", fn_start)
         snippet = _HTML[fn_start:fn_end]
         self.assertNotIn("fetch(", snippet)
+
+    def test_stale_session_guard_in_success_path(self):
+        """saveSessionRename checks current session before updating UI on success."""
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        snippet = _HTML[fn_start:fn_end]
+        # Must have stale check after fetch (currentSession !== sessionId)
+        self.assertIn("currentSession !== sessionId", snippet)
+
+    def test_stale_session_guard_in_error_path(self):
+        """saveSessionRename checks current session before updating UI on error."""
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        snippet = _HTML[fn_start:fn_end]
+        # Must appear multiple times: success path, error resp path, catch path
+        first = snippet.index("currentSession !== sessionId")
+        second = snippet.index("currentSession !== sessionId", first + 1)
+        third = snippet.index("currentSession !== sessionId", second + 1)
+        self.assertIsNotNone(third)
+
+    def test_stale_guard_still_updates_allprojects_cache(self):
+        """Even on stale session, allProjects cache is updated before guard check."""
+        fn_start = _HTML.index("async function saveSessionRename()")
+        fn_end = _HTML.index("}", _HTML.index("} finally {", fn_start)) + 2
+        snippet = _HTML[fn_start:fn_end]
+        # allProjects update must come before the stale guard
+        cache_pos = snippet.index("sess.title = result.title")
+        stale_pos = snippet.index("currentSession !== sessionId", snippet.index("sess.title"))
+        self.assertLess(cache_pos, stale_pos)
 
 
 # ---------------------------------------------------------------------------
