@@ -2,15 +2,30 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v1.1.0` · [更新日志](CHANGELOG.md)
+当前版本：`v2.0.0 preview` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-### v1.1.0 — 新增手动任务切分 + 自动任务切分，支持人为微调
+### v2.0.0 preview — Task Dataset Builder：数据标准化
 
-在 v1.0.0 的自动切分基础上新增：
-- **手动任务切分**：Tasks 页面提供「手动切分」入口，在 Session 会话树上框选连续会话范围创建 Task，支持连续创建、撤销上一次、确认后自动切换 Task-first Trace 树。
-- **Task Trace 编辑校正**：对自动切分结果可人为微调——调整起止边界、拆分、合并、删除 Task、修改标题和类型。编辑后可保存、撤销或导出 Overlay JSON。
+从 Agent Session 中切分出的 Task 被清洗为标准 Dataset 格式，核心是四层结构：
+
+```text
+ccwhat-dataset/
+├── manifest.json        # 数据集元信息
+├── dataset.jsonl        # 任务定义索引，每行一个 task
+├── traces/              # task 执行过程详情
+│   ├── trace-task-001.json
+│   └── trace-task-002.json
+└── scores.jsonl         # 评分占位，第一版为空
+```
+
+- **`dataset.jsonl`**：只存任务定义，`id`、`input.instruction`、`input.repo`、`expected.success_criteria`、`metadata.agent/session_id/task_source/trace_path` 等。
+- **`traces/*.json`**：存完整执行过程，events、commands、files.read/changed、changes、patches、errors、final_claim、repo_state。
+- **`scores.jsonl`**：第一版为空，留给后续 evaluator 追加。
+- **`manifest.json`**：schema_version、tool、session、counts 等。
+
+Dataset 可保存到 `~/.ccwhat/datasets/` 本地 Registry，也可导出为 `dataset-*.tar.gz` 压缩包。格式由 Dataset validator 自动校验。
 
 ### v1.0.0 — Session Trace 双视图 + 自动任务切分闭环
 
