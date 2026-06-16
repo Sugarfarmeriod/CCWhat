@@ -2,7 +2,32 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
-## v2.0.0 preview - 2026-06-16
+## v2.1.0 - 2026-06-16
+
+### Turn-Level Diff Viewer
+
+V2.1.0 将 Diff 页面从 task evidence 文件汇总升级为 Turn 级结构化对比能力，新增 `Diff with Prev` modal 弹层。
+
+### 新增
+
+- **Turn Diff 数据模型**：前端基于 session Turn projection 构建 diff model，归一化 9 个稳定观测字段（文本、Thinking、工具调用、工具结果、命令、文件、错误、元数据），不依赖 task segmentation 或 Dataset。
+- **`Diff with Prev` Modal**：在 Turn/Step 详情操作区新增按钮，打开弹层进行 Turn 间对比。Modal 支持：
+  - 统一 LEFT (baseline) / RIGHT (current) 字段网格布局，全部 9 个字段逐行展示
+  - 当前有/baseline 无 → 右侧绿色背景；baseline 有/当前无 → 左侧红色背景；变更 → 两侧橙色背景
+  - 上一组/下一组 diff pair 导航
+  - 手动 baseline selector，可从候选 Turn 列表中切换比较对象
+  - Escape 键和背景点击关闭
+- **Diff 页面升级**：左侧 `Diff` 页面从 task 文件汇总改为 Turn diff 总览，列出所有 primary Turn 的 diff 摘要，点击条目直接打开同一 diff modal。
+- **前端测试**：新增 13 个测试函数覆盖数据模型、modal 渲染、字段网格、baseline 选择、无 task 依赖等场景。
+
+### 改进
+
+- Turn 详情区恢复为 `Agent 响应` + `原始 JSON` 两项，`Diff with Prev` 作为独立操作入口，不常驻详情区。
+- Diff 展示不再引用 `taskSegmentReports`、task evidence `filesChanged`/`filesRead` 或 Dataset `changes`/`patches`。
+
+---
+
+## v2.0.0 preview - 2026-06-15
 
 ### Preview：Task Dataset Builder — 数据标准化
 

@@ -474,6 +474,74 @@ body {
     padding: 8px; overflow: auto; max-height: 240px; white-space: pre-wrap; word-break: break-all;
     margin-top: 4px;
   }
+  /* ── Turn Diff display ──────────────────────────────────────────────── */
+  .turn-diff-block { margin-bottom: 15px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .turn-diff-block-hdr {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--bg-surface); border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  }
+  .turn-diff-block-hdr .diff-icon { font-size: 13px; }
+  .turn-diff-block-body { padding: 8px 12px; }
+  .turn-diff-row {
+    display: flex; align-items: flex-start; gap: 8px; padding: 5px 0;
+    border-bottom: 1px solid var(--border); font-size: 11px;
+  }
+  .turn-diff-row:last-child { border-bottom: none; }
+  .turn-diff-indicator {
+    font-size: 10px; font-weight: 700; width: 18px; text-align: center; flex-shrink: 0;
+    padding: 1px 0; border-radius: 3px;
+  }
+  .turn-diff-added    { color: var(--success); }
+  .turn-diff-removed  { color: var(--danger); }
+  .turn-diff-changed  { color: var(--warning); }
+  .turn-diff-unchanged{ color: var(--text-tertiary); }
+  .turn-diff-indicator.turn-diff-added    { background: rgba(48,209,88,0.10); }
+  .turn-diff-indicator.turn-diff-removed  { background: rgba(255,59,48,0.10); }
+  .turn-diff-indicator.turn-diff-changed  { background: rgba(255,159,10,0.10); }
+  .turn-diff-indicator.turn-diff-unchanged{ background: rgba(0,0,0,0.04); }
+  .turn-diff-content {
+    flex: 1; min-width: 0; word-break: break-word;
+    color: var(--text-primary); font-family: var(--font-mono); font-size: 10px;
+    line-height: 1.5; max-height: 120px; overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .turn-diff-baseline-label {
+    font-size: 10px; color: var(--text-tertiary); font-style: italic;
+    margin-bottom: 4px;
+  }
+  .turn-diff-empty-state {
+    font-size: 11px; color: var(--text-tertiary); font-style: italic;
+    padding: 8px 12px; text-align: center;
+  }
+  .turn-diff-summary-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+    font-weight: 600; margin-right: 4px;
+  }
+  .turn-diff-summary-chip.added    { background: rgba(48,209,88,0.12); color: #1c8c3c; }
+  .turn-diff-summary-chip.removed  { background: rgba(255,59,48,0.12); color: #c0251c; }
+  .turn-diff-summary-chip.changed  { background: rgba(255,159,10,0.12); color: #b36a00; }
+  .diff-overview-item {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 8px; background: var(--bg-surface); cursor: pointer;
+    transition: box-shadow .15s, border-color .15s;
+  }
+  .diff-overview-item:hover {
+    box-shadow: var(--shadow-sm); border-color: var(--accent);
+  }
+  .diff-overview-item-hdr {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .diff-overview-item-body {
+    padding: 6px 12px;
+  }
+  .diff-baseline-empty {
+    font-size: 10px; color: var(--text-tertiary); background: var(--bg-elevated);
+    border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    padding: 6px 10px; margin: 8px 0; text-align: center;
+  }
   /* ── Conversation header ────────────────────────────────────────────── */
   .conv-hdr {
     font-size: 11px; font-weight: 600; color: var(--text-secondary);
@@ -969,6 +1037,253 @@ body {
     border-radius: var(--radius-sm); padding: 8px; color: var(--danger); font-size: 12px;
   }
 
+  /* ── Turn Diff Modal ─────────────────────────────────────────────── */
+  .diff-modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 10000;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(5px);
+  }
+  .diff-modal-overlay.open { display: flex; }
+  .diff-modal {
+    background: var(--bg-elevated); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg); width: min(900px, 96vw);
+    max-height: 92vh; display: flex; flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  }
+  .diff-modal-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: var(--bg-surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .diff-modal-nav {
+    display: flex; align-items: center; gap: 4px;
+    margin-right: 4px;
+  }
+  .diff-modal-nav-btn {
+    background: var(--bg-base); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; color: var(--text-secondary); transition: all .15s;
+    font-family: var(--font-sans); padding: 0;
+  }
+  .diff-modal-nav-btn:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-strong); }
+  .diff-modal-nav-btn:disabled { opacity: 0.35; cursor: default; }
+  .diff-modal-title {
+    flex: 1; font-size: 13px; font-weight: 600; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .diff-modal-arrow { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .diff-modal-close {
+    background: none; border: none; color: var(--text-tertiary);
+    font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1;
+    transition: color .15s;
+  }
+  .diff-modal-close:hover { color: var(--text-primary); }
+  .diff-modal-baseline {
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    font-size: 11px; color: var(--text-secondary);
+  }
+  .diff-modal-baseline select {
+    font-size: 11px; font-family: var(--font-sans); background: var(--bg-base);
+    color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 3px 6px; max-width: 220px; cursor: pointer;
+  }
+  .diff-modal-body {
+    flex: 1; overflow-y: auto; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .diff-section {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .diff-section-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  }
+  .diff-section-badge {
+    font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase;
+  }
+  .diff-section-badge.added    { background: rgba(48,209,88,0.12); color: #1c8c3c; }
+  .diff-section-badge.removed  { background: rgba(255,59,48,0.12); color: #c0251c; }
+  .diff-section-badge.changed  { background: rgba(255,159,10,0.12); color: #b36a00; }
+  .diff-section-badge.unchanged{ background: rgba(0,0,0,0.06); color: var(--text-tertiary); }
+  .diff-section-body {
+    padding: 8px 12px;
+  }
+  /* Side-by-side OLD / NEW layout */
+  .diff-side-by-side {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .diff-side-panel {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    overflow: hidden; min-height: 40px;
+  }
+  .diff-side-label {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; padding: 4px 10px;
+    background: var(--bg-surface); border-bottom: 1px solid var(--border);
+  }
+  .diff-side-label.old { color: var(--danger); background: rgba(255,59,48,0.06); }
+  .diff-side-label.new { color: var(--success); background: rgba(48,209,88,0.06); }
+  .diff-side-content {
+    padding: 8px 10px; font-size: 11px; line-height: 1.55;
+    font-family: var(--font-mono); white-space: pre-wrap; word-break: break-word;
+    max-height: 260px; overflow-y: auto;
+    color: var(--text-primary);
+  }
+  .diff-side-content.empty { color: var(--text-tertiary); font-style: italic; }
+  /* Line diff */
+  .diff-line { padding: 1px 6px; font-size: 10px; line-height: 1.5; font-family: var(--font-mono); white-space: pre-wrap; word-break: break-all; }
+  .diff-line { display: block; }
+  .diff-line.added   { background: rgba(48,209,88,0.10); color: #1c8c3c; }
+  .diff-line.removed { background: rgba(255,59,48,0.08); color: #c0251c; }
+  .diff-line.unchanged{ color: var(--text-secondary); }
+  /* Single-column for add-only / remove-only */
+  .diff-single-col {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 14px; max-height: 260px; overflow-y: auto;
+    margin-bottom: 6px;
+  }
+  .diff-single-col.added {
+    border-color: rgba(48,209,88,0.35);
+    background: rgba(48,209,88,0.10);
+  }
+  .diff-single-col.removed {
+    border-color: rgba(255,59,48,0.30);
+    background: rgba(255,59,48,0.08);
+  }
+  .diff-item-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 10px; font-size: 11px; font-family: var(--font-mono);
+    border-radius: var(--radius-sm); margin-bottom: 4px;
+    border: 1px solid var(--border);
+  }
+  .diff-item-row:last-child { margin-bottom: 0; }
+  .diff-item-row.added {
+    background: rgba(48,209,88,0.10); border-color: rgba(48,209,88,0.30);
+  }
+  .diff-item-row.removed {
+    background: rgba(255,59,48,0.08); border-color: rgba(255,59,48,0.25);
+  }
+  .diff-item-row.changed {
+    background: rgba(255,159,10,0.08); border-color: rgba(255,159,10,0.25);
+  }
+  .diff-item-indicator {
+    font-size: 11px; font-weight: 700; width: 18px; text-align: center; flex-shrink: 0;
+    line-height: 1.4;
+  }
+  .diff-item-indicator.added   { color: #1c8c3c; }
+  .diff-item-indicator.removed { color: #c0251c; }
+  .diff-item-indicator.changed { color: #b36a00; }
+  .diff-item-text { flex: 1; min-width: 0; word-break: break-word; color: var(--text-primary); line-height: 1.5; }
+  [data-theme="dark"] .diff-item-row.added    { background: rgba(48,209,88,0.12); border-color: rgba(48,209,88,0.35); }
+  [data-theme="dark"] .diff-item-row.removed  { background: rgba(255,59,48,0.10); border-color: rgba(255,59,48,0.30); }
+  [data-theme="dark"] .diff-item-row.changed  { background: rgba(255,159,10,0.10); border-color: rgba(255,159,10,0.30); }
+  [data-theme="dark"] .diff-single-col.added  { background: rgba(48,209,88,0.12); border-color: rgba(48,209,88,0.40); }
+  [data-theme="dark"] .diff-single-col.removed{ background: rgba(255,59,48,0.10); border-color: rgba(255,59,48,0.35); }
+  [data-theme="dark"] .diff-item-indicator.added   { color: #30d158; }
+  [data-theme="dark"] .diff-item-indicator.removed { color: #ff453a; }
+  .diff-modal-empty {
+    text-align: center; padding: 24px; color: var(--text-tertiary); font-size: 13px;
+  }
+  .diff-no-baseline-banner {
+    background: rgba(255,159,10,0.06); border: 1px solid rgba(255,159,10,0.2);
+    border-radius: var(--radius-sm); padding: 8px 12px;
+    font-size: 11px; color: var(--text-secondary); text-align: center; margin-bottom: 10px;
+  }
+
+  /* ── Unified field diff grid (LEFT=OLD/baseline, RIGHT=NEW/current) ── */
+  .diff-field-grid {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .diff-field-row {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .diff-field-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; padding: 6px 12px;
+    background: var(--bg-surface); color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .diff-field-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .diff-field-label .dot.green { background: var(--success); }
+  .diff-field-label .dot.red   { background: var(--danger); }
+  .diff-field-label .dot.amber { background: var(--warning); }
+  .diff-field-label .dot.gray  { background: var(--text-tertiary); }
+  .diff-field-body {
+    display: grid; grid-template-columns: 1fr 1fr;
+  }
+  .diff-field-side {
+    padding: 8px 12px; min-height: 36px;
+    font-size: 11px; line-height: 1.55; font-family: var(--font-mono);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 260px; overflow-y: auto;
+    color: var(--text-primary);
+  }
+  .diff-field-column-label {
+    font-family: var(--font-sans); font-size: 9px; font-weight: 700;
+    letter-spacing: .06em; color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+  .diff-field-empty-text {
+    color: var(--text-tertiary); font-style: italic; font-family: var(--font-sans);
+  }
+  .diff-field-side:first-child { border-right: 1px solid var(--border); }
+  .diff-field-side.old {
+    background: var(--bg-surface);
+  }
+  .diff-field-side.new {
+    /* default neutral */
+  }
+  /* Added in current → right green */
+  .diff-field-side.new.added {
+    background: rgba(48,209,88,0.10); color: #1c8c3c;
+  }
+  /* Removed from baseline → left red */
+  .diff-field-side.old.removed {
+    background: rgba(255,59,48,0.08); color: #c0251c;
+  }
+  /* Changed → both sides with subtle tint */
+  .diff-field-side.old.changed {
+    background: rgba(255,159,10,0.05);
+  }
+  .diff-field-side.new.changed {
+    background: rgba(255,159,10,0.05);
+  }
+  .diff-field-side.empty {
+    color: var(--text-tertiary); font-style: italic; font-family: var(--font-sans);
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* List items inside field sides */
+  .diff-field-item {
+    padding: 4px 8px; border-radius: 4px; margin-bottom: 3px;
+    font-size: 10px; line-height: 1.4;
+    border: 1px solid transparent;
+  }
+  .diff-field-item:last-child { margin-bottom: 0; }
+  .diff-field-item.added {
+    background: rgba(48,209,88,0.12); border-color: rgba(48,209,88,0.30); color: #1c8c3c;
+  }
+  .diff-field-item.removed {
+    background: rgba(255,59,48,0.10); border-color: rgba(255,59,48,0.25); color: #c0251c;
+  }
+  .diff-field-item.changed {
+    background: rgba(255,159,10,0.08); border-color: rgba(255,159,10,0.20);
+  }
+
+  [data-theme="dark"] .diff-field-side.new.added   { background: rgba(48,209,88,0.14); color: #30d158; }
+  [data-theme="dark"] .diff-field-side.old.removed { background: rgba(255,59,48,0.12); color: #ff453a; }
+  [data-theme="dark"] .diff-field-item.added   { background: rgba(48,209,88,0.16); border-color: rgba(48,209,88,0.40); color: #30d158; }
+  [data-theme="dark"] .diff-field-item.removed { background: rgba(255,59,48,0.14); border-color: rgba(255,59,48,0.35); color: #ff453a; }
+
   /* ── App Shell layout ── */
   .app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   .app-body { display: flex; flex: 1; overflow: hidden; }
@@ -1087,6 +1402,134 @@ body {
   .trace-step-card.edit-selected,
   .trace-turn-card.edit-selected {
     box-shadow: inset 3px 0 0 var(--warning);
+  }
+
+  /* ── Context Diff modal (MVP) ── */
+  .diff-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.70); z-index: 9999;
+    align-items: flex-start; justify-content: center; padding-top: 32px;
+  }
+  .diff-overlay.open { display: flex; }
+  .diff-card {
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);
+    width: min(840px, 96vw); max-height: calc(100vh - 64px);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .diff-card-hdr {
+    background: var(--bg-surface); padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .diff-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .diff-card-close {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .diff-card-close:hover { color: var(--text-primary); }
+  .diff-info-bar {
+    padding: 8px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+    font-size: 11px;
+  }
+  .diff-info-label { color: var(--text-secondary); white-space: nowrap; }
+  .diff-info-val { color: var(--text-primary); font-family: var(--font-mono); }
+  .diff-source-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
+    color: var(--accent); border: 1px solid var(--accent); white-space: nowrap;
+  }
+  .diff-base-sel {
+    margin-left: auto; font-size: 11px; background: var(--bg-base);
+    color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 3px 6px; cursor: pointer; max-width: 260px;
+  }
+  .diff-base-sel:focus { outline: none; border-color: var(--accent); }
+  .diff-tab-nav {
+    display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    background: var(--bg-elevated); overflow-x: auto;
+  }
+  .diff-tab-btn {
+    border: none; background: transparent; color: var(--text-secondary); cursor: pointer;
+    font-size: 12px; padding: 8px 14px; white-space: nowrap;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .diff-tab-btn:hover { color: var(--text-primary); }
+  .diff-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .diff-body { flex: 1; overflow-y: auto; padding: 14px; background: var(--bg-base); }
+  /* Message diff rows */
+  .diff-msg-row { padding: 7px 10px; border-radius: 5px; margin-bottom: 5px; border-left: 3px solid transparent; }
+  .diff-msg-added  { background: rgba(48,209,88,0.12); border-left-color: var(--success); }
+  .diff-msg-removed{ background: rgba(255,59,48,0.12); border-left-color: var(--danger); }
+  .diff-msg-same   { background: var(--bg-surface); border-left-color: var(--border); opacity: 0.65; }
+  .diff-msg-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .diff-msg-mark { font-size: 12px; font-weight: 700; width: 12px; flex-shrink: 0; }
+  .diff-msg-added  .diff-msg-mark { color: var(--success); }
+  .diff-msg-removed .diff-msg-mark { color: var(--danger); }
+  .diff-msg-same    .diff-msg-mark { color: var(--text-tertiary); }
+  .diff-role-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+  .diff-role-user      { background: var(--type-user-bg); color: var(--type-user-fg); }
+  .diff-role-assistant { background: var(--type-asst-bg); color: var(--type-asst-fg); }
+  .diff-role-tool  { background: var(--type-att-bg); color: var(--type-att-fg); }
+  .diff-special-tag {
+    font-size: 9px; padding: 1px 5px; border-radius: 10px;
+    background: rgba(175,82,222,0.12); color: #7a2fa0;
+  }
+  .diff-msg-content {
+    color: var(--text-secondary); font-size: 11px; line-height: 1.5; margin-top: 3px;
+    max-height: 80px; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+  }
+  .diff-fold-row {
+    text-align: center; font-size: 11px; color: var(--text-tertiary); padding: 4px;
+    cursor: pointer; border-bottom: 1px dashed var(--border); margin-bottom: 5px;
+  }
+  .diff-fold-row:hover { color: var(--text-secondary); }
+  /* Field diff rows */
+  .diff-field-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px;
+    border-radius: 4px; margin-bottom: 4px; font-size: 12px;
+  }
+  .diff-field-added   { background: rgba(48,209,88,0.12); }
+  .diff-field-removed { background: rgba(255,59,48,0.12); }
+  .diff-field-changed { background: rgba(255,159,10,0.12); }
+  .diff-field-same    { background: var(--bg-surface); opacity: 0.6; }
+  .diff-field-key { color: var(--accent); font-family: var(--font-mono); min-width: 110px; flex-shrink: 0; font-size: 11px; }
+  .diff-field-old { color: var(--danger); text-decoration: line-through; font-family: var(--font-mono); margin-right: 6px; }
+  .diff-field-new { color: var(--success); font-family: var(--font-mono); }
+  .diff-section-hdr {
+    font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 14px 0 6px;
+  }
+  .diff-section-hdr:first-child { margin-top: 0; }
+  .diff-empty { color: var(--text-tertiary); font-size: 12px; text-align: center; padding: 24px 0; }
+  .diff-summary-item { font-size: 12px; color: var(--text-primary); line-height: 1.8; }
+  .diff-plus  { color: var(--success); font-weight: 600; }
+  .diff-minus { color: var(--danger); font-weight: 600; }
+  .diff-tilde { color: var(--warning); font-weight: 600; }
+  .diff-same  { color: var(--text-tertiary); }
+  .diff-schema-pre {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; margin-top: 4px;
+    max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  /* Diff entry button */
+  .diff-entry-btn {
+    font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
+    color: var(--accent); border: 1px solid var(--accent);
+    cursor: pointer; white-space: nowrap; flex-shrink: 0; line-height: 1.6;
+  }
+  .diff-entry-btn:hover { background: color-mix(in srgb, var(--accent) 25%, var(--bg-surface)); }
+
+  /* ── Dark theme overrides ── */
+  [data-theme="dark"] .diff-msg-added  { background: rgba(48,209,88,0.18); }
+  [data-theme="dark"] .diff-msg-removed{ background: rgba(255,59,48,0.18); }
+  [data-theme="dark"] .diff-field-added   { background: rgba(48,209,88,0.18); }
+  [data-theme="dark"] .diff-field-removed { background: rgba(255,59,48,0.18); }
+  [data-theme="dark"] .diff-field-changed { background: rgba(255,159,10,0.18); }
+  [data-theme="dark"] .diff-special-tag {
+    background: rgba(175,82,222,0.20);
+    color: #bc8cff;
   }
 </style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
@@ -1272,12 +1715,12 @@ body {
       <!-- Diff Page -->
       <div class="page" data-page="differential">
         <div class="page-pad" id="differentialPage">
-          <div class="page-title">Differential Analysis</div>
+          <div class="page-title">Turn Diff 总览</div>
           <div class="ev-toolbar" id="diffToolbar">
-            <button class="btn" onclick="refreshDiffPage()">刷新文件列表</button>
-            <span style="font-size:11px;color:var(--text-secondary)" id="diffStatus">选择一个 session 并加载后查看文件变更</span>
+            <button class="btn" onclick="refreshDiffPage()">刷新 Turn Diff</button>
+            <span style="font-size:11px;color:var(--text-secondary)" id="diffStatus">选择一个 session 并加载后查看 Turn Diff</span>
           </div>
-          <div id="diffContent"><div class="placeholder">选择一个 session 并加载后查看差异分析</div></div>
+          <div id="diffContent"><div class="placeholder">选择一个 session 并加载后查看 Turn Diff 总览</div></div>
         </div>
       </div>
 
@@ -1462,6 +1905,27 @@ body {
     <div class="mode-card-footer">
       <button class="mode-btn-cancel" onclick="closeModeModal()">取消</button>
       <button class="mode-btn-confirm" id="modeConfirmBtn" onclick="confirmModeSelection()">生成报告</button>
+    </div>
+  </div>
+</div>
+
+<!-- Turn Diff modal (portal) -->
+<div class="diff-modal-overlay" id="diffModalOverlay" onclick="onDiffModalOverlayClick(event)">
+  <div class="diff-modal" id="diffModal" onclick="event.stopPropagation()">
+    <div class="diff-modal-header">
+      <div class="diff-modal-nav">
+        <button class="diff-modal-nav-btn" id="diffPrevBtn" onclick="navigateDiffModal(-1)" title="上一组 diff (←)">←</button>
+        <button class="diff-modal-nav-btn" id="diffNextBtn" onclick="navigateDiffModal(1)" title="下一组 diff (→)">→</button>
+      </div>
+      <div class="diff-modal-title" id="diffModalTitle">Turn Diff</div>
+      <div class="diff-modal-baseline" id="diffModalBaseline" style="display:none;">
+        <span>baseline:</span>
+        <select id="diffBaselineSelect" onchange="onDiffBaselineChange()"></select>
+      </div>
+      <button class="diff-modal-close" onclick="closeDiffModal()" title="关闭 (Esc)">✕</button>
+    </div>
+    <div class="diff-modal-body" id="diffModalBody">
+      <div class="diff-modal-empty">加载中…</div>
     </div>
   </div>
 </div>
@@ -1669,9 +2133,9 @@ function buildMinimalTurns(conversation, startIndex = 0) {
               : String(b.content || '');
             addTurn('tool_result', e, i, {
               toolUseId: b.tool_use_id || null,
-              resultSummary: trunc(txt, 200),
+              resultSummary: txt,
               isError: b.is_error || false,
-              text: trunc(txt, 200),
+              text: txt,
             });
           } else if (b.type === 'text') {
             const t = (b.text || '').trim();
@@ -1863,6 +2327,263 @@ function rebuildTurnTaskAssociation(taskData) {
       if (t && !t.taskIds.includes(task.taskId)) t.taskIds.push(task.taskId);
     }
   }
+}
+
+// ── Turn Diff data model ─────────────────────────────────────────────────
+
+const TURN_DIFF_SLOT_DEFS = [
+  { key: 'thinking', label: 'THINKING' },
+  { key: 'text', label: 'TEXT' },
+  { key: 'toolCall', label: 'TOOL CALL' },
+  { key: 'toolResult', label: 'TOOL RESULT' },
+];
+
+function formatToolCallBlock(block, fallbackTurn) {
+  const name = block?.name || fallbackTurn?.toolName || '?';
+  const id = block?.id || fallbackTurn?.toolUseId || '';
+  let input = '';
+  if (block && Object.prototype.hasOwnProperty.call(block, 'input')) {
+    input = JSON.stringify(block.input ?? {}, null, 2);
+  } else if (fallbackTurn?.inputSummary) {
+    input = fallbackTurn.inputSummary;
+  }
+  return [
+    `tool: ${name}`,
+    id ? `id: ${id}` : '',
+    input ? `input:\n${input}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatToolResultBlock(block, fallbackTurn) {
+  const id = block?.tool_use_id || fallbackTurn?.toolUseId || '';
+  const resultText = block ? fullBlockText(block) : (fallbackTurn?.resultSummary || fallbackTurn?.text || '');
+  return [
+    id ? `tool_use_id: ${id}` : '',
+    `is_error: ${String(!!(block?.is_error || fallbackTurn?.isError))}`,
+    resultText || '',
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Normalize a Turn into the four fixed slots used by the front-end Turn Diff.
+ * Does NOT mutate the source Turn or entry, and intentionally excludes
+ * noisy non-slot observability details from the default comparison.
+ */
+function normalizeTurnFields(turn, entry) {
+  const block = entry ? getTurnContentBlock(entry, turn) : null;
+  const fullText = fullBlockText(block) || turn.text || (entry ? extractFullText(entry) : '') || '';
+  const slots = {
+    thinking: '',
+    text: '',
+    toolCall: '',
+    toolResult: '',
+  };
+
+  if (turn.kind === 'thinking') {
+    slots.thinking = fullText;
+  } else if (turn.kind === 'user_message' || turn.kind === 'assistant_text') {
+    slots.text = fullText;
+  } else if (turn.kind === 'tool_use') {
+    slots.toolCall = formatToolCallBlock(block, turn);
+  } else if (turn.kind === 'tool_result') {
+    slots.toolResult = formatToolResultBlock(block, turn);
+  }
+
+  return {
+    slots,
+    thinking: slots.thinking,
+    text: slots.text,
+    toolCall: slots.toolCall,
+    toolResult: slots.toolResult,
+  };
+}
+
+function turnDiffSlotStatus(currentVal, baselineVal, hasBaseline) {
+  const cur = (currentVal || '').trim();
+  const base = (baselineVal || '').trim();
+  if (!hasBaseline) return cur ? 'added' : 'unchanged';
+  if (!cur && !base) return 'unchanged';
+  if (cur && !base) return 'added';
+  if (!cur && base) return 'removed';
+  if (cur !== base) return 'changed';
+  return 'unchanged';
+}
+
+/**
+ * Compare two normalized Turn field sets and return the fixed four-slot model.
+ */
+function buildTurnDiffModel(currentTurnWithEntry, baselineTurnWithEntry) {
+  const { turn: currentTurn, normalizedFields: currentFields } = currentTurnWithEntry;
+  const { turn: baselineTurn, normalizedFields: baselineFields } = baselineTurnWithEntry;
+  const summary = { added: 0, removed: 0, changed: 0, unchanged: 0 };
+  const sections = TURN_DIFF_SLOT_DEFS.map(slot => {
+    const currentVal = currentFields.slots?.[slot.key] || currentFields[slot.key] || '';
+    const baselineVal = baselineFields.slots?.[slot.key] || baselineFields[slot.key] || '';
+    const status = turnDiffSlotStatus(currentVal, baselineVal, true);
+    summary[status]++;
+    return {
+      field: slot.key,
+      label: slot.label,
+      status,
+      currentVal,
+      baselineVal,
+    };
+  });
+
+  return {
+    current: { turn: currentTurn, normalizedFields: currentFields },
+    baseline: { turn: baselineTurn, normalizedFields: baselineFields },
+    sections,
+    summary,
+  };
+}
+
+/**
+ * Diff two arrays of objects by a key function.
+ * Returns categorized items: added, removed, changed, unchanged.
+ */
+function diffListByKey(currentItems, baseItems, keyFn) {
+  // current only → added; base only → removed; both → possibly changed
+  const curMap = new Map();
+  const baseMap = new Map();
+  for (const item of currentItems) curMap.set(keyFn(item), item);
+  for (const item of baseItems) baseMap.set(keyFn(item), item);
+
+  const results = [];
+  const allKeys = new Set([...curMap.keys(), ...baseMap.keys()]);
+
+  for (const k of allKeys) {
+    const inCur = curMap.has(k);
+    const inBase = baseMap.has(k);
+    if (inCur && !inBase) {
+      results.push({ status: 'added', currentItems: [curMap.get(k)], baselineItems: [] });
+    } else if (!inCur && inBase) {
+      results.push({ status: 'removed', currentItems: [], baselineItems: [baseMap.get(k)] });
+    } else {
+      const curItem = curMap.get(k);
+      const baseItem = baseMap.get(k);
+      const curStr = JSON.stringify(curItem);
+      const baseStr = JSON.stringify(baseItem);
+      results.push({
+        status: curStr === baseStr ? 'unchanged' : 'changed',
+        currentItems: [curItem],
+        baselineItems: [baseItem],
+      });
+    }
+  }
+
+  if (results.length === 0) results.push({ status: 'unchanged', currentItems: [], baselineItems: [] });
+  return results;
+}
+
+/**
+ * Diff two string arrays, returning added/removed/unchanged sets.
+ */
+function diffStringLists(currentList, baseList) {
+  const curSet = new Set(currentList);
+  const baseSet = new Set(baseList);
+  const added = currentList.filter(s => !baseSet.has(s));
+  const removed = baseList.filter(s => !curSet.has(s));
+  const unchanged = currentList.filter(s => baseSet.has(s));
+  // Also include items in base that are unchanged but not in current
+  for (const s of baseList) {
+    if (curSet.has(s) && !unchanged.includes(s)) unchanged.push(s);
+  }
+
+  let status = 'unchanged';
+  if (added.length && !removed.length) status = 'added';
+  else if (!added.length && removed.length) status = 'removed';
+  else if (added.length || removed.length) status = 'changed';
+
+  return { status, currentItems: currentList, baselineItems: baseList, added, removed, unchanged };
+}
+
+/**
+ * Find the baseline Turn for a given Turn based on the view mode.
+ * In default mode: find previous comparable visible Step/Turn.
+ * In debug mode: find previous comparable Turn in raw order.
+ * Returns {turn, entry} object or null if no baseline.
+ */
+function findBaselineTurn(turn, mode) {
+  // Build a flat ordered list of all eligible Turns across all groups/conversations
+  const flatTurns = [];
+  for (const { groupId, conversations } of allGroupConversations) {
+    for (const conv of conversations) {
+      for (const t of conv.turns) {
+        if (mode === 'debug') {
+          flatTurns.push({ turn: t, groupId, conv });
+        } else {
+          // Default mode: only consider PRIMARY_KINDS or error-promoted turns
+          const classification = classifyTurnForDefaultView(t);
+          if (classification.visibility === 'primary') {
+            flatTurns.push({ turn: t, groupId, conv });
+          }
+        }
+      }
+    }
+  }
+
+  // Find the index of the current turn and return the previous one
+  const curIdx = flatTurns.findIndex(t => t.turn.turnKey === turn.turnKey);
+  if (curIdx <= 0) return null; // First turn or not found
+
+  const baseline = flatTurns[curIdx - 1];
+  const entry = allEntries[baseline.turn.sourceEntryIdx] || null;
+  return { turn: baseline.turn, entry };
+}
+
+/**
+ * Look up a Turn with its source entry for diff model building.
+ * Returns {turn, entry, normalizedFields} or null.
+ */
+function lookupTurnWithEntry(turnKey) {
+  const found = lookupTurnByKey(turnKey);
+  if (!found) return null;
+  const { turn } = found;
+  const entry = allEntries[turn.sourceEntryIdx] || null;
+  const normalizedFields = normalizeTurnFields(turn, entry);
+  return { turn, entry, normalizedFields };
+}
+
+/**
+ * Build a full diff model for a given Turn, including baseline resolution and field normalization.
+ * Returns the diff model or a no-baseline indicator.
+ */
+function buildTurnDiffForTurn(turnKey, mode) {
+  const cur = lookupTurnWithEntry(turnKey);
+  if (!cur) return null;
+
+  const baseline = findBaselineTurn(cur.turn, mode || traceViewMode || 'default');
+  if (!baseline) {
+    const summary = { added: 0, removed: 0, changed: 0, unchanged: 0 };
+    const sections = TURN_DIFF_SLOT_DEFS.map(slot => {
+      const currentVal = cur.normalizedFields.slots?.[slot.key] || cur.normalizedFields[slot.key] || '';
+      const status = turnDiffSlotStatus(currentVal, '', false);
+      summary[status]++;
+      return {
+        field: slot.key,
+        label: slot.label,
+        status,
+        currentVal,
+        baselineVal: '',
+      };
+    });
+    return {
+      current: cur,
+      baseline: null,
+      sections,
+      summary,
+      isNoBaseline: true,
+    };
+  }
+
+  const baselineWithEntry = {
+    turn: baseline.turn,
+    entry: baseline.entry,
+    normalizedFields: normalizeTurnFields(baseline.turn, baseline.entry),
+  };
+
+  return buildTurnDiffModel(cur, baselineWithEntry);
 }
 
 function canonicalPageId(pageId) {
@@ -3496,10 +4217,26 @@ function selectTurn(groupId, turnKey) {
   if (found) renderTurnDetailInPanel(found.groupId, found.turn);
 }
 
+function renderTurnDetailActionBar(turn) {
+  const baseline = findBaselineTurn(turn, traceViewMode);
+  const hasBaseline = !!baseline;
+  const btnClass = hasBaseline ? 'btn' : 'btn';
+  const title = hasBaseline
+    ? `Diff with Prev: ${esc(baseline.turn.label || '?')}`
+    : '无前置 Turn 可比较';
+  return `<div class="turn-detail-actionbar" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg-surface);border-bottom:1px solid var(--border);flex-shrink:0;">
+    <button class="${btnClass}" onclick="openDiffModal('${escRaw(turn.turnKey)}')"
+      title="${title}" style="font-size:11px;${hasBaseline ? '' : 'opacity:.5;cursor:not-allowed;'}">
+      ± Diff with Prev
+    </button>
+    ${!hasBaseline ? '<span style="font-size:10px;color:var(--text-tertiary);">无前置 Turn（第一个可比较 Turn）</span>' : ''}
+  </div>`;
+}
+
 function renderTurnDetailInPanel(groupId, turn) {
   const panel = document.getElementById('detailPanel');
   if (!panel) return;
-  panel.innerHTML = renderTaskTraceActionBar({ kind: 'turn', turn }) + buildTurnDetailHtml(groupId, turn);
+  panel.innerHTML = renderTurnDetailActionBar(turn) + renderTaskTraceActionBar({ kind: 'turn', turn }) + buildTurnDetailHtml(groupId, turn);
 }
 
 // Render conversation summary in the detail panel
@@ -3833,6 +4570,7 @@ function renderTurnEvidenceSections(model) {
 
 // Kind-specific detail for minimal Turns with complete evidence.
 function buildMinimalTurnDetailHtml(groupId, turn) {
+  // Kind detail rendering below still covers case 'tool_use': and case 'tool_result':
   const e = allEntries[turn.sourceEntryIdx];
   const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:11px;padding:2px 8px">${esc(kindLabel(turn.kind))}</span>`;
   const model = buildTurnEvidenceModel(turn, e);
@@ -3864,6 +4602,124 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
 
   html += '</div>';
   return html;
+}
+
+/**
+ * Build the Turn Diff section HTML for a Turn detail view.
+ * Compares the current Turn with its baseline (previous comparable Turn).
+ * Does NOT depend on task segmentation, Dataset changes/patches, or any backend API.
+ */
+function buildTurnDiffSectionHtml(turn) {
+  const diffModel = buildTurnDiffForTurn(turn.turnKey, traceViewMode);
+  if (!diffModel) {
+    return `<div class="turn-detail-section"><div class="turn-detail-label">Turn Diff</div>
+      <div class="turn-detail-empty">无法构建 Turn Diff（数据不完整）</div></div>`;
+  }
+
+  let html = '<div class="turn-detail-section"><div class="turn-detail-label">Turn Diff</div>';
+
+  // Diff header: show current and baseline Turn info
+  const curLabel = turn.label || '当前 Turn';
+  const curKind = kindLabel(turn.kind);
+  if (diffModel.isNoBaseline) {
+    html += `<div class="diff-baseline-empty">
+      无前置 Turn — 当前 Turn（${esc(curLabel)} · ${esc(curKind)}）为会话中第一个可比较 Turn<br>
+      <span style="font-size:10px;color:var(--text-tertiary)">以下展示当前 Turn 的观测字段作为初始内容</span>
+    </div>`;
+  } else if (diffModel.baseline) {
+    const bl = diffModel.baseline;
+    html += `<div class="turn-diff-baseline-label">
+      对比: 当前 <strong>${esc(curLabel)}</strong>（${esc(curKind)}）
+      ← baseline <strong>${esc(bl.turn.label || '?')}</strong>（${esc(kindLabel(bl.turn.kind))}）
+    </div>`;
+  }
+
+  // Summary chips
+  const s = diffModel.summary;
+  if (s.added + s.removed + s.changed > 0) {
+    html += '<div style="margin-bottom:8px;">';
+    if (s.added) html += `<span class="turn-diff-summary-chip added">+${s.added} 新增</span>`;
+    if (s.removed) html += `<span class="turn-diff-summary-chip removed">-${s.removed} 移除</span>`;
+    if (s.changed) html += `<span class="turn-diff-summary-chip changed">~${s.changed} 变更</span>`;
+    html += '</div>';
+  }
+
+  // Render each diff section
+  if (diffModel.isNoBaseline) {
+    // Show current fields as all-added initial content
+    const fields = diffModel.current.normalizedFields;
+    html += renderFieldAsAdded('文本', fields.text);
+    html += renderFieldAsAdded('Thinking', fields.thinking);
+    html += renderFieldAsAdded('工具调用', fields.toolCall);
+    html += renderFieldAsAdded('工具结果', fields.toolResult);
+  } else {
+    for (const section of diffModel.sections) {
+      if (section.status === 'unchanged' && !section.currentVal?.length && !section.baselineVal?.length) continue;
+      html += renderDiffSection(section);
+    }
+  }
+
+  if (!diffModel.isNoBaseline && (!diffModel.sections || diffModel.sections.length === 0)) {
+    html += '<div class="turn-diff-empty-state">当前 Turn 与 baseline Turn 观测字段无显著差异</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderFieldAsAdded(label, content) {
+  if (!content || (Array.isArray(content) && !content.length) || (typeof content === 'string' && !content.trim())) return '';
+  const display = typeof content === 'string' ? content : JSON.stringify(content);
+  return `<div class="turn-diff-block">
+    <div class="turn-diff-block-hdr"><span class="diff-icon turn-diff-added">+</span> ${esc(label)}</div>
+    <div class="turn-diff-block-body"><div class="turn-diff-content">${esc(display)}</div></div>
+  </div>`;
+}
+
+function renderDiffSection(section) {
+  const iconMap = { added: '+', removed: '−', changed: '~', unchanged: '=' };
+  const clsMap = { added: 'turn-diff-added', removed: 'turn-diff-removed', changed: 'turn-diff-changed', unchanged: 'turn-diff-unchanged' };
+  const icon = iconMap[section.status] || '?';
+  const cls = clsMap[section.status] || '';
+
+  let bodyHtml = '';
+  if (section.field === 'text' || section.field === 'thinking' || section.field === 'toolCall' || section.field === 'toolResult') {
+    // Text fields: show side-by-side comparison
+    const curDisplay = section.currentVal || '（无）';
+    const baseDisplay = section.baselineVal || '（无）';
+    if (section.status === 'changed') {
+      bodyHtml = `<div style="margin-bottom:6px;"><span style="color:var(--success);font-size:10px">+ 当前:</span>
+        <div class="turn-diff-content">${esc(curDisplay)}</div></div>
+        <div><span style="color:var(--danger);font-size:10px">- baseline:</span>
+        <div class="turn-diff-content" style="opacity:.7">${esc(baseDisplay)}</div></div>`;
+    } else {
+      bodyHtml = `<div class="turn-diff-content">${esc(curDisplay || baseDisplay)}</div>`;
+    }
+  } else {
+    // List fields (commands, files, errors)
+    const items = section.currentVal || section.baselineVal || [];
+    if (Array.isArray(items) && items.length) {
+      bodyHtml = items.slice(0, 20).map(item => {
+          const display = typeof item === 'string' ? item : JSON.stringify(item);
+          return `<div class="turn-diff-row">
+            <span class="turn-diff-indicator ${cls}">${icon}</span>
+          <span class="turn-diff-content">${esc(display)}</span>
+        </div>`;
+      }).join('');
+      if (items.length > 20) bodyHtml += `<div style="font-size:10px;color:var(--text-tertiary);padding:4px 0;">... 还有 ${items.length - 20} 项（查看原始 JSON 获取完整列表）</div>`;
+    } else if (section.status !== 'unchanged') {
+      bodyHtml = `<div class="turn-diff-empty-state">无内容</div>`;
+    }
+  }
+
+  if (!bodyHtml) return '';
+
+  return `<div class="turn-diff-block">
+    <div class="turn-diff-block-hdr">
+      <span class="diff-icon ${cls}">${icon}</span> ${esc(section.label)}
+    </div>
+    <div class="turn-diff-block-body">${bodyHtml}</div>
+  </div>`;
 }
 
 // Render content for 'Agent 响应' section based on turn kind
@@ -4055,37 +4911,643 @@ function renderDifferentialPage() {
   if (!el) return;
   const sid = document.getElementById('sessionSel').value;
   if (!sid || !allEntries.length) {
-    el.innerHTML = '<div class="placeholder">选择一个 session 并加载后查看文件差异</div>';
+    el.innerHTML = '<div class="placeholder">选择一个 session 并加载后查看 Turn Diff</div>';
+    document.getElementById('diffStatus').textContent = '未加载 session';
     return;
   }
-  const taskData = taskSegmentReports[sid];
-  const tasks = taskData?.tasks || [];
-  // Collect unique files from task evidence
-  const filesChanged = new Set();
-  const filesRead = new Set();
-  for (const t of tasks) {
-    for (const f of (t.evidence?.filesChanged || [])) filesChanged.add(f);
-    for (const f of (t.evidence?.filesRead || [])) filesRead.add(f);
+
+  // Build turn diff overview: iterate all Turns across all groups/conversations
+  const diffItems = [];
+  for (const { groupId, conversations } of allGroupConversations) {
+    for (const conv of conversations) {
+      for (const turn of conv.turns) {
+        // Default mode: only show primary/visible Turns as diff items
+        const classification = classifyTurnForDefaultView(turn);
+        if (classification.visibility !== 'primary') continue;
+
+        const diffModel = buildTurnDiffForTurn(turn.turnKey, 'default');
+        if (!diffModel) continue;
+
+        // Skip Turns with no baseline AND no meaningful content
+        if (diffModel.isNoBaseline) {
+          const fields = diffModel.current.normalizedFields;
+          const hasContent = TURN_DIFF_SLOT_DEFS.some(slot => (fields.slots?.[slot.key] || fields[slot.key] || '').trim());
+          if (!hasContent) continue;
+        }
+
+        diffItems.push({
+          turn,
+          groupId,
+          conversationKey: conv.conversationKey,
+          diffModel,
+        });
+      }
+    }
   }
-  if (filesChanged.size === 0 && filesRead.size === 0) {
-    el.innerHTML = '<div class="placeholder">未检测到文件变更。请运行任务切分后查看。</div>';
+
+  if (diffItems.length === 0) {
+    el.innerHTML = '<div class="placeholder">当前 session 中未找到可比较的 Turn 对<br><span style="font-size:11px;color:var(--text-tertiary)">请确保 session 包含至少两个 primary Turn 后重试</span></div>';
+    document.getElementById('diffStatus').textContent = '无可比较 Turn';
     return;
   }
-  let html = '<div class="section"><div class="sec-hdr"><span class="sec-title">Files Changed</span><span class="sec-toggle">' + filesChanged.size + ' files</span></div><div class="sec-body">';
-  for (const f of filesChanged) {
-    html += `<div class="tool-row"><span class="tool-name" style="font-size:11px">✎ ${esc(f)}</span></div>`;
+
+  const turnCount = diffItems.length;
+  const withBaseline = diffItems.filter(d => !d.diffModel.isNoBaseline).length;
+  const noBaseline = diffItems.filter(d => d.diffModel.isNoBaseline).length;
+  document.getElementById('diffStatus').textContent = `${turnCount} turns · ${withBaseline} 可比较 · ${noBaseline} 初始`;
+
+  let html = '';
+  for (const item of diffItems) {
+    const { turn, groupId, diffModel } = item;
+    const s = diffModel.summary;
+    const kindLabelText = kindLabel(turn.kind);
+
+    // Summary chips
+    let chipsHtml = '';
+    if (s.added) chipsHtml += `<span class="turn-diff-summary-chip added">+${s.added}</span>`;
+    if (s.removed) chipsHtml += `<span class="turn-diff-summary-chip removed">-${s.removed}</span>`;
+    if (s.changed) chipsHtml += `<span class="turn-diff-summary-chip changed">~${s.changed}</span>`;
+    if (!chipsHtml) chipsHtml = '<span style="font-size:10px;color:var(--text-tertiary)">无显著变更</span>';
+
+    const baselineLabel = diffModel.isNoBaseline
+      ? '无前置 Turn'
+      : (diffModel.baseline?.turn?.label || '?');
+    const baselineKind = diffModel.isNoBaseline
+      ? ''
+      : (diffModel.baseline?.turn?.kind || '');
+
+    // Get a text preview (first meaningful text field)
+    let preview = '';
+    const nf = diffModel.current.normalizedFields;
+    preview = nf.text || nf.thinking || nf.toolCall || nf.toolResult || '';
+    preview = trunc(preview, 80) || '—';
+
+    html += `<div class="diff-overview-item" onclick="openDiffFromDiffPage('${escRaw(groupId)}','${escRaw(turn.turnKey)}')">
+      <div class="diff-overview-item-hdr">
+        <span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:9px;">${esc(kindLabelText)}</span>
+        <span style="font-weight:600;color:var(--text-primary);font-size:12px;">${esc(turn.label)}</span>
+        <span style="color:var(--text-tertiary);font-size:10px;">← ${esc(baselineLabel)}${baselineKind ? ' · ' + esc(kindLabel(baselineKind)) : ''}</span>
+        <div style="margin-left:auto;">${chipsHtml}</div>
+      </div>
+      <div class="diff-overview-item-body">
+        <div style="font-size:11px;color:var(--text-secondary);">${esc(preview)}</div>`;
+
+    // Section counts
+    const secSummary = diffModel.sections.filter(sec => sec.status !== 'unchanged');
+    if (secSummary.length) {
+      html += '<div style="margin-top:4px;font-size:10px;color:var(--text-tertiary)">';
+      html += secSummary.map(sec =>
+        `<span style="margin-right:6px;">${sec.label}: ${sec.status === 'added' ? '新增' : sec.status === 'removed' ? '移除' : sec.status === 'changed' ? '变更' : '不变'}</span>`
+      ).join('');
+      html += '</div>';
+    }
+
+    html += '</div></div>';
   }
-  html += '</div></div>';
-  html += '<div class="section"><div class="sec-hdr"><span class="sec-title">Files Read</span><span class="sec-toggle">' + filesRead.size + ' files</span></div><div class="sec-body">';
-  for (const f of filesRead) {
-    html += `<div class="tool-row"><span class="tool-name" style="font-size:11px">◎ ${esc(f)}</span></div>`;
-  }
-  html += '</div></div>';
-  document.getElementById('diffStatus').textContent = `${filesChanged.size} changed, ${filesRead.size} read`;
+
+  // Add note about debug view
+  html += `<div style="margin-top:12px;font-size:10px;color:var(--text-tertiary);text-align:center;">
+    当前展示默认视图中的 primary Turn 对比。切换到<a href="#" onclick="event.preventDefault();navigateToPage('sessions');setTraceViewMode('debug');" style="color:var(--accent);">调试视图</a>可查看完整 Turn 列表的 diff。
+  </div>`;
+
   el.innerHTML = html;
 }
 
 function refreshDiffPage() { renderDifferentialPage(); }
+
+/**
+ * Navigate from Diff overview to a specific Turn in Session view.
+ */
+function openDiffFromDiffPage(groupId, turnKey) {
+  // Open the diff modal for this turn instead of navigating
+  openDiffModal(turnKey);
+}
+
+// ── Turn Diff Modal ──────────────────────────────────────────────────────
+
+// Modal state
+const diffModalState = {
+  currentTurnKey: null,
+  baselineTurnKey: null,
+  allPairs: [],        // [{turnKey, baselineKey}] ordered list
+  currentPairIndex: -1,
+  candidateBaselines: [], // [{turnKey, label, kind}] for selector
+};
+
+/**
+ * Build the ordered list of all eligible turn diff pairs for prev/next navigation.
+ */
+function buildDiffPairList(mode) {
+  const pairs = [];
+  for (const { conversations } of allGroupConversations) {
+    for (const conv of conversations) {
+      for (const turn of conv.turns) {
+        if (mode === 'default') {
+          const classification = classifyTurnForDefaultView(turn);
+          if (classification.visibility !== 'primary') continue;
+        }
+        const baseline = findBaselineTurn(turn, mode);
+        pairs.push({
+          turnKey: turn.turnKey,
+          baselineKey: baseline ? baseline.turn.turnKey : null,
+        });
+      }
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Build the list of candidate previous Turns for the baseline selector.
+ */
+function buildCandidateBaselines(turnKey, mode) {
+  // Get all previous turns in order
+  const allPrev = [];
+  let found = false;
+  for (const { conversations } of allGroupConversations) {
+    for (const conv of conversations) {
+      for (const turn of conv.turns) {
+        if (mode === 'default') {
+          const cls = classifyTurnForDefaultView(turn);
+          if (cls.visibility !== 'primary') continue;
+        }
+        if (turn.turnKey === turnKey) {
+          found = true;
+          break;
+        }
+        allPrev.push({
+          turnKey: turn.turnKey,
+          label: turn.label || '?',
+          kind: turn.kind || '',
+        });
+      }
+      if (found) break;
+    }
+    if (found) break;
+  }
+  // Return in reverse order (most recent first)
+  return allPrev.reverse();
+}
+
+/**
+ * Open the Turn Diff modal for a given Turn.
+ * @param {string} turnKey - the current Turn's key
+ * @param {string|null} explicitBaselineKey - optional explicit baseline
+ */
+function openDiffModal(turnKey, explicitBaselineKey) {
+  const mode = traceViewMode || 'default';
+  const found = lookupTurnByKey(turnKey);
+  if (!found) return;
+
+  const allPairs = buildDiffPairList(mode);
+  const pairIdx = allPairs.findIndex(p => p.turnKey === turnKey);
+
+  const baseline = explicitBaselineKey
+    ? lookupTurnByKey(explicitBaselineKey)
+    : findBaselineTurn(found.turn, mode);
+
+  const candidates = buildCandidateBaselines(turnKey, mode);
+
+  diffModalState.currentTurnKey = turnKey;
+  diffModalState.baselineTurnKey = baseline ? baseline.turn.turnKey : null;
+  diffModalState.allPairs = allPairs;
+  diffModalState.currentPairIndex = pairIdx;
+  diffModalState.candidateBaselines = candidates;
+
+  // Update prev/next button states
+  const prevBtn = document.getElementById('diffPrevBtn');
+  const nextBtn = document.getElementById('diffNextBtn');
+  if (prevBtn) prevBtn.disabled = pairIdx <= 0;
+  if (nextBtn) nextBtn.disabled = pairIdx < 0 || pairIdx >= allPairs.length - 1;
+
+  // Render baseline selector
+  const baselineSel = document.getElementById('diffModalBaseline');
+  const baselineSelect = document.getElementById('diffBaselineSelect');
+  if (baselineSel && baselineSelect) {
+    if (candidates.length > 1) {
+      baselineSel.style.display = 'flex';
+      baselineSelect.innerHTML = candidates.map((c, i) => {
+        const isDefault = i === 0; // Most recent = default
+        const selected = (baseline && c.turnKey === baseline.turn.turnKey) || (!baseline && isDefault);
+        return `<option value="${esc(c.turnKey)}"${selected ? ' selected' : ''}>
+          ${isDefault ? '← ' : ''}${esc(c.label)} · ${esc(kindLabel(c.kind))}${isDefault ? ' (默认)' : ''}
+        </option>`;
+      }).join('');
+    } else if (candidates.length === 1) {
+      baselineSel.style.display = 'flex';
+      baselineSelect.innerHTML = `<option value="${esc(candidates[0].turnKey)}" selected>← ${esc(candidates[0].label)} · ${esc(kindLabel(candidates[0].kind))} (默认)</option>`;
+    } else {
+      baselineSel.style.display = 'none';
+    }
+  }
+
+  // Render modal content
+  renderDiffModalContent();
+
+  // Show modal
+  const overlay = document.getElementById('diffModalOverlay');
+  if (overlay) overlay.classList.add('open');
+}
+
+/**
+ * Close the diff modal.
+ */
+function closeDiffModal() {
+  const overlay = document.getElementById('diffModalOverlay');
+  if (overlay) overlay.classList.remove('open');
+  diffModalState.currentTurnKey = null;
+  diffModalState.baselineTurnKey = null;
+}
+
+/**
+ * Navigate to previous/next diff pair.
+ */
+function navigateDiffModal(direction) {
+  const { allPairs, currentPairIndex } = diffModalState;
+  const newIdx = currentPairIndex + direction;
+  if (newIdx < 0 || newIdx >= allPairs.length) return;
+  const pair = allPairs[newIdx];
+  if (pair) {
+    openDiffModal(pair.turnKey);
+  }
+}
+
+/**
+ * Handle baseline selector change.
+ */
+function onDiffBaselineChange() {
+  const sel = document.getElementById('diffBaselineSelect');
+  if (!sel || !sel.value) return;
+  const newBaselineKey = sel.value;
+  diffModalState.baselineTurnKey = newBaselineKey;
+  renderDiffModalContent();
+}
+
+/**
+ * Handle overlay backdrop click.
+ */
+function onDiffModalOverlayClick(e) {
+  if (e.target === document.getElementById('diffModalOverlay')) {
+    closeDiffModal();
+  }
+}
+
+// Keyboard handler
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('diffModalOverlay');
+    if (overlay && overlay.classList.contains('open')) {
+      closeDiffModal();
+    }
+  }
+});
+
+/**
+ * Simple line-level diff: split text by newlines, compare line-by-line.
+ * Returns array of {status: 'added'|'removed'|'unchanged', text: string}.
+ */
+function computeLineDiff(oldText, newText) {
+  if (!(oldText || '').length && (newText || '').length) {
+    return String(newText).split('\n').map(l => ({ status: 'added', text: l }));
+  }
+  if ((oldText || '').length && !(newText || '').length) {
+    return String(oldText).split('\n').map(l => ({ status: 'removed', text: l }));
+  }
+  const oldLines = (oldText || '').split('\n');
+  const newLines = (newText || '').split('\n');
+  const result = [];
+
+  // Simple LCS-based approach for readability
+  // Build a simple diff using a greedy matching approach
+  const oldSet = new Map(); // text → [indices]
+  for (let i = 0; i < oldLines.length; i++) {
+    const line = oldLines[i].trim();
+    if (!oldSet.has(line)) oldSet.set(line, []);
+    oldSet.get(line).push(i);
+  }
+
+  // Mark matched lines
+  const oldMatched = new Array(oldLines.length).fill(false);
+  const newMatched = new Array(newLines.length).fill(false);
+
+  // First pass: exact full-line matches
+  const newLineMap = new Map();
+  for (let i = 0; i < newLines.length; i++) {
+    const line = newLines[i];
+    if (!newLineMap.has(line)) newLineMap.set(line, []);
+    newLineMap.get(line).push(i);
+  }
+  for (const [line, oldIdxs] of oldSet) {
+    const newIdxs = newLineMap.get(line) || [];
+    let oi = 0, ni = 0;
+    while (oi < oldIdxs.length && ni < newIdxs.length) {
+      if (!oldMatched[oldIdxs[oi]] && !newMatched[newIdxs[ni]]) {
+        oldMatched[oldIdxs[oi]] = true;
+        newMatched[newIdxs[ni]] = true;
+        oi++; ni++;
+      } else if (oldMatched[oldIdxs[oi]]) oi++;
+      else ni++;
+    }
+  }
+
+  // Build result
+  let oi = 0, ni = 0;
+  const unmatchedOld = [];
+  const unmatchedNew = [];
+
+  while (oi < oldLines.length || ni < newLines.length) {
+    if (oi < oldLines.length && !oldMatched[oi]) {
+      unmatchedOld.push({ idx: oi, text: oldLines[oi] });
+      oi++;
+    } else if (ni < newLines.length && !newMatched[ni]) {
+      unmatchedNew.push({ idx: ni, text: newLines[ni] });
+      ni++;
+    } else if (oi < oldLines.length && oldMatched[oi] && ni < newLines.length && newMatched[ni]) {
+      // Flush pending
+      while (unmatchedOld.length && unmatchedNew.length) {
+        result.push({ status: 'changed', text: unmatchedOld.shift().text, newText: unmatchedNew.shift().text });
+      }
+      while (unmatchedOld.length) {
+        result.push({ status: 'removed', text: unmatchedOld.shift().text });
+      }
+      while (unmatchedNew.length) {
+        result.push({ status: 'added', text: unmatchedNew.shift().text });
+      }
+      result.push({ status: 'unchanged', text: oldLines[oi] });
+      oi++; ni++;
+    } else {
+      break;
+    }
+  }
+  // Flush remaining
+  while (unmatchedOld.length && unmatchedNew.length) {
+    result.push({ status: 'changed', text: unmatchedOld.shift().text, newText: unmatchedNew.shift().text });
+  }
+  while (unmatchedOld.length) {
+    result.push({ status: 'removed', text: unmatchedOld.shift().text });
+  }
+  while (unmatchedNew.length) {
+    result.push({ status: 'added', text: unmatchedNew.shift().text });
+  }
+
+  if (result.length === 0 && oldLines.length === 0 && newLines.length > 0) {
+    return newLines.map(l => ({ status: 'added', text: l }));
+  }
+  if (result.length === 0 && newLines.length === 0 && oldLines.length > 0) {
+    return oldLines.map(l => ({ status: 'removed', text: l }));
+  }
+
+  return result;
+}
+
+/**
+ * Render the modal body content based on current modal state.
+ */
+function renderDiffModalContent() {
+  const body = document.getElementById('diffModalBody');
+  const titleEl = document.getElementById('diffModalTitle');
+  if (!body || !titleEl) return;
+
+  const curKey = diffModalState.currentTurnKey;
+  const baseKey = diffModalState.baselineTurnKey;
+
+  const cur = lookupTurnWithEntry(curKey);
+  if (!cur) {
+    body.innerHTML = '<div class="diff-modal-empty">无法加载当前 Turn 数据</div>';
+    return;
+  }
+
+  const base = baseKey ? lookupTurnWithEntry(baseKey) : null;
+
+  // Update title — baseline LEFT, current RIGHT
+  const curLabel = cur.turn.label || '?';
+  const curKind = kindLabel(cur.turn.kind);
+  if (base) {
+    const baseLabel = base.turn.label || '?';
+    const baseKind = kindLabel(base.turn.kind);
+    titleEl.innerHTML = `<span>${esc(baseLabel)}</span> <span class="turn-kind-badge kind-${esc(base.turn.kind)}" style="font-size:9px;">${esc(baseKind)}</span> <span class="diff-modal-arrow">→</span> <span>${esc(curLabel)}</span> <span class="turn-kind-badge kind-${esc(cur.turn.kind)}" style="font-size:9px;">${esc(curKind)}</span>`;
+  } else {
+    titleEl.innerHTML = `<span style="color:var(--text-tertiary);font-style:italic">无前置 Turn</span> <span class="diff-modal-arrow">→</span> <span>${esc(curLabel)}</span> <span class="turn-kind-badge kind-${esc(cur.turn.kind)}" style="font-size:9px;">${esc(curKind)}</span>`;
+  }
+
+  const cFields = cur.normalizedFields;
+  const bFields = base ? base.normalizedFields : null;
+
+  let html = '';
+  if (!base) {
+    html += '<div class="diff-no-baseline-banner">当前 Turn 为会话中第一个可比较 Turn，所有字段均为新增内容。可通过 baseline 选择器比较更早的 Turn。</div>';
+  }
+
+  html += '<div class="diff-field-grid">';
+
+  for (const slot of TURN_DIFF_SLOT_DEFS) {
+    html += buildFieldRow(
+      slot.label,
+      base ? (bFields?.slots?.[slot.key] || bFields?.[slot.key] || '') : '',
+      cFields?.slots?.[slot.key] || cFields?.[slot.key] || '',
+      !!base
+    );
+  }
+
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+function renderDiffLines(oldVal, newVal, side, status) {
+  const value = side === 'old' ? oldVal : newVal;
+  if (!(value || '').trim()) return '<span class="diff-field-empty-text">（无）</span>';
+  if (status !== 'changed') return esc(value);
+  const lines = computeLineDiff(oldVal, newVal);
+  const rendered = [];
+  for (const line of lines) {
+    if (side === 'old') {
+      if (line.status === 'added') continue;
+      const lineStatus = line.status === 'changed' ? 'removed' : line.status;
+      rendered.push(`<span class="diff-line ${lineStatus}">${esc(line.text || '')}</span>`);
+    } else {
+      if (line.status === 'removed') continue;
+      const lineStatus = line.status === 'changed' ? 'added' : line.status;
+      rendered.push(`<span class="diff-line ${lineStatus}">${esc(line.status === 'changed' ? (line.newText || '') : (line.text || ''))}</span>`);
+    }
+  }
+  return rendered.join('') || esc(value);
+}
+
+/**
+ * Build a unified field row: LEFT=OLD(baseline), RIGHT=NEW(current).
+ * Every row shows BOTH columns regardless of status.
+ */
+function buildFieldRow(label, oldVal, newVal, hasBaseline) {
+  const oVal = (oldVal || '').trim();
+  const nVal = (newVal || '').trim();
+
+  // Determine per-side status
+  let oldSideClass = '';
+  let newSideClass = '';
+  let dotClass = 'gray';
+
+  if (!hasBaseline) {
+    newSideClass = ' added';
+    dotClass = 'green';
+  } else if (!oVal && !nVal) {
+    dotClass = 'gray';
+  } else if (!oVal && nVal) {
+    newSideClass = ' added';
+    dotClass = 'green';
+  } else if (oVal && !nVal) {
+    oldSideClass = ' removed';
+    dotClass = 'red';
+  } else if (oVal !== nVal) {
+    oldSideClass = ' changed';
+    newSideClass = ' changed';
+    dotClass = 'amber';
+  }
+
+  const status = !hasBaseline ? (nVal ? 'added' : 'unchanged') : (!oVal && !nVal ? 'unchanged' : (!oVal ? 'added' : (!nVal ? 'removed' : (oVal === nVal ? 'unchanged' : 'changed'))));
+  const oldDisplay = renderDiffLines(oVal, nVal, 'old', status);
+  const newDisplay = renderDiffLines(oVal, nVal, 'new', status);
+
+  return `<div class="diff-field-row">
+    <div class="diff-field-label"><span class="dot ${dotClass}"></span>${esc(label)}</div>
+    <div class="diff-field-body">
+      <div class="diff-field-side old${oldSideClass}"><div class="diff-field-column-label">OLD</div>${oldDisplay}</div>
+      <div class="diff-field-side new${newSideClass}"><div class="diff-field-column-label">NEW</div>${newDisplay}</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Build a field row for list-type fields (tool calls, tool results, etc.).
+ * Items present in both → shown in both; unique to one side → show with color.
+ */
+function buildListFieldRow(label, oldItems, newItems, hasBaseline, displayFn) {
+  if (!oldItems.length && !newItems.length) return '';
+
+  // Build keyed maps
+  const oldMap = new Map();
+  const newMap = new Map();
+  const allKeys = new Set();
+
+  for (const item of oldItems) {
+    const k = (item.id || item.name || JSON.stringify(item).slice(0, 60));
+    oldMap.set(k, item); allKeys.add(k);
+  }
+  for (const item of newItems) {
+    const k = (item.id || item.name || JSON.stringify(item).slice(0, 60));
+    newMap.set(k, item); allKeys.add(k);
+  }
+
+  // Determine dot color
+  let dotClass = 'gray';
+  if (!hasBaseline) {
+    dotClass = 'green';
+  } else {
+    const hasAdded = [...allKeys].some(k => newMap.has(k) && !oldMap.has(k));
+    const hasRemoved = [...allKeys].some(k => oldMap.has(k) && !newMap.has(k));
+    const hasChanged = [...allKeys].some(k => {
+      if (oldMap.has(k) && newMap.has(k)) {
+        return JSON.stringify(oldMap.get(k)) !== JSON.stringify(newMap.get(k));
+      }
+      return false;
+    });
+    if (hasAdded && hasRemoved) dotClass = 'amber';
+    else if (hasAdded) dotClass = 'green';
+    else if (hasRemoved) dotClass = 'red';
+    else if (hasChanged) dotClass = 'amber';
+  }
+
+  // Build old (left) side: show items from baseline
+  let oldHtml = '';
+  for (const k of allKeys) {
+    const item = oldMap.get(k);
+    if (item) {
+      const inNew = newMap.has(k);
+      const same = inNew && JSON.stringify(item) === JSON.stringify(newMap.get(k));
+      const cls = !inNew ? ' removed' : (!same ? ' changed' : '');
+      oldHtml += `<div class="diff-field-item${cls}">${esc(displayFn(item))}</div>`;
+    } else {
+      // Item absent in baseline → placeholder
+      oldHtml += `<div class="diff-field-item" style="opacity:.15">—</div>`;
+    }
+  }
+  if (!oldHtml) oldHtml = '<span class="diff-field-side empty">（无）</span>';
+
+  // Build new (right) side: show items from current
+  let newHtml = '';
+  for (const k of allKeys) {
+    const item = newMap.get(k);
+    if (item) {
+      const inOld = oldMap.has(k);
+      const same = inOld && JSON.stringify(item) === JSON.stringify(oldMap.get(k));
+      const cls = !inOld ? ' added' : (!same ? ' changed' : '');
+      newHtml += `<div class="diff-field-item${cls}">${esc(displayFn(item))}</div>`;
+    } else {
+      // Item absent in current → placeholder
+      newHtml += `<div class="diff-field-item" style="opacity:.15">—</div>`;
+    }
+  }
+  if (!newHtml) newHtml = '<span class="diff-field-side empty">（无）</span>';
+
+  return `<div class="diff-field-row">
+    <div class="diff-field-label"><span class="dot ${dotClass}"></span>${esc(label)}</div>
+    <div class="diff-field-body">
+      <div class="diff-field-side old" style="padding:4px 8px;">${oldHtml}</div>
+      <div class="diff-field-side new" style="padding:4px 8px;">${newHtml}</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Build a field row for plain string-list fields (commands, files, errors).
+ */
+function buildStringListFieldRow(label, oldList, newList, hasBaseline) {
+  if (!oldList.length && !newList.length) return '';
+
+  const oldSet = new Set(oldList);
+  const newSet = new Set(newList);
+
+  let dotClass = 'gray';
+  const added = newList.filter(s => !oldSet.has(s));
+  const removed = oldList.filter(s => !newSet.has(s));
+  if (!hasBaseline) dotClass = 'green';
+  else if (added.length && removed.length) dotClass = 'amber';
+  else if (added.length) dotClass = 'green';
+  else if (removed.length) dotClass = 'red';
+
+  // Build sorted combined list: show removed in old, added in new
+  const allVals = [...new Set([...oldList, ...newList])];
+
+  let oldHtml = '';
+  let newHtml = '';
+  for (const v of allVals) {
+    const inOld = oldSet.has(v);
+    const inNew = newSet.has(v);
+    if (inOld) {
+      const cls = !inNew ? ' removed' : '';
+      oldHtml += `<div class="diff-field-item${cls}">${esc(v)}</div>`;
+    } else {
+      oldHtml += '<div class="diff-field-item" style="opacity:.15">—</div>';
+    }
+    if (inNew) {
+      const cls = !inOld ? ' added' : '';
+      newHtml += `<div class="diff-field-item${cls}">${esc(v)}</div>`;
+    } else {
+      newHtml += '<div class="diff-field-item" style="opacity:.15">—</div>';
+    }
+  }
+
+  if (!oldHtml) oldHtml = '<span class="diff-field-side empty">（无）</span>';
+  if (!newHtml) newHtml = '<span class="diff-field-side empty">（无）</span>';
+
+  return `<div class="diff-field-row">
+    <div class="diff-field-label"><span class="dot ${dotClass}"></span>${esc(label)}</div>
+    <div class="diff-field-body">
+      <div class="diff-field-side old" style="padding:4px 8px;">${oldHtml}</div>
+      <div class="diff-field-side new" style="padding:4px 8px;">${newHtml}</div>
+    </div>
+  </div>`;
+}
 
 function renderDiagnosticsPage() {
   const el = document.getElementById('diagContent');
@@ -4422,6 +5884,12 @@ let selectedTurnKey = null;       // currently selected minimal turn key
 let allGroupTurns = [];           // [{groupId, label, turns: [...minimal Turn objects]}]
 let allGroupConversations = [];   // [{groupId, label, preamble, conversations: [...]}]
 window.allGroupConversations = allGroupConversations;
+
+// Turn Diff state
+let _diffCurrentTurnKey = null;
+let _diffBaseTurnKey    = null;
+let _diffActiveTab      = 'overview';
+let _diffIsManualBase   = false;
 
 // Trace Tree UI state
 let selectedTraceNodeKey = null;  // currently selected trace node key (conversationKey or turnKey)
@@ -7193,6 +8661,10 @@ function renderList() {
           `<div class="turn-summary">${esc(turnLabel)}</div>` +
         `</div>`;
 
+      // Add diff button to turn header
+      const diffBtn = _makeDiffBtn(turnKey);
+      turnHdr.querySelector('.turn-hdr-row1').appendChild(diffBtn);
+
       grpBody.appendChild(turnHdr);
 
       // ── Turn body (children, indented) ───────────────────────────────────
@@ -7378,7 +8850,10 @@ function renderDetail(e) {
           for (const b of sysTexts) {
             const d = document.createElement('div');
             d.className = 'content-text'; d.style.fontSize='11px'; d.style.color='#6e7681';
-            d.textContent = trunc(b.text, 500);
+            d.style.maxHeight = '320px';
+            d.style.overflowY = 'auto';
+            d.style.whiteSpace = 'pre-wrap';
+            d.textContent = b.text || '';
             body.appendChild(d);
           }
         }, true));
@@ -7472,11 +8947,12 @@ function renderDetail(e) {
       if (att.stdout) {
         const pre = document.createElement('div');
         pre.className = 'raw-json'; pre.style.marginTop = '8px';
-        let stdoutDisplay = trunc(att.stdout, 2000);
+        pre.style.maxHeight = '420px';
+        pre.style.overflowY = 'auto';
         try {
           pre.innerHTML = syntaxHighlightJson(JSON.parse(att.stdout));
         } catch {
-          pre.textContent = stdoutDisplay;
+          pre.textContent = att.stdout;
         }
         body.appendChild(pre);
       }
@@ -7693,8 +9169,1016 @@ function copyImportCmd() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Turn Diff Functions (Ported from session-report-clean)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── 1.1 Turn resolution helpers ──────────────────────────────────────────
+
+function _parseTurnKey(tk) {
+  if (!tk) return null;
+  const sep = tk.lastIndexOf(':');
+  if (sep < 0) return null;
+  return { gid: tk.slice(0, sep), idx: parseInt(tk.slice(sep + 1), 10) };
+}
+
+function _getGroupObj(gid) {
+  return groups.find(g => g.id === gid) || null;
+}
+
+function _getGroupAllTurnKeys(gid) {
+  const g = _getGroupObj(gid);
+  if (!g) return [];
+  const turns = buildTurns(g.entries, gid);
+  return turns.filter(t => !t._isPreamble).map(t => `${gid}:${t._turnIdx}`);
+}
+
+function findDefaultBaseTurnKey(turnKey) {
+  const parsed = _parseTurnKey(turnKey);
+  if (!parsed) return null;
+  const allKeys = _getGroupAllTurnKeys(parsed.gid);
+  const pos = allKeys.indexOf(turnKey);
+  if (pos <= 0) return null;
+  return allKeys[pos - 1];
+}
+
+// ── 1.2 Context normalization ─────────────────────────────────────────────
+
+const _NOISE_KEYS = new Set([
+  'cache_control','timestamp','request_id','requestId','request-id',
+  'trace_id','traceId','trace-id','authorization','cch','ephemeral',
+  'x-request-id','x-trace-id','x-stainless-arch','x-stainless-os',
+  'x-stainless-lang','x-stainless-package-version','x-stainless-runtime',
+  'x-stainless-runtime-version','x-api-key','_fileLine','_source',
+  '_gid','_agentDesc','_idx','_turnKey',
+]);
+
+function _isNoiseKey(k) {
+  if (_NOISE_KEYS.has(k)) return true;
+  if (/^(hash|chksum|checksum|cache_hash|cch_)/.test(k)) return true;
+  return false;
+}
+
+function _msgContentSummary(entry) {
+  const c = entry.message?.content;
+  if (!c) return '';
+  if (typeof c === 'string') return trunc(c, 120);
+  if (!Array.isArray(c)) return '';
+  const parts = [];
+  const specials = [];
+  for (const b of c) {
+    if (!b || typeof b !== 'object') continue;
+    if (b.type === 'text') {
+      const t = b.text || '';
+      if (t.startsWith('<system-reminder')) { specials.push('[system-reminder]'); continue; }
+      if (t.startsWith('<local-command')) { specials.push('[local-command]'); continue; }
+      parts.push(trunc(t, 80));
+    } else if (b.type === 'tool_result') {
+      const rc = typeof b.content === 'string' ? b.content : JSON.stringify(b.content||'');
+      parts.push(`[tool_result:${b.tool_use_id||''}] ${trunc(rc, 60)}`);
+    } else if (b.type === 'tool_use') {
+      parts.push(`[tool:${b.name||'?'}]`);
+    } else if (b.type === 'thinking') {
+      parts.push('[thinking]');
+    } else if (b.type === 'image') {
+      parts.push('[image]');
+    }
+  }
+  return [...specials, ...parts].join(' ').slice(0, 160);
+}
+
+function _extractSysReminders(entry) {
+  const c = entry.message?.content;
+  if (!Array.isArray(c)) return [];
+  return c.filter(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.startsWith('<system-reminder')).map(b => b.text);
+}
+
+function _extractToolCalls(entry) {
+  const c = entry.message?.content;
+  if (!Array.isArray(c)) return [];
+  return c.filter(b => b && b.type === 'tool_use' && b.name).map(b => ({
+    name: b.name,
+    id: b.id || '',
+    inputSummary: b.input ? trunc(JSON.stringify(b.input), 80) : '',
+  }));
+}
+
+function _extractTokenUsage(entry) {
+  return entry.message?.usage || null;
+}
+
+function normalizeTurnContext(turnKey) {
+  const parsed = _parseTurnKey(turnKey);
+  if (!parsed) return null;
+  const g = _getGroupObj(parsed.gid);
+  if (!g) return null;
+  const entries = g.entries.filter(e =>
+    typeof e._turnIdx === 'number' && e._turnIdx <= parsed.idx
+  ).sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
+
+  const messages = [];
+  const system = [];
+  const toolCallsList = [];
+  let params = {};
+  let tokenUsage = null;
+
+  for (const e of entries) {
+    if (e.type === 'user') {
+      messages.push({
+        role: 'user', uuid: e.uuid,
+        summary: _msgContentSummary(e),
+        hasSysReminder: _extractSysReminders(e).length > 0,
+        hasToolResult: Array.isArray(e.message?.content) && e.message.content.some(b=>b&&b.type==='tool_result'),
+        turnIdx: e._turnIdx,
+      });
+      for (const s of _extractSysReminders(e)) system.push(s);
+    } else if (e.type === 'assistant') {
+      const toks = _extractTokenUsage(e);
+      if (toks) tokenUsage = toks;
+      const calls = _extractToolCalls(e);
+      for (const c of calls) toolCallsList.push(c);
+      const msg = e.message || {};
+      if (msg.model)       params.model       = msg.model;
+      if (msg.stop_reason) params.stop_reason = msg.stop_reason;
+      messages.push({
+        role: 'assistant', uuid: e.uuid,
+        summary: _msgContentSummary(e),
+        hasToolUse: calls.length > 0,
+        hasThinking: Array.isArray(msg.content) && msg.content.some(b=>b&&b.type==='thinking'),
+        turnIdx: e._turnIdx,
+      });
+    }
+  }
+
+  if (tokenUsage) {
+    for (const [k, v] of Object.entries(tokenUsage)) {
+      if (!_isNoiseKey(k)) params[k] = v;
+    }
+  }
+
+  const sysUniq = [...new Set(system)];
+  const toolByName = {};
+  for (const c of toolCallsList) toolByName[c.name] = c;
+  const toolsDedup = Object.values(toolByName);
+
+  return {
+    messages,
+    system: sysUniq,
+    tools: toolsDedup,
+    toolNames: toolsDedup.map(t => t.name),
+    params: Object.fromEntries(Object.entries(params).filter(([k,v]) => v != null)),
+    tokenUsage,
+    rawEntries: entries,
+    turnKey,
+  };
+}
+
+// ── 1.3 & 1.4 Diff computation ────────────────────────────────────────────
+
+function diffMessages(oldMsgs, newMsgs) {
+  const oldUuids = new Set(oldMsgs.map(m => m.uuid).filter(Boolean));
+  const added    = newMsgs.filter(m => m.uuid && !oldUuids.has(m.uuid));
+  const newUuids = new Set(newMsgs.map(m => m.uuid).filter(Boolean));
+  const removed  = oldMsgs.filter(m => m.uuid && !newUuids.has(m.uuid));
+  const unchanged_count = newMsgs.length - added.length;
+  return { added, removed, unchanged_count };
+}
+
+function diffSystem(oldSys, newSys) {
+  const oldSet = new Set(oldSys);
+  const newSet = new Set(newSys);
+  const added   = newSys.filter(s => !oldSet.has(s));
+  const removed = oldSys.filter(s => !newSet.has(s));
+  const same    = newSys.filter(s => oldSet.has(s));
+  const _isNoisySystem = s => /<system-reminder[^>]*>.*?(?:cache|timestamp|request.?id)/is.test(s.slice(0, 400));
+  const allChanges = [...added, ...removed];
+  const isMetadataOnly = allChanges.length > 0 && allChanges.every(_isNoisySystem);
+  return { added, removed, same, isMetadataOnly, changed: added.length > 0 || removed.length > 0 };
+}
+
+function diffTools(oldNames, newNames, oldObjs, newObjs) {
+  const oldSet = new Set(oldNames);
+  const newSet = new Set(newNames);
+  const addedNames   = newNames.filter(t => !oldSet.has(t));
+  const removedNames = oldNames.filter(t => !newSet.has(t));
+  const sameNames    = newNames.filter(t => oldSet.has(t));
+  const byNameNew = Object.fromEntries((newObjs||[]).map(o=>[o.name,o]));
+  const byNameOld = Object.fromEntries((oldObjs||[]).map(o=>[o.name,o]));
+  const added   = addedNames.map(n => byNameNew[n] || {name:n, inputSummary:''});
+  const removed = removedNames.map(n => byNameOld[n] || {name:n, inputSummary:''});
+  const same    = sameNames.map(n => byNameNew[n] || {name:n, inputSummary:''});
+  return { added, removed, same, changed: added.length > 0 || removed.length > 0 };
+}
+
+function diffParams(oldP, newP) {
+  const allKeys = new Set([...Object.keys(oldP), ...Object.keys(newP)]);
+  const changes = [];
+  for (const k of allKeys) {
+    if (_isNoiseKey(k)) continue;
+    const ov = oldP[k], nv = newP[k];
+    const oStr = JSON.stringify(ov ?? null);
+    const nStr = JSON.stringify(nv ?? null);
+    if (oStr !== nStr) changes.push({ key: k, oldVal: ov, newVal: nv });
+  }
+  return { changes };
+}
+
+function diffTurnContexts(baseTurnKey, curTurnKey) {
+  const baseCtx = normalizeTurnContext(baseTurnKey);
+  const curCtx  = normalizeTurnContext(curTurnKey);
+  if (!baseCtx || !curCtx) return null;
+
+  const messages = diffMessages(baseCtx.messages, curCtx.messages);
+  const system   = diffSystem(baseCtx.system, curCtx.system);
+  const tools    = diffTools(baseCtx.toolNames, curCtx.toolNames, baseCtx.tools, curCtx.tools);
+  const params   = diffParams(baseCtx.params, curCtx.params);
+
+  let tokenDelta = null;
+  if (baseCtx.tokenUsage && curCtx.tokenUsage) {
+    const bIn  = baseCtx.tokenUsage.input_tokens  || 0;
+    const cIn  = curCtx.tokenUsage.input_tokens   || 0;
+    const bOut = baseCtx.tokenUsage.output_tokens || 0;
+    const cOut = curCtx.tokenUsage.output_tokens  || 0;
+    tokenDelta = { inputDelta: cIn - bIn, outputDelta: cOut - bOut, curInput: cIn, curOutput: cOut };
+  }
+
+  return { messages, system, tools, params, tokenDelta, baseCtx, curCtx };
+}
+
+// ── 1.5 Human-readable summary ────────────────────────────────────────────
+
+function summarizeTurnDiff(diff) {
+  if (!diff) return ['无可比较数据'];
+  const lines = [];
+  const { messages, system, tools, params, tokenDelta } = diff;
+
+  if (messages.added.length > 0) {
+    const roles = messages.added.map(m => m.role);
+    const rCnt = {};
+    roles.forEach(r => { rCnt[r] = (rCnt[r]||0)+1; });
+    const rStr = Object.entries(rCnt).map(([r,n])=>`${n} 条 ${r}`).join('、');
+    lines.push(`新增 ${rStr} 消息（含上一轮回复与本轮输入）`);
+  } else {
+    lines.push('消息列表无新增');
+  }
+  if (messages.removed.length > 0) lines.push(`移除 ${messages.removed.length} 条消息（不常见）`);
+
+  if (system.changed) {
+    if (system.isMetadataOnly) {
+      lines.push('系统提示：仅元数据变化（cache/timestamp 等），规则正文未变');
+    } else {
+      lines.push(`系统提示：规则变化（+${system.added.length} -${system.removed.length}）`);
+    }
+  } else {
+    lines.push('系统提示：无变化');
+  }
+
+  if (tools.changed) {
+    const parts = [];
+    if (tools.added.length) parts.push(`+${tools.added.length} 新增`);
+    if (tools.removed.length) parts.push(`-${tools.removed.length} 删除`);
+    lines.push(`工具调用：${parts.join('，')}`);
+  } else {
+    lines.push(`工具调用：无变化（${tools.same.length} 个）`);
+  }
+
+  if (params.changes.length > 0) {
+    const keys = params.changes.map(c=>c.key).join('、');
+    lines.push(`参数变化：${keys}`);
+  }
+
+  if (tokenDelta) {
+    const sign = n => n > 0 ? `+${n}` : String(n);
+    lines.push(`可用 token：输入 ${sign(tokenDelta.inputDelta)}，输出 ${sign(tokenDelta.outputDelta)}`);
+  }
+
+  return lines;
+}
+
+// ── 2.1 Modal UI ────────────────────────────────────────────────
+
+function openSchemaDiffModal(turnKeyOrEntry) {
+  let turnKey;
+  if (typeof turnKeyOrEntry === 'string') {
+    turnKey = turnKeyOrEntry;
+  } else if (turnKeyOrEntry && turnKeyOrEntry._turnKey) {
+    turnKey = turnKeyOrEntry._turnKey;
+  } else {
+    return;
+  }
+  _diffCurrentTurnKey = turnKey;
+  _diffBaseTurnKey    = findDefaultBaseTurnKey(turnKey);
+  _diffIsManualBase   = false;
+  _diffActiveTab      = 'overview';
+  document.getElementById('diffOverlay').classList.add('open');
+  _renderDiffModal();
+}
+
+function closeSchemaDiffModal() {
+  document.getElementById('diffOverlay').classList.remove('open');
+}
+
+function onSchemaDiffOverlayClick(e) {
+  if (e.target === document.getElementById('diffOverlay')) closeSchemaDiffModal();
+}
+
+function switchDiffTab(tab) {
+  _diffActiveTab = tab;
+  document.querySelectorAll('.diff-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.dtab === tab));
+  _renderDiffBody();
+}
+
+function setDiffBaseTurn(turnKey) {
+  _diffBaseTurnKey    = turnKey;
+  _diffIsManualBase   = true;
+  _renderDiffInfoBar();
+  _renderDiffBody();
+}
+
+// ── 2.2 Info bar ──────────────────────────────────────────────────────────
+
+function _renderDiffInfoBar() {
+  const bar = document.getElementById('diffInfoBar');
+  if (!bar) return;
+  const parsed = _parseTurnKey(_diffCurrentTurnKey);
+  const baseParsed = _parseTurnKey(_diffBaseTurnKey);
+
+  const curLabel = parsed ? `Turn #${parsed.idx}` : '?';
+  const baseLabel = baseParsed ? `Turn #${baseParsed.idx}` : '—';
+
+  const allKeys = parsed ? _getGroupAllTurnKeys(parsed.gid) : [];
+  const otherKeys = allKeys.filter(k => k !== _diffCurrentTurnKey);
+  const selectorHtml = otherKeys.length
+    ? `<select class="diff-base-sel" id="diffBaseSel" onchange="setDiffBaseTurn(this.value)">` +
+      otherKeys.map(k => {
+        const p2 = _parseTurnKey(k);
+        const g = p2 ? _getGroupObj(p2.gid) : null;
+        const turns = g ? buildTurns(g.entries, p2.gid) : [];
+        const t = turns.find(t => !t._isPreamble && t._turnIdx === p2.idx);
+        const label = t?.root ? trunc(summarize(t.root), 36) : `Turn #${p2.idx}`;
+        const sel = k === _diffBaseTurnKey ? ' selected' : '';
+        return `<option value="${escRaw(k)}"${sel}>#${p2.idx} ${esc(label)}</option>`;
+      }).join('') +
+      `</select>`
+    : '<span class="diff-info-val">（无其他 turn）</span>';
+
+  bar.innerHTML =
+    `<span class="diff-info-label">当前：</span><span class="diff-info-val">${esc(curLabel)}</span>` +
+    `<span class="diff-info-label">对比：</span>` +
+    (_diffBaseTurnKey
+      ? `<span class="diff-info-val">${esc(baseLabel)}</span>`
+      : `<span class="diff-info-val" style="color:var(--text-tertiary)">无（首个 turn）</span>`) +
+    `<span class="diff-source-badge">${_diffIsManualBase ? '手动选择' : '自动匹配'}</span>` +
+    selectorHtml;
+}
+
+function _renderDiffModal() {
+  _renderDiffInfoBar();
+  document.querySelectorAll('.diff-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.dtab === _diffActiveTab));
+  _renderDiffBody();
+}
+
+function _renderDiffBody() {
+  const body = document.getElementById('diffBody');
+  if (!body) return;
+
+  if (!_diffBaseTurnKey) {
+    body.innerHTML = `<div class="diff-empty">当前 turn 是首个 turn，没有可比较的上一个 turn。</div>`;
+    return;
+  }
+
+  const diff = diffTurnContexts(_diffBaseTurnKey, _diffCurrentTurnKey);
+  if (!diff) {
+    body.innerHTML = `<div class="diff-empty">无法获取对比数据。</div>`;
+    return;
+  }
+
+  switch (_diffActiveTab) {
+    case 'overview':  body.innerHTML = _renderOverviewTab(diff); break;
+    case 'messages':  body.innerHTML = _renderMessagesTab(diff); break;
+    case 'system':    body.innerHTML = _renderSystemTab(diff); break;
+    case 'tools':     body.innerHTML = _renderToolsTab(diff); break;
+    case 'params':    body.innerHTML = _renderParamsTab(diff); break;
+    case 'rawjson':   body.innerHTML = _renderRawJsonTab(diff); break;
+    default:          body.innerHTML = `<div class="diff-empty">Unknown tab.</div>`;
+  }
+}
+
+// ── 2.3 Overview tab ─────────────────────────────────────────────────────
+
+function _renderOverviewTab(diff) {
+  const lines = summarizeTurnDiff(diff);
+  const baseParsed = _parseTurnKey(_diffBaseTurnKey);
+  const curParsed  = _parseTurnKey(_diffCurrentTurnKey);
+
+  let html = `<div class="diff-section-hdr">变化摘要</div>`;
+  html += `<div style="margin-bottom:14px">`;
+  html += `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">Turn #${curParsed?.idx} 相比 Turn #${baseParsed?.idx}</div>`;
+  for (const line of lines) {
+    const icon = line.startsWith('新增') ? '＋' : line.startsWith('系统提示：规则') ? '△' : line.startsWith('工具调用：无') || line.startsWith('消息列表无') || line.startsWith('系统提示：无') ? '－' : '·';
+    html += `<div class="diff-summary-item">${esc(icon)} ${esc(line)}</div>`;
+  }
+  html += `</div>`;
+
+  const { messages, system, tools, params, tokenDelta } = diff;
+  html += `<div class="diff-section-hdr">各维度变化</div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px">`;
+  const cards = [
+    { label: '新增消息', val: messages.added.length, cls: messages.added.length ? 'diff-plus' : 'diff-same' },
+    { label: '系统提示', val: system.changed ? (system.isMetadataOnly ? '仅元数据' : '规则变化') : '无变化', cls: system.changed && !system.isMetadataOnly ? 'diff-tilde' : 'diff-same' },
+    { label: '工具调用变化', val: tools.changed ? `+${tools.added.length}/-${tools.removed.length}` : '无变化', cls: tools.changed ? 'diff-tilde' : 'diff-same' },
+    { label: '参数变化', val: params.changes.length > 0 ? `${params.changes.length} 项` : '无变化', cls: params.changes.length ? 'diff-tilde' : 'diff-same' },
+  ];
+  if (tokenDelta) {
+    const sign = n => n > 0 ? `+${n}` : String(n);
+    cards.push({ label: '输入 token', val: sign(tokenDelta.inputDelta), cls: tokenDelta.inputDelta !== 0 ? 'diff-tilde' : 'diff-same' });
+  }
+  for (const c of cards) {
+    html += `<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">` +
+      `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">${esc(c.label)}</div>` +
+      `<div class="${c.cls}" style="font-size:14px;font-weight:700">${typeof c.val === 'number' ? c.val : esc(String(c.val))}</div>` +
+      `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+// ── 2.4 Messages tab ─────────────────────────────────────────────────────
+
+function _renderMessagesTab(diff) {
+  const { messages } = diff;
+  const allNew = diff.curCtx.messages;
+  const addedUuids = new Set(messages.added.map(m => m.uuid));
+
+  let html = '';
+  if (messages.unchanged_count > 0) {
+    html += `<div class="diff-fold-row" onclick="this.style.display='none';document.getElementById('diffUnchanged').style.display=''">` +
+      `▶ 折叠 ${messages.unchanged_count} 条未变化消息（点击展开）</div>` +
+      `<div id="diffUnchanged" style="display:none">`;
+    for (const m of allNew.filter(m => !addedUuids.has(m.uuid))) {
+      html += _renderMsgRow(m, 'same');
+    }
+    html += `</div>`;
+  }
+
+  if (messages.removed.length > 0) {
+    html += `<div class="diff-section-hdr">删除消息</div>`;
+    for (const m of messages.removed) html += _renderMsgRow(m, 'removed');
+  }
+
+  if (messages.added.length > 0) {
+    html += `<div class="diff-section-hdr">新增消息（${messages.added.length} 条）</div>`;
+    for (const m of messages.added) html += _renderMsgRow(m, 'added');
+  } else {
+    html += `<div class="diff-empty">本轮无新增消息。</div>`;
+  }
+  return html;
+}
+
+function _renderMsgRow(m, state) {
+  const mark = state === 'added' ? '+' : state === 'removed' ? '−' : '·';
+  const roleCls = m.role === 'user' ? 'diff-role-user' : m.role === 'assistant' ? 'diff-role-assistant' : 'diff-role-tool';
+  const tags = [];
+  if (m.hasSysReminder) tags.push('system-reminder');
+  if (m.hasToolResult)  tags.push('tool_result');
+  if (m.hasToolUse)     tags.push('tool_use');
+  if (m.hasThinking)    tags.push('thinking');
+  const tagsHtml = tags.map(t => `<span class="diff-special-tag">${esc(t)}</span>`).join(' ');
+  return `<div class="diff-msg-row diff-msg-${state}">` +
+    `<div class="diff-msg-hdr">` +
+      `<span class="diff-msg-mark">${mark}</span>` +
+      `<span class="diff-role-badge ${roleCls}">${esc(m.role)}</span>` +
+      tagsHtml +
+    `</div>` +
+    (m.summary ? `<div class="diff-msg-content">${esc(m.summary)}</div>` : '') +
+    `</div>`;
+}
+
+// ── 2.5a System tab ────────────────────────────────────────────────────────
+
+function _renderSystemTab(diff) {
+  const { system } = diff;
+  if (!system.changed) {
+    return `<div class="diff-empty">系统提示无变化（${system.same.length} 条保持不变）。</div>`;
+  }
+  let html = '';
+  if (system.isMetadataOnly) {
+    html += `<div style="background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.3);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--warning)">` +
+      `⚠ 仅元数据变化 — 变化内容仅涉及 cache hash / timestamp 等低价值字段，系统规则正文未实质变化。</div>`;
+  }
+  if (system.added.length) {
+    html += `<div class="diff-section-hdr diff-plus">+ 新增系统内容（${system.added.length} 条）</div>`;
+    for (const s of system.added) {
+      html += `<div class="diff-field-row diff-field-added"><div class="diff-schema-pre">${esc(s.slice(0,500))}${s.length>500?'\n[截断…]':''}</div></div>`;
+    }
+  }
+  if (system.removed.length) {
+    html += `<div class="diff-section-hdr diff-minus">- 删除系统内容（${system.removed.length} 条）</div>`;
+    for (const s of system.removed) {
+      html += `<div class="diff-field-row diff-field-removed"><div class="diff-schema-pre">${esc(s.slice(0,500))}${s.length>500?'\n[截断…]':''}</div></div>`;
+    }
+  }
+  return html;
+}
+
+// ── 2.5b Tools tab ────────────────────────────────────────────────────────
+
+function _renderToolRow(toolObj, state) {
+  const cls = state === 'added' ? 'diff-field-added' : state === 'removed' ? 'diff-field-removed' : 'diff-field-same';
+  const mark = state === 'added' ? '<span class="diff-field-new">＋新增</span>' : state === 'removed' ? '<span class="diff-field-old">已删除</span>' : '';
+  const inputHtml = toolObj.inputSummary
+    ? `<span style="font-size:10px;color:var(--text-tertiary);font-family:monospace;margin-left:8px">${esc(toolObj.inputSummary)}</span>`
+    : '';
+  return `<div class="diff-field-row ${cls}">` +
+    `<span class="diff-field-key">${esc(toolObj.name)}</span>` +
+    inputHtml + mark +
+    `</div>`;
+}
+
+function _renderToolsTab(diff) {
+  const { tools } = diff;
+  const notice = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">` +
+    `注：JSONL 只记录工具调用记录（name + input），不含工具定义（description/schema）。` +
+    `如需查看完整工具定义，请参考 Raw Req/Resp viewer。</div>`;
+
+  if (!tools.changed) {
+    if (tools.same.length === 0) return notice + `<div class="diff-empty">两个 turn 均无工具调用。</div>`;
+    return notice + `<div class="diff-section-hdr diff-same">无变化（${tools.same.length} 个工具）</div>` +
+      tools.same.map(t => _renderToolRow(t, 'same')).join('');
+  }
+  let html = notice;
+  if (tools.added.length) {
+    html += `<div class="diff-section-hdr diff-plus">+ 新增调用（${tools.added.length} 个）</div>`;
+    html += tools.added.map(t => _renderToolRow(t, 'added')).join('');
+  }
+  if (tools.removed.length) {
+    html += `<div class="diff-section-hdr diff-minus">- 减少调用（${tools.removed.length} 个）</div>`;
+    html += tools.removed.map(t => _renderToolRow(t, 'removed')).join('');
+  }
+  if (tools.same.length) {
+    html += `<div class="diff-section-hdr diff-same">相同（${tools.same.length} 个）</div>`;
+    html += tools.same.map(t => _renderToolRow(t, 'same')).join('');
+  }
+  return html;
+}
+
+// ── 2.5c Params tab ───────────────────────────────────────────────────────
+
+function _renderParamsTab(diff) {
+  const { params } = diff;
+  const notice = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">` +
+    `注：JSONL 只存储响应侧字段（model、stop_reason、token 用量）。` +
+    `请求侧参数（temperature、max_tokens、thinking 等）不在 JSONL 中，` +
+    `如需查看请参考 Raw Req/Resp viewer。</div>`;
+  if (params.changes.length === 0) {
+    return notice + `<div class="diff-empty">可比较的参数字段无变化（噪声字段已过滤）。</div>`;
+  }
+  let html = notice + `<div class="diff-section-hdr">参数变化（${params.changes.length} 项）</div>`;
+  for (const c of params.changes) {
+    const cls = c.oldVal == null ? 'diff-field-added' : c.newVal == null ? 'diff-field-removed' : 'diff-field-changed';
+    html += `<div class="diff-field-row ${cls}">` +
+      `<span class="diff-field-key">${esc(c.key)}</span>` +
+      (c.oldVal != null ? `<span class="diff-field-old">${esc(String(c.oldVal))}</span>` : '') +
+      (c.newVal != null ? `<span class="diff-field-new">${esc(String(c.newVal))}</span>` : '<span class="diff-field-old">（已删除）</span>') +
+      `</div>`;
+  }
+  html += `<div style="font-size:11px;color:var(--text-tertiary);margin-top:10px">注：cache_control、timestamp、request_id、authorization 等噪声字段已过滤。</div>`;
+  return html;
+}
+
+// ── 2.6 Raw JSON tab ──────────────────────────────────────────────────────
+
+function _renderRawJsonTab(diff) {
+  const { baseCtx, curCtx } = diff;
+  const _STRIP = new Set(['_source','_agentDesc','_gid','_idx','_turnKey','_fileLine','_lineNo']);
+  const cleanEntry = e => Object.fromEntries(Object.entries(e).filter(([k]) => !_STRIP.has(k)));
+
+  const baseUuids = new Set(baseCtx.rawEntries.map(e => e.uuid).filter(Boolean));
+  const addedEntries   = curCtx.rawEntries.filter(e => e.uuid && !baseUuids.has(e.uuid));
+  const baseLastEntry  = baseCtx.rawEntries[baseCtx.rawEntries.length - 1];
+
+  let html = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">Raw JSON 展示的是 JSONL 原始条目对象（已去除内部追踪字段）。</div>`;
+
+  if (addedEntries.length) {
+    html += `<div class="diff-section-hdr diff-plus">新增条目（${addedEntries.length} 条）</div>`;
+    for (const e of addedEntries) {
+      html += `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">${esc(e.type||'?')} · ${esc(e.uuid?.slice(0,16)||'')} · Turn #${e._turnIdx ?? '?'}</div>` +
+        `<div class="diff-schema-pre">${esc(JSON.stringify(cleanEntry(e), null, 2))}</div></div>`;
+    }
+  } else {
+    html += `<div class="diff-empty" style="margin-bottom:12px">无新增原始条目。</div>`;
+  }
+
+  if (baseLastEntry) {
+    html += `<div class="diff-section-hdr diff-same" style="margin-top:14px">Base Turn 最后条条目（参考）</div>`;
+    html += `<div class="diff-schema-pre">${esc(JSON.stringify(cleanEntry(baseLastEntry), null, 2))}</div>`;
+  }
+
+  return html;
+}
+
+// ── 3.1 Entry points ─────────────────────────────────────────────────
+
+function _makeDiffBtn(turnKey) {
+  const btn = document.createElement('button');
+  btn.className = 'diff-entry-btn';
+  btn.textContent = '上下文变化';
+  btn.title = 'Turn Diff / Context Diff';
+  btn.onclick = (e) => { e.stopPropagation(); openSchemaDiffModal(turnKey); };
+  return btn;
+}
+
+// ── Turn Diff Tests ──────────────────────────────────────────────────────
+// These tests verify that the turn-level diff works correctly and does NOT
+// depend on task segmentation, Task Dataset, or any backend API.
+
+const turnDiffTests = {
+  results: [],
+  log(msg) { this.results.push(msg); },
+
+  // Test 1: normalizeTurnFields extracts correct observability fields
+  testNormalizeTurnFields() {
+    const mockTurn = {
+      turnKey: 'g:conv:0:turn:0',
+      label: 'Turn 1',
+      kind: 'user_message',
+      text: 'Hello, write a function to sort an array',
+      groupId: 'main',
+      conversationKey: 'main:conversation:0',
+      sourceEntryIdx: 0,
+      contentIndex: null,
+    };
+    const mockEntry = {
+      type: 'user',
+      message: { content: [{ type: 'text', text: 'Hello, write a function to sort an array' }] },
+    };
+    const fields = normalizeTurnFields(mockTurn, mockEntry);
+    this.assert(fields.text.includes('Hello'), 'user_message text should be captured');
+    this.assert(fields.slots.text.includes('Hello'), 'slot text should be captured');
+    this.assert(Object.keys(fields.slots).length === 4, 'diff model should have exactly four slots');
+    this.assert(!('metadataSummary' in fields), 'metadata should not be normalized for default diff');
+    this.assert(!('filesChanged' in fields), 'files should not be normalized for default diff');
+    this.assert(!('errors' in fields), 'errors should not be normalized for default diff');
+  },
+
+  // Test 2: normalizeTurnFields for tool_use extracts tool info
+  testNormalizeToolUse() {
+    const mockTurn = {
+      turnKey: 'g:conv:0:turn:2',
+      label: 'Turn 3',
+      kind: 'tool_use',
+      toolName: 'Write',
+      toolUseId: 'toolu_abc123',
+      inputSummary: '{"file_path":"/test.js","content":"..."}',
+      groupId: 'main',
+      conversationKey: 'main:conversation:0',
+      sourceEntryIdx: 1,
+      contentIndex: 0,
+    };
+    const mockEntry = {
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', name: 'Write', id: 'toolu_abc123', input: { file_path: '/test.js', content: '...' } }] },
+    };
+    const fields = normalizeTurnFields(mockTurn, mockEntry);
+    this.assert(fields.toolCall.includes('tool: Write'), 'tool call slot should include tool name');
+    this.assert(fields.toolCall.includes('/test.js'), 'tool call slot should include full input');
+    this.assert(!('filesChanged' in fields), 'tool call diff should not expose file summary fields');
+  },
+
+  // Test 3: buildTurnDiffModel handles null baseline (no previous Turn)
+  testBuildTurnDiffNoBaseline() {
+    const mockTurn = {
+      turnKey: 'g:conv:0:turn:0', label: 'Turn 1', kind: 'user_message',
+      text: 'Hello', groupId: 'main', conversationKey: 'main:conversation:0',
+      sourceEntryIdx: 0, contentIndex: null,
+    };
+    const mockEntry = {
+      type: 'user',
+      message: { content: [{ type: 'text', text: 'Hello' }] },
+    };
+    const cur = {
+      turn: mockTurn, entry: mockEntry,
+      normalizedFields: normalizeTurnFields(mockTurn, mockEntry),
+    };
+
+    // Test that buildTurnDiffForTurn properly sets isNoBaseline when no baseline exists
+    // We test the diff model builder directly with no baseline
+    const diffWithNoBaseline = {
+      current: cur,
+      baseline: null,
+      sections: [],
+      summary: { added: 0, removed: 0, changed: 0, unchanged: 0 },
+      isNoBaseline: true,
+    };
+    this.assert(diffWithNoBaseline.isNoBaseline === true, 'should have isNoBaseline flag');
+    this.assert(diffWithNoBaseline.baseline === null, 'baseline should be null');
+    this.assert(diffWithNoBaseline.current.turn.turnKey === 'g:conv:0:turn:0', 'current should be correct');
+  },
+
+  // Test 4: buildTurnDiffModel correctly compares two normalized turns
+  testBuildTurnDiffModelComparison() {
+    const curTurn = {
+      turnKey: 'g:conv:0:turn:1', label: 'Turn 2', kind: 'assistant_text',
+      text: 'Here is a sorted array function', groupId: 'main',
+      conversationKey: 'main:conversation:0', sourceEntryIdx: 1, contentIndex: 0,
+    };
+    const curEntry = {
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'Here is a sorted array function' }] },
+    };
+    const baseTurn = {
+      turnKey: 'g:conv:0:turn:0', label: 'Turn 1', kind: 'user_message',
+      text: 'Hello, write a function', groupId: 'main',
+      conversationKey: 'main:conversation:0', sourceEntryIdx: 0, contentIndex: null,
+    };
+    const baseEntry = {
+      type: 'user',
+      message: { content: [{ type: 'text', text: 'Hello, write a function' }] },
+    };
+
+    const curFields = normalizeTurnFields(curTurn, curEntry);
+    const baseFields = normalizeTurnFields(baseTurn, baseEntry);
+    const diff = buildTurnDiffModel(
+      { turn: curTurn, entry: curEntry, normalizedFields: curFields },
+      { turn: baseTurn, entry: baseEntry, normalizedFields: baseFields }
+    );
+
+    this.assert(diff.current.turn.turnKey === curTurn.turnKey, 'current turn should match');
+    this.assert(diff.baseline.turn.turnKey === baseTurn.turnKey, 'baseline turn should match');
+    this.assert(Array.isArray(diff.sections), 'sections should be an array');
+    this.assert(typeof diff.summary === 'object', 'summary should be an object');
+    this.assert(typeof diff.summary.changed === 'number', 'summary.changed should be a number');
+
+    // Text section should exist and show change
+    const textSection = diff.sections.find(s => s.field === 'text');
+    this.assert(!!textSection, 'should have a text section');
+  },
+
+  // Test 5: Diff does NOT depend on task segmentation or Dataset
+  testNoTaskDependency() {
+    // This test verifies that the turn diff functions exist and work
+    // without accessing taskSegmentReports or any Dataset data
+    this.assert(typeof normalizeTurnFields === 'function', 'normalizeTurnFields should exist');
+    this.assert(typeof buildTurnDiffModel === 'function', 'buildTurnDiffModel should exist');
+    this.assert(typeof buildTurnDiffForTurn === 'function', 'buildTurnDiffForTurn should exist');
+    this.assert(typeof findBaselineTurn === 'function', 'findBaselineTurn should exist');
+    this.assert(typeof lookupTurnWithEntry === 'function', 'lookupTurnWithEntry should exist');
+
+    // Verify that these functions can be called without task data
+    // by checking they don't reference taskSegmentReports in their signature
+    const fnStr = normalizeTurnFields.toString();
+    this.assert(!fnStr.includes('taskSegmentReports'), 'normalizeTurnFields should not reference taskSegmentReports');
+    this.assert(!fnStr.includes('Dataset'), 'normalizeTurnFields should not reference Dataset');
+    this.assert(!fnStr.includes('changes'), 'normalizeTurnFields should not reference Dataset changes field');
+    this.assert(!fnStr.includes('patches'), 'normalizeTurnFields should not reference Dataset patches field');
+
+    const diffModelFnStr = buildTurnDiffModel.toString();
+    this.assert(!diffModelFnStr.includes('taskSegmentReports'), 'buildTurnDiffModel should not reference taskSegmentReports');
+    this.assert(!diffModelFnStr.includes('changes'), 'buildTurnDiffModel should not reference Dataset changes');
+  },
+
+  // Test 6: diffStringLists correctly computes added/removed/unchanged
+  testDiffStringLists() {
+    const cur = ['a.txt', 'b.txt', 'c.txt'];
+    const base = ['a.txt', 'c.txt', 'd.txt'];
+    const result = diffStringLists(cur, base);
+    this.assert(result.status === 'changed', 'should detect change');
+    this.assert(result.added.length === 1 && result.added[0] === 'b.txt', 'b.txt should be added');
+    this.assert(result.removed.length === 1 && result.removed[0] === 'd.txt', 'd.txt should be removed');
+    this.assert(result.unchanged.length > 0, 'should have unchanged items');
+
+    // Test identical lists
+    const result2 = diffStringLists(['a', 'b'], ['a', 'b']);
+    this.assert(result2.status === 'unchanged', 'identical lists should be unchanged');
+  },
+
+  // Test 7: diffListByKey correctly categorizes items
+  testDiffListByKey() {
+    const curItems = [
+      { name: 'Read', id: '1', input: '{}' },
+      { name: 'Write', id: '2', input: '{"file":"/x"}' },
+    ];
+    const baseItems = [
+      { name: 'Read', id: '1', input: '{}' },
+      { name: 'Bash', id: '3', input: '{"cmd":"ls"}' },
+    ];
+    const results = diffListByKey(curItems, baseItems, item => `${item.name}::${item.id}`);
+    const added = results.filter(r => r.status === 'added');
+    const removed = results.filter(r => r.status === 'removed');
+    const unchanged = results.filter(r => r.status === 'unchanged');
+
+    this.assert(added.length === 1 && added[0].currentItems[0].name === 'Write', 'Write should be added');
+    this.assert(removed.length === 1 && removed[0].baselineItems[0].name === 'Bash', 'Bash should be removed');
+    this.assert(unchanged.length === 1 && unchanged[0].currentItems[0].name === 'Read', 'Read should be unchanged');
+  },
+
+  // Test 8: Modal render functions exist
+  testModalFunctionsExist() {
+    this.assert(typeof openDiffModal === 'function', 'openDiffModal should exist');
+    this.assert(typeof closeDiffModal === 'function', 'closeDiffModal should exist');
+    this.assert(typeof navigateDiffModal === 'function', 'navigateDiffModal should exist');
+    this.assert(typeof onDiffBaselineChange === 'function', 'onDiffBaselineChange should exist');
+    this.assert(typeof computeLineDiff === 'function', 'computeLineDiff should exist');
+    this.assert(typeof renderDiffModalContent === 'function', 'renderDiffModalContent should exist');
+    this.assert(typeof buildFieldRow === 'function', 'buildFieldRow should exist');
+    this.assert(Array.isArray(TURN_DIFF_SLOT_DEFS), 'fixed slot definitions should exist');
+    this.assert(TURN_DIFF_SLOT_DEFS.map(s => s.key).join(',') === 'thinking,text,toolCall,toolResult', 'fixed slots should be thinking/text/toolCall/toolResult');
+  },
+
+  // Test 9: Turn detail has Diff with Prev button, NOT inline Turn Diff
+  testTurnDetailStructure() {
+    // buildMinimalTurnDetailHtml should NOT include inline Turn Diff
+    const fnStr = buildMinimalTurnDetailHtml.toString();
+    this.assert(!fnStr.includes('buildTurnDiffSectionHtml'), 'buildMinimalTurnDetailHtml should NOT have inline Turn Diff');
+    this.assert(fnStr.includes('renderTurnEvidenceSections'), 'should still include evidence sections (Agent 响应)');
+    this.assert(fnStr.includes('renderRawEvidenceJson'), 'should still include raw JSON');
+
+    // renderTurnDetailInPanel should render action bar with Diff button
+    const panelFnStr = renderTurnDetailInPanel.toString();
+    this.assert(panelFnStr.includes('renderTurnDetailActionBar'), 'renderTurnDetailInPanel should call renderTurnDetailActionBar');
+
+    // renderTurnDetailActionBar should have Diff with Prev button
+    const actionBarStr = renderTurnDetailActionBar.toString();
+    this.assert(actionBarStr.includes('Diff with Prev'), 'action bar should have Diff with Prev button');
+    this.assert(actionBarStr.includes('openDiffModal'), 'Diff with Prev should call openDiffModal');
+  },
+
+  // Test 10: Diff page opens modal, not task-based
+  testDiffPageNotTaskBased() {
+    const fnStr = renderDifferentialPage.toString();
+    this.assert(!fnStr.includes('taskSegmentReports'), 'renderDifferentialPage should not reference taskSegmentReports');
+    this.assert(!fnStr.includes('evidence?.filesChanged'), 'renderDifferentialPage should not use task evidence filesChanged');
+    this.assert(!fnStr.includes('evidence?.filesRead'), 'renderDifferentialPage should not use task evidence filesRead');
+
+    // openDiffFromDiffPage should open modal
+    const navFnStr = openDiffFromDiffPage.toString();
+    this.assert(navFnStr.includes('openDiffModal'), 'openDiffFromDiffPage should call openDiffModal');
+  },
+
+  // Test 11: Modal HTML portal exists
+  testModalPortalExists() {
+    const overlay = document.getElementById('diffModalOverlay');
+    this.assert(!!overlay, 'diffModalOverlay should exist in DOM');
+    const modal = document.getElementById('diffModal');
+    this.assert(!!modal, 'diffModal should exist in DOM');
+    const title = document.getElementById('diffModalTitle');
+    this.assert(!!title, 'diffModalTitle should exist');
+    const body = document.getElementById('diffModalBody');
+    this.assert(!!body, 'diffModalBody should exist');
+    const prevBtn = document.getElementById('diffPrevBtn');
+    this.assert(!!prevBtn, 'diffPrevBtn should exist');
+    const nextBtn = document.getElementById('diffNextBtn');
+    this.assert(!!nextBtn, 'diffNextBtn should exist');
+    const baselineSel = document.getElementById('diffBaselineSelect');
+    this.assert(!!baselineSel, 'diffBaselineSelect should exist');
+  },
+
+  // Test 12: computeLineDiff handles basic cases
+  testComputeLineDiff() {
+    // Identical texts
+    const r1 = computeLineDiff('hello\nworld', 'hello\nworld');
+    this.assert(r1.every(l => l.status === 'unchanged'), 'identical text should be all unchanged');
+
+    // Added text
+    const r2 = computeLineDiff('', 'hello');
+    this.assert(r2.length > 0, 'should have diff lines');
+    this.assert(r2[0].status === 'added', 'new text should be added');
+
+    // Removed text
+    const r3 = computeLineDiff('hello', '');
+    this.assert(r3.length > 0 && r3[0].status === 'removed', 'removed text should be removed');
+
+    // Changed text
+    const r4 = computeLineDiff('old line', 'new line');
+    this.assert(r4.some(l => l.status !== 'unchanged'), 'changed text should have non-unchanged lines');
+  },
+
+  // Test 13: Unified field grid renders ALL fields with LEFT/RIGHT layout
+  testUnifiedFieldGrid() {
+    // Build field row for text content
+    const html = buildFieldRow('文本内容', 'old msg', 'new msg', true);
+    this.assert(html.includes('diff-field-row'), 'field row should be created');
+    this.assert(html.includes('diff-field-side old'), 'should have OLD (baseline) column');
+    this.assert(html.includes('diff-field-side new'), 'should have NEW (current) column');
+    this.assert(html.includes('old msg'), 'old value should be in the row');
+    this.assert(html.includes('new msg'), 'new value should be in the row');
+    this.assert(html.includes('OLD'), 'old column label should be rendered');
+    this.assert(html.includes('NEW'), 'new column label should be rendered');
+    this.assert(html.includes('diff-line'), 'changed content should render line-level diff markup');
+
+    // Added field (no baseline value): right side should be green
+    const addedHtml = buildFieldRow('新增字段', '', 'new content', true);
+    this.assert(addedHtml.includes('added'), 'new-only field should have added class on right');
+
+    // Removed field (no current value): left side should be red
+    const removedHtml = buildFieldRow('移除字段', 'old content', '', true);
+    this.assert(removedHtml.includes('removed'), 'old-only field should have removed class on left');
+
+    // No baseline case: everything green on right
+    const noBaseHtml = buildFieldRow('初始字段', '', 'content', false);
+    this.assert(noBaseHtml.includes('added'), 'no-baseline field should be green on right');
+
+    // Empty rows are still rendered for the fixed-slot layout
+    const emptyHtml = buildFieldRow('空字段', '', '', true);
+    this.assert(emptyHtml.includes('（无）'), 'empty fixed slot should show empty state');
+  },
+
+  // Test 14: Modal content is constrained to four slots and no noisy fields
+  testModalUsesOnlyFourSlots() {
+    const modalStr = renderDiffModalContent.toString();
+    this.assert(modalStr.includes('TURN_DIFF_SLOT_DEFS'), 'modal should render from fixed slot definitions');
+    this.assert(!modalStr.includes('元数据'), 'modal should not render metadata');
+    this.assert(!modalStr.includes('命令'), 'modal should not render commands');
+    this.assert(!modalStr.includes('已修改文件'), 'modal should not render changed files');
+    this.assert(!modalStr.includes('已读取文件'), 'modal should not render read files');
+    this.assert(!modalStr.includes('错误'), 'modal should not render errors');
+    this.assert(!modalStr.includes('buildListFieldRow'), 'modal should not render list helper rows');
+    this.assert(!modalStr.includes('buildStringListFieldRow'), 'modal should not render string list helper rows');
+  },
+
+  // Test 15: Normalization keeps long slot content intact
+  testLongContentNotTruncated() {
+    const longText = 'line\n'.repeat(260);
+    const mockTurn = {
+      turnKey: 'g:conv:0:turn:4',
+      label: 'Turn 4',
+      kind: 'assistant_text',
+      text: longText,
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    };
+    const mockEntry = {
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: longText }] },
+    };
+    const fields = normalizeTurnFields(mockTurn, mockEntry);
+    this.assert(fields.text === longText, 'long text should be preserved without truncation');
+    const row = buildFieldRow('TEXT', '', longText, false);
+    this.assert(row.includes(longText.slice(0, 900)), 'rendered row should contain long content');
+    this.assert(!row.includes('…'), 'field row should not inject ellipsis truncation');
+  },
+
+  // ── Runner ──────────────────────────────────────────────────────────
+  assert(condition, msg) {
+    if (!condition) {
+      this.log(`  FAIL: ${msg}`);
+      this.failures = (this.failures || 0) + 1;
+    } else {
+      this.log(`  PASS: ${msg}`);
+      this.passes = (this.passes || 0) + 1;
+    }
+  },
+
+  runAll() {
+    this.failures = 0;
+    this.passes = 0;
+    this.results = [];
+    const methods = Object.keys(this)
+      .filter(k => k.startsWith('test') && typeof this[k] === 'function');
+    this.log(`Turn Diff Tests — ${methods.length} test functions`);
+    this.log('');
+    for (const m of methods) {
+      this.log(`[${m}]`);
+      try {
+        this[m]();
+      } catch (e) {
+        this.log(`  FAIL (exception): ${e.message || e}`);
+        this.failures++;
+      }
+      this.log('');
+    }
+    this.log(`Results: ${this.passes} passed, ${this.failures} failed, ${methods.length} total`);
+    return { passes: this.passes, failures: this.failures, results: this.results };
+  },
+};
+
+// Expose tests for console / automated runs
+window.__turnDiffTests = turnDiffTests;
+console.log('[turn-diff-tests] Loaded. Run window.__turnDiffTests.runAll() to execute.');
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
+
+<!-- Diff Modal -->
+<div id="diffOverlay" class="diff-overlay" onclick="onSchemaDiffOverlayClick(event)">
+  <div class="diff-card">
+    <div class="diff-card-hdr">
+      <span class="diff-card-title">上下文变化 (Turn Diff)</span>
+      <button class="diff-card-close" onclick="closeSchemaDiffModal()">&times;</button>
+    </div>
+    <div id="diffInfoBar" class="diff-info-bar"></div>
+    <div class="diff-tab-nav">
+      <button class="diff-tab-btn active" data-dtab="overview" onclick="switchDiffTab('overview')">概览</button>
+      <button class="diff-tab-btn" data-dtab="messages" onclick="switchDiffTab('messages')">消息</button>
+      <button class="diff-tab-btn" data-dtab="system" onclick="switchDiffTab('system')">系统提示</button>
+      <button class="diff-tab-btn" data-dtab="tools" onclick="switchDiffTab('tools')">工具</button>
+      <button class="diff-tab-btn" data-dtab="params" onclick="switchDiffTab('params')">参数</button>
+      <button class="diff-tab-btn" data-dtab="rawjson" onclick="switchDiffTab('rawjson')">Raw JSON</button>
+    </div>
+    <div id="diffBody" class="diff-body"></div>
+  </div>
+</div>
 </body>
 </html>

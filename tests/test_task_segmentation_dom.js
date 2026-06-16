@@ -1859,6 +1859,93 @@ async function test_task_first_projection_debug_mode() {
   console.log('  ✓ task-first projection debug mode includes all turns');
 }
 
+async function test_turn_diff_modal_opens_without_task_segments() {
+  const emptyTasks = {
+    ok: true,
+    sessionId: 'test-session-001',
+    tasks: [],
+    summary: { taskCount: 0 },
+    elapsedMs: 1,
+  };
+  const dom = makeDOM(MOCK_SESSION, emptyTasks);
+  await loadTestSession(dom);
+
+  const win = dom.window;
+  const doc = dom.window.document;
+  const conv = win.allGroupConversations[0].conversations[0];
+  const targetTurn = conv.turns.find(t => t.kind === 'assistant_text');
+  assert.ok(targetTurn, 'fixture should have an assistant_text turn');
+
+  win.openDiffModal(targetTurn.turnKey);
+
+  const overlay = doc.getElementById('diffModalOverlay');
+  assert.ok(overlay.classList.contains('open'), 'diff modal should open');
+  const body = doc.getElementById('diffModalBody');
+  const labels = Array.from(body.querySelectorAll('.diff-field-label')).map(el => el.textContent.trim());
+  assert.deepStrictEqual(labels, ['THINKING', 'TEXT', 'TOOL CALL', 'TOOL RESULT']);
+  assert.strictEqual(body.querySelectorAll('.diff-field-row').length, 4, 'modal should render four fixed slots');
+  assert.ok(body.textContent.includes('OLD'), 'modal should render OLD column');
+  assert.ok(body.textContent.includes('NEW'), 'modal should render NEW column');
+  assert.ok(!body.textContent.includes('元数据'), 'modal should not render metadata');
+  assert.ok(!body.textContent.includes('已修改文件'), 'modal should not render changed files');
+
+  console.log('  ✓ turn diff modal opens without task segmentation results');
+}
+
+async function test_turn_diff_long_content_and_line_highlight() {
+  const dom = makeDOM();
+  const win = dom.window;
+  const longText = 'alpha\n' + 'same\n'.repeat(140) + 'omega';
+  const fields = win.normalizeTurnFields(
+    {
+      turnKey: 'g:conv:0:turn:99',
+      kind: 'assistant_text',
+      text: longText,
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    },
+    { type: 'assistant', message: { content: [{ type: 'text', text: longText }] } }
+  );
+  assert.strictEqual(fields.text, longText, 'normalizeTurnFields should preserve long text');
+
+  const longThinking = 'short-start\n' + 'thinking detail\n'.repeat(180) + 'short-end';
+  const thinkingFields = win.normalizeTurnFields(
+    {
+      turnKey: 'g:conv:0:turn:100',
+      kind: 'thinking',
+      text: 'short summary',
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    },
+    { type: 'assistant', message: { content: [{ type: 'thinking', thinking: longThinking }] } }
+  );
+  assert.strictEqual(thinkingFields.thinking, longThinking, 'thinking diff should prefer full content block over turn summary');
+
+  const longResult = 'result-start\n' + 'tool output line\n'.repeat(220) + 'result-end';
+  const resultFields = win.normalizeTurnFields(
+    {
+      turnKey: 'g:conv:0:turn:101',
+      kind: 'tool_result',
+      text: 'short result',
+      resultSummary: 'short result',
+      toolUseId: 'toolu_long',
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_long', is_error: false, content: longResult }] } }
+  );
+  assert.ok(resultFields.toolResult.includes(longResult), 'tool result diff should preserve full block content');
+
+  const html = win.buildFieldRow('TEXT', 'alpha\nold', 'alpha\nnew', true);
+  assert.ok(html.includes('diff-line removed'), 'changed old line should be highlighted');
+  assert.ok(html.includes('diff-line added'), 'changed new line should be highlighted');
+  assert.ok(html.includes('OLD'), 'row should include OLD column label');
+  assert.ok(html.includes('NEW'), 'row should include NEW column label');
+  assert.ok(!html.includes('…'), 'row should not inject ellipsis truncation');
+
+  console.log('  ✓ turn diff preserves long content and renders line highlights');
+}
+
 // ---------------------------------------------------------------------------
 // Run all tests
 // ---------------------------------------------------------------------------
@@ -1915,6 +2002,8 @@ const tests = [
   test_projection_preserves_anchors,
   test_task_first_projection_default_mode,
   test_task_first_projection_debug_mode,
+  test_turn_diff_modal_opens_without_task_segments,
+  test_turn_diff_long_content_and_line_highlight,
 ];
 
 async function main() {
