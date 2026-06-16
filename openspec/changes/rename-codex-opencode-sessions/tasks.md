@@ -31,9 +31,10 @@
 
 ## 5. Viewer 前端
 
-- [x] 5.1 更新 session selector label：优先显示 `displayName`，并保留完整 session id 供悬停或识别。
-- [x] 5.1.1 当多个 session `displayName` 相同或相近时，selector option 或标题区同时展示 session id 前缀，确保用户仍能区分；定位/加载 session 必须使用 session id。
-- [x] 5.2 在已加载 session 的主标题区域显示 `displayName`、session id 和 rename 能力状态。
+- [x] 5.1 更新 session selector label：优先显示 `displayName`，不再在默认可见文本中拼接 short session id 或 raw session id。
+- [x] 5.1.1 当多个 session `displayName` 相同或相近时，selector option 或标题区同时展示非 id 区分信息（如时间范围、agent、项目路径摘要），不再使用 raw session id 或 short session id；定位/加载 session 必须使用 session id。
+- [x] 5.2 在已加载 session 的主标题区域显示 `displayName`、时间范围等非 id 辅助信息和 rename 能力状态；不再显示 raw session id。
+- [x] 5.2.1 Codex adapter 从 SQLite `threads.created_at` / `updated_at` 向 session entry 的 `firstTimestamp` / `lastTimestamp` 传播时间，使同名 session 可通过时间区分。
 - [x] 5.3 为 `canRenameSession: true` 的 session 增加编辑入口、输入框、保存、取消和保存中状态。
 - [x] 5.4 对 `canRenameSession: false` 的 session 禁用或隐藏编辑入口，并显示该 agent 暂不支持 native rename。
 - [x] 5.5 保存成功后用 API 响应更新当前标题、session selector option 和 `allProjects` 内存数据。
@@ -47,7 +48,7 @@
 - [x] 6.2 新增 Codex SQLite fixture 测试：读取 `threads.title`、成功写回、row 不存在、schema 缺失、DB 不可写或写入失败、cache 刷新。
 - [x] 6.3 新增 OpenCode SQLite fixture 测试：读取 `session.title`、成功写回、row 不存在、schema 缺失、DB 不可写或写入失败。
 - [x] 6.4 新增 viewer server API 测试：Codex/OpenCode rename 成功，invalid title 返回 400，session missing 返回 404，Claude unsupported 返回 501，native 写回失败返回稳定错误 code。
-- [x] 6.5 新增前端静态或 DOM 冒烟测试：selector 使用 `displayName`、当前 session 标题存在、rename endpoint 调用存在、`canRenameSession` 控制编辑入口、成功/失败状态处理存在。
+- [x] 6.5 新增前端行为测试：selector 使用 `displayName` 且不显示 short/raw session id、当前 session 标题区不显示 raw session id、同名 session 仍可通过非 id 信息区分、rename endpoint 调用仍使用 session id、`canRenameSession` 控制编辑入口、成功/失败状态处理。
 - [x] 6.6 运行既有 Codex/OpenCode adapter、viewer server、task segmentation/frontend 静态测试，确认非 rename 行为不回退。
 
 ## 7. 验证与交接
