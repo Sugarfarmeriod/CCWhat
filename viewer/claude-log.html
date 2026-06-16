@@ -1088,6 +1088,123 @@ body {
   .trace-turn-card.edit-selected {
     box-shadow: inset 3px 0 0 var(--warning);
   }
+
+  /* ── Context Diff modal (MVP) ── */
+  .diff-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.70); z-index: 9999;
+    align-items: flex-start; justify-content: center; padding-top: 32px;
+  }
+  .diff-overlay.open { display: flex; }
+  .diff-card {
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);
+    width: min(840px, 96vw); max-height: calc(100vh - 64px);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .diff-card-hdr {
+    background: var(--bg-surface); padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .diff-card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .diff-card-close {
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .diff-card-close:hover { color: var(--text-primary); }
+  .diff-info-bar {
+    padding: 8px 14px; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0;
+    font-size: 11px;
+  }
+  .diff-info-label { color: var(--text-secondary); white-space: nowrap; }
+  .diff-info-val { color: var(--text-primary); font-family: var(--font-mono); }
+  .diff-source-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
+    color: var(--accent); border: 1px solid var(--accent); white-space: nowrap;
+  }
+  .diff-base-sel {
+    margin-left: auto; font-size: 11px; background: var(--bg-base);
+    color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 3px 6px; cursor: pointer; max-width: 260px;
+  }
+  .diff-base-sel:focus { outline: none; border-color: var(--accent); }
+  .diff-tab-nav {
+    display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    background: var(--bg-elevated); overflow-x: auto;
+  }
+  .diff-tab-btn {
+    border: none; background: transparent; color: var(--text-secondary); cursor: pointer;
+    font-size: 12px; padding: 8px 14px; white-space: nowrap;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .diff-tab-btn:hover { color: var(--text-primary); }
+  .diff-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .diff-body { flex: 1; overflow-y: auto; padding: 14px; background: var(--bg-base); }
+  /* Message diff rows */
+  .diff-msg-row { padding: 7px 10px; border-radius: 5px; margin-bottom: 5px; border-left: 3px solid transparent; }
+  .diff-msg-added  { background: rgba(48,209,88,0.12); border-left-color: var(--success); }
+  .diff-msg-removed{ background: rgba(255,59,48,0.12); border-left-color: var(--danger); }
+  .diff-msg-same   { background: var(--bg-surface); border-left-color: var(--border); opacity: 0.65; }
+  .diff-msg-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .diff-msg-mark { font-size: 12px; font-weight: 700; width: 12px; flex-shrink: 0; }
+  .diff-msg-added  .diff-msg-mark { color: var(--success); }
+  .diff-msg-removed .diff-msg-mark { color: var(--danger); }
+  .diff-msg-same    .diff-msg-mark { color: var(--text-tertiary); }
+  .diff-role-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+  .diff-role-user      { background: var(--type-user-bg); color: var(--type-user-fg); }
+  .diff-role-assistant { background: var(--type-asst-bg); color: var(--type-asst-fg); }
+  .diff-role-tool  { background: var(--type-att-bg); color: var(--type-att-fg); }
+  .diff-special-tag {
+    font-size: 9px; padding: 1px 5px; border-radius: 10px;
+    background: rgba(175,82,222,0.12); color: #7a2fa0;
+  }
+  .diff-msg-content {
+    color: var(--text-secondary); font-size: 11px; line-height: 1.5; margin-top: 3px;
+    max-height: 80px; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+  }
+  .diff-fold-row {
+    text-align: center; font-size: 11px; color: var(--text-tertiary); padding: 4px;
+    cursor: pointer; border-bottom: 1px dashed var(--border); margin-bottom: 5px;
+  }
+  .diff-fold-row:hover { color: var(--text-secondary); }
+  /* Field diff rows */
+  .diff-field-row {
+    display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px;
+    border-radius: 4px; margin-bottom: 4px; font-size: 12px;
+  }
+  .diff-field-added   { background: rgba(48,209,88,0.12); }
+  .diff-field-removed { background: rgba(255,59,48,0.12); }
+  .diff-field-changed { background: rgba(255,159,10,0.12); }
+  .diff-field-same    { background: var(--bg-surface); opacity: 0.6; }
+  .diff-field-key { color: var(--accent); font-family: var(--font-mono); min-width: 110px; flex-shrink: 0; font-size: 11px; }
+  .diff-field-old { color: var(--danger); text-decoration: line-through; font-family: var(--font-mono); margin-right: 6px; }
+  .diff-field-new { color: var(--success); font-family: var(--font-mono); }
+  .diff-section-hdr {
+    font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 14px 0 6px;
+  }
+  .diff-section-hdr:first-child { margin-top: 0; }
+  .diff-empty { color: var(--text-tertiary); font-size: 12px; text-align: center; padding: 24px 0; }
+  .diff-summary-item { font-size: 12px; color: var(--text-primary); line-height: 1.8; }
+  .diff-plus  { color: var(--success); font-weight: 600; }
+  .diff-minus { color: var(--danger); font-weight: 600; }
+  .diff-tilde { color: var(--warning); font-weight: 600; }
+  .diff-same  { color: var(--text-tertiary); }
+  .diff-schema-pre {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; margin-top: 4px;
+    max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  /* Diff entry button */
+  .diff-entry-btn {
+    font-size: 10px; padding: 1px 7px; border-radius: 3px;
+    background: color-mix(in srgb, var(--accent) 15%, var(--bg-surface));
+    color: var(--accent); border: 1px solid var(--accent);
+    cursor: pointer; white-space: nowrap; flex-shrink: 0; line-height: 1.6;
+  }
+  .diff-entry-btn:hover { background: color-mix(in srgb, var(--accent) 25%, var(--bg-surface)); }
 </style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body class="app-shell">
@@ -4411,6 +4528,12 @@ let allGroupTurns = [];           // [{groupId, label, turns: [...minimal Turn o
 let allGroupConversations = [];   // [{groupId, label, preamble, conversations: [...]}]
 window.allGroupConversations = allGroupConversations;
 
+// Turn Diff state
+let _diffCurrentTurnKey = null;
+let _diffBaseTurnKey    = null;
+let _diffActiveTab      = 'overview';
+let _diffIsManualBase   = false;
+
 // Trace Tree UI state
 let selectedTraceNodeKey = null;  // currently selected trace node key (conversationKey or turnKey)
 let selectedTraceNodeType = null; // 'snapshot' | 'task' | 'conversation' | 'turn'
@@ -7020,6 +7143,10 @@ function renderList() {
           `<div class="turn-summary">${esc(turnLabel)}</div>` +
         `</div>`;
 
+      // Add diff button to turn header
+      const diffBtn = _makeDiffBtn(turnKey);
+      turnHdr.querySelector('.turn-hdr-row1').appendChild(diffBtn);
+
       grpBody.appendChild(turnHdr);
 
       // ── Turn body (children, indented) ───────────────────────────────────
@@ -7520,8 +7647,648 @@ function copyImportCmd() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Turn Diff Functions (Ported from session-report-clean)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── 1.1 Turn resolution helpers ──────────────────────────────────────────
+
+function _parseTurnKey(tk) {
+  if (!tk) return null;
+  const sep = tk.lastIndexOf(':');
+  if (sep < 0) return null;
+  return { gid: tk.slice(0, sep), idx: parseInt(tk.slice(sep + 1), 10) };
+}
+
+function _getGroupObj(gid) {
+  return groups.find(g => g.id === gid) || null;
+}
+
+function _getGroupAllTurnKeys(gid) {
+  const g = _getGroupObj(gid);
+  if (!g) return [];
+  const turns = buildTurns(g.entries, gid);
+  return turns.filter(t => !t._isPreamble).map(t => `${gid}:${t._turnIdx}`);
+}
+
+function findDefaultBaseTurnKey(turnKey) {
+  const parsed = _parseTurnKey(turnKey);
+  if (!parsed) return null;
+  const allKeys = _getGroupAllTurnKeys(parsed.gid);
+  const pos = allKeys.indexOf(turnKey);
+  if (pos <= 0) return null;
+  return allKeys[pos - 1];
+}
+
+// ── 1.2 Context normalization ─────────────────────────────────────────────
+
+const _NOISE_KEYS = new Set([
+  'cache_control','timestamp','request_id','requestId','request-id',
+  'trace_id','traceId','trace-id','authorization','cch','ephemeral',
+  'x-request-id','x-trace-id','x-stainless-arch','x-stainless-os',
+  'x-stainless-lang','x-stainless-package-version','x-stainless-runtime',
+  'x-stainless-runtime-version','x-api-key','_fileLine','_source',
+  '_gid','_agentDesc','_idx','_turnKey',
+]);
+
+function _isNoiseKey(k) {
+  if (_NOISE_KEYS.has(k)) return true;
+  if (/^(hash|chksum|checksum|cache_hash|cch_)/.test(k)) return true;
+  return false;
+}
+
+function _msgContentSummary(entry) {
+  const c = entry.message?.content;
+  if (!c) return '';
+  if (typeof c === 'string') return trunc(c, 120);
+  if (!Array.isArray(c)) return '';
+  const parts = [];
+  const specials = [];
+  for (const b of c) {
+    if (!b || typeof b !== 'object') continue;
+    if (b.type === 'text') {
+      const t = b.text || '';
+      if (t.startsWith('<system-reminder')) { specials.push('[system-reminder]'); continue; }
+      if (t.startsWith('<local-command')) { specials.push('[local-command]'); continue; }
+      parts.push(trunc(t, 80));
+    } else if (b.type === 'tool_result') {
+      const rc = typeof b.content === 'string' ? b.content : JSON.stringify(b.content||'');
+      parts.push(`[tool_result:${b.tool_use_id||''}] ${trunc(rc, 60)}`);
+    } else if (b.type === 'tool_use') {
+      parts.push(`[tool:${b.name||'?'}]`);
+    } else if (b.type === 'thinking') {
+      parts.push('[thinking]');
+    } else if (b.type === 'image') {
+      parts.push('[image]');
+    }
+  }
+  return [...specials, ...parts].join(' ').slice(0, 160);
+}
+
+function _extractSysReminders(entry) {
+  const c = entry.message?.content;
+  if (!Array.isArray(c)) return [];
+  return c.filter(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.startsWith('<system-reminder')).map(b => b.text);
+}
+
+function _extractToolCalls(entry) {
+  const c = entry.message?.content;
+  if (!Array.isArray(c)) return [];
+  return c.filter(b => b && b.type === 'tool_use' && b.name).map(b => ({
+    name: b.name,
+    id: b.id || '',
+    inputSummary: b.input ? trunc(JSON.stringify(b.input), 80) : '',
+  }));
+}
+
+function _extractTokenUsage(entry) {
+  return entry.message?.usage || null;
+}
+
+function normalizeTurnContext(turnKey) {
+  const parsed = _parseTurnKey(turnKey);
+  if (!parsed) return null;
+  const g = _getGroupObj(parsed.gid);
+  if (!g) return null;
+  const entries = g.entries.filter(e =>
+    typeof e._turnIdx === 'number' && e._turnIdx <= parsed.idx
+  ).sort((a,b) => (a._fileLine||0) - (b._fileLine||0));
+
+  const messages = [];
+  const system = [];
+  const toolCallsList = [];
+  let params = {};
+  let tokenUsage = null;
+
+  for (const e of entries) {
+    if (e.type === 'user') {
+      messages.push({
+        role: 'user', uuid: e.uuid,
+        summary: _msgContentSummary(e),
+        hasSysReminder: _extractSysReminders(e).length > 0,
+        hasToolResult: Array.isArray(e.message?.content) && e.message.content.some(b=>b&&b.type==='tool_result'),
+        turnIdx: e._turnIdx,
+      });
+      for (const s of _extractSysReminders(e)) system.push(s);
+    } else if (e.type === 'assistant') {
+      const toks = _extractTokenUsage(e);
+      if (toks) tokenUsage = toks;
+      const calls = _extractToolCalls(e);
+      for (const c of calls) toolCallsList.push(c);
+      const msg = e.message || {};
+      if (msg.model)       params.model       = msg.model;
+      if (msg.stop_reason) params.stop_reason = msg.stop_reason;
+      messages.push({
+        role: 'assistant', uuid: e.uuid,
+        summary: _msgContentSummary(e),
+        hasToolUse: calls.length > 0,
+        hasThinking: Array.isArray(msg.content) && msg.content.some(b=>b&&b.type==='thinking'),
+        turnIdx: e._turnIdx,
+      });
+    }
+  }
+
+  if (tokenUsage) {
+    for (const [k, v] of Object.entries(tokenUsage)) {
+      if (!_isNoiseKey(k)) params[k] = v;
+    }
+  }
+
+  const sysUniq = [...new Set(system)];
+  const toolByName = {};
+  for (const c of toolCallsList) toolByName[c.name] = c;
+  const toolsDedup = Object.values(toolByName);
+
+  return {
+    messages,
+    system: sysUniq,
+    tools: toolsDedup,
+    toolNames: toolsDedup.map(t => t.name),
+    params: Object.fromEntries(Object.entries(params).filter(([k,v]) => v != null)),
+    tokenUsage,
+    rawEntries: entries,
+    turnKey,
+  };
+}
+
+// ── 1.3 & 1.4 Diff computation ────────────────────────────────────────────
+
+function diffMessages(oldMsgs, newMsgs) {
+  const oldUuids = new Set(oldMsgs.map(m => m.uuid).filter(Boolean));
+  const added    = newMsgs.filter(m => m.uuid && !oldUuids.has(m.uuid));
+  const newUuids = new Set(newMsgs.map(m => m.uuid).filter(Boolean));
+  const removed  = oldMsgs.filter(m => m.uuid && !newUuids.has(m.uuid));
+  const unchanged_count = newMsgs.length - added.length;
+  return { added, removed, unchanged_count };
+}
+
+function diffSystem(oldSys, newSys) {
+  const oldSet = new Set(oldSys);
+  const newSet = new Set(newSys);
+  const added   = newSys.filter(s => !oldSet.has(s));
+  const removed = oldSys.filter(s => !newSet.has(s));
+  const same    = newSys.filter(s => oldSet.has(s));
+  const _isNoisySystem = s => /<system-reminder[^>]*>.*?(?:cache|timestamp|request.?id)/is.test(s.slice(0, 400));
+  const allChanges = [...added, ...removed];
+  const isMetadataOnly = allChanges.length > 0 && allChanges.every(_isNoisySystem);
+  return { added, removed, same, isMetadataOnly, changed: added.length > 0 || removed.length > 0 };
+}
+
+function diffTools(oldNames, newNames, oldObjs, newObjs) {
+  const oldSet = new Set(oldNames);
+  const newSet = new Set(newNames);
+  const addedNames   = newNames.filter(t => !oldSet.has(t));
+  const removedNames = oldNames.filter(t => !newSet.has(t));
+  const sameNames    = newNames.filter(t => oldSet.has(t));
+  const byNameNew = Object.fromEntries((newObjs||[]).map(o=>[o.name,o]));
+  const byNameOld = Object.fromEntries((oldObjs||[]).map(o=>[o.name,o]));
+  const added   = addedNames.map(n => byNameNew[n] || {name:n, inputSummary:''});
+  const removed = removedNames.map(n => byNameOld[n] || {name:n, inputSummary:''});
+  const same    = sameNames.map(n => byNameNew[n] || {name:n, inputSummary:''});
+  return { added, removed, same, changed: added.length > 0 || removed.length > 0 };
+}
+
+function diffParams(oldP, newP) {
+  const allKeys = new Set([...Object.keys(oldP), ...Object.keys(newP)]);
+  const changes = [];
+  for (const k of allKeys) {
+    if (_isNoiseKey(k)) continue;
+    const ov = oldP[k], nv = newP[k];
+    const oStr = JSON.stringify(ov ?? null);
+    const nStr = JSON.stringify(nv ?? null);
+    if (oStr !== nStr) changes.push({ key: k, oldVal: ov, newVal: nv });
+  }
+  return { changes };
+}
+
+function diffTurnContexts(baseTurnKey, curTurnKey) {
+  const baseCtx = normalizeTurnContext(baseTurnKey);
+  const curCtx  = normalizeTurnContext(curTurnKey);
+  if (!baseCtx || !curCtx) return null;
+
+  const messages = diffMessages(baseCtx.messages, curCtx.messages);
+  const system   = diffSystem(baseCtx.system, curCtx.system);
+  const tools    = diffTools(baseCtx.toolNames, curCtx.toolNames, baseCtx.tools, curCtx.tools);
+  const params   = diffParams(baseCtx.params, curCtx.params);
+
+  let tokenDelta = null;
+  if (baseCtx.tokenUsage && curCtx.tokenUsage) {
+    const bIn  = baseCtx.tokenUsage.input_tokens  || 0;
+    const cIn  = curCtx.tokenUsage.input_tokens   || 0;
+    const bOut = baseCtx.tokenUsage.output_tokens || 0;
+    const cOut = curCtx.tokenUsage.output_tokens  || 0;
+    tokenDelta = { inputDelta: cIn - bIn, outputDelta: cOut - bOut, curInput: cIn, curOutput: cOut };
+  }
+
+  return { messages, system, tools, params, tokenDelta, baseCtx, curCtx };
+}
+
+// ── 1.5 Human-readable summary ────────────────────────────────────────────
+
+function summarizeTurnDiff(diff) {
+  if (!diff) return ['无可比较数据'];
+  const lines = [];
+  const { messages, system, tools, params, tokenDelta } = diff;
+
+  if (messages.added.length > 0) {
+    const roles = messages.added.map(m => m.role);
+    const rCnt = {};
+    roles.forEach(r => { rCnt[r] = (rCnt[r]||0)+1; });
+    const rStr = Object.entries(rCnt).map(([r,n])=>`${n} 条 ${r}`).join('、');
+    lines.push(`新增 ${rStr} 消息（含上一轮回复与本轮输入）`);
+  } else {
+    lines.push('消息列表无新增');
+  }
+  if (messages.removed.length > 0) lines.push(`移除 ${messages.removed.length} 条消息（不常见）`);
+
+  if (system.changed) {
+    if (system.isMetadataOnly) {
+      lines.push('系统提示：仅元数据变化（cache/timestamp 等），规则正文未变');
+    } else {
+      lines.push(`系统提示：规则变化（+${system.added.length} -${system.removed.length}）`);
+    }
+  } else {
+    lines.push('系统提示：无变化');
+  }
+
+  if (tools.changed) {
+    const parts = [];
+    if (tools.added.length) parts.push(`+${tools.added.length} 新增`);
+    if (tools.removed.length) parts.push(`-${tools.removed.length} 删除`);
+    lines.push(`工具调用：${parts.join('，')}`);
+  } else {
+    lines.push(`工具调用：无变化（${tools.same.length} 个）`);
+  }
+
+  if (params.changes.length > 0) {
+    const keys = params.changes.map(c=>c.key).join('、');
+    lines.push(`参数变化：${keys}`);
+  }
+
+  if (tokenDelta) {
+    const sign = n => n > 0 ? `+${n}` : String(n);
+    lines.push(`可用 token：输入 ${sign(tokenDelta.inputDelta)}，输出 ${sign(tokenDelta.outputDelta)}`);
+  }
+
+  return lines;
+}
+
+// ── 2.1 Modal UI ────────────────────────────────────────────────
+
+function openDiffModal(turnKeyOrEntry) {
+  let turnKey;
+  if (typeof turnKeyOrEntry === 'string') {
+    turnKey = turnKeyOrEntry;
+  } else if (turnKeyOrEntry && turnKeyOrEntry._turnKey) {
+    turnKey = turnKeyOrEntry._turnKey;
+  } else {
+    return;
+  }
+  _diffCurrentTurnKey = turnKey;
+  _diffBaseTurnKey    = findDefaultBaseTurnKey(turnKey);
+  _diffIsManualBase   = false;
+  _diffActiveTab      = 'overview';
+  document.getElementById('diffOverlay').classList.add('open');
+  _renderDiffModal();
+}
+
+function closeDiffModal() {
+  document.getElementById('diffOverlay').classList.remove('open');
+}
+
+function onDiffOverlayClick(e) {
+  if (e.target === document.getElementById('diffOverlay')) closeDiffModal();
+}
+
+function switchDiffTab(tab) {
+  _diffActiveTab = tab;
+  document.querySelectorAll('.diff-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.dtab === tab));
+  _renderDiffBody();
+}
+
+function setDiffBaseTurn(turnKey) {
+  _diffBaseTurnKey    = turnKey;
+  _diffIsManualBase   = true;
+  _renderDiffInfoBar();
+  _renderDiffBody();
+}
+
+// ── 2.2 Info bar ──────────────────────────────────────────────────────────
+
+function _renderDiffInfoBar() {
+  const bar = document.getElementById('diffInfoBar');
+  if (!bar) return;
+  const parsed = _parseTurnKey(_diffCurrentTurnKey);
+  const baseParsed = _parseTurnKey(_diffBaseTurnKey);
+
+  const curLabel = parsed ? `Turn #${parsed.idx}` : '?';
+  const baseLabel = baseParsed ? `Turn #${baseParsed.idx}` : '—';
+
+  const allKeys = parsed ? _getGroupAllTurnKeys(parsed.gid) : [];
+  const otherKeys = allKeys.filter(k => k !== _diffCurrentTurnKey);
+  const selectorHtml = otherKeys.length
+    ? `<select class="diff-base-sel" id="diffBaseSel" onchange="setDiffBaseTurn(this.value)">` +
+      otherKeys.map(k => {
+        const p2 = _parseTurnKey(k);
+        const g = p2 ? _getGroupObj(p2.gid) : null;
+        const turns = g ? buildTurns(g.entries, p2.gid) : [];
+        const t = turns.find(t => !t._isPreamble && t._turnIdx === p2.idx);
+        const label = t?.root ? trunc(summarize(t.root), 36) : `Turn #${p2.idx}`;
+        const sel = k === _diffBaseTurnKey ? ' selected' : '';
+        return `<option value="${escRaw(k)}"${sel}>#${p2.idx} ${esc(label)}</option>`;
+      }).join('') +
+      `</select>`
+    : '<span class="diff-info-val">（无其他 turn）</span>';
+
+  bar.innerHTML =
+    `<span class="diff-info-label">当前：</span><span class="diff-info-val">${esc(curLabel)}</span>` +
+    `<span class="diff-info-label">对比：</span>` +
+    (_diffBaseTurnKey
+      ? `<span class="diff-info-val">${esc(baseLabel)}</span>`
+      : `<span class="diff-info-val" style="color:var(--text-tertiary)">无（首个 turn）</span>`) +
+    `<span class="diff-source-badge">${_diffIsManualBase ? '手动选择' : '自动匹配'}</span>` +
+    selectorHtml;
+}
+
+function _renderDiffModal() {
+  _renderDiffInfoBar();
+  document.querySelectorAll('.diff-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.dtab === _diffActiveTab));
+  _renderDiffBody();
+}
+
+function _renderDiffBody() {
+  const body = document.getElementById('diffBody');
+  if (!body) return;
+
+  if (!_diffBaseTurnKey) {
+    body.innerHTML = `<div class="diff-empty">当前 turn 是首个 turn，没有可比较的上一个 turn。</div>`;
+    return;
+  }
+
+  const diff = diffTurnContexts(_diffBaseTurnKey, _diffCurrentTurnKey);
+  if (!diff) {
+    body.innerHTML = `<div class="diff-empty">无法获取对比数据。</div>`;
+    return;
+  }
+
+  switch (_diffActiveTab) {
+    case 'overview':  body.innerHTML = _renderOverviewTab(diff); break;
+    case 'messages':  body.innerHTML = _renderMessagesTab(diff); break;
+    case 'system':    body.innerHTML = _renderSystemTab(diff); break;
+    case 'tools':     body.innerHTML = _renderToolsTab(diff); break;
+    case 'params':    body.innerHTML = _renderParamsTab(diff); break;
+    case 'rawjson':   body.innerHTML = _renderRawJsonTab(diff); break;
+    default:          body.innerHTML = `<div class="diff-empty">Unknown tab.</div>`;
+  }
+}
+
+// ── 2.3 Overview tab ─────────────────────────────────────────────────────
+
+function _renderOverviewTab(diff) {
+  const lines = summarizeTurnDiff(diff);
+  const baseParsed = _parseTurnKey(_diffBaseTurnKey);
+  const curParsed  = _parseTurnKey(_diffCurrentTurnKey);
+
+  let html = `<div class="diff-section-hdr">变化摘要</div>`;
+  html += `<div style="margin-bottom:14px">`;
+  html += `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">Turn #${curParsed?.idx} 相比 Turn #${baseParsed?.idx}</div>`;
+  for (const line of lines) {
+    const icon = line.startsWith('新增') ? '＋' : line.startsWith('系统提示：规则') ? '△' : line.startsWith('工具调用：无') || line.startsWith('消息列表无') || line.startsWith('系统提示：无') ? '－' : '·';
+    html += `<div class="diff-summary-item">${esc(icon)} ${esc(line)}</div>`;
+  }
+  html += `</div>`;
+
+  const { messages, system, tools, params, tokenDelta } = diff;
+  html += `<div class="diff-section-hdr">各维度变化</div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px">`;
+  const cards = [
+    { label: '新增消息', val: messages.added.length, cls: messages.added.length ? 'diff-plus' : 'diff-same' },
+    { label: '系统提示', val: system.changed ? (system.isMetadataOnly ? '仅元数据' : '规则变化') : '无变化', cls: system.changed && !system.isMetadataOnly ? 'diff-tilde' : 'diff-same' },
+    { label: '工具调用变化', val: tools.changed ? `+${tools.added.length}/-${tools.removed.length}` : '无变化', cls: tools.changed ? 'diff-tilde' : 'diff-same' },
+    { label: '参数变化', val: params.changes.length > 0 ? `${params.changes.length} 项` : '无变化', cls: params.changes.length ? 'diff-tilde' : 'diff-same' },
+  ];
+  if (tokenDelta) {
+    const sign = n => n > 0 ? `+${n}` : String(n);
+    cards.push({ label: '输入 token', val: sign(tokenDelta.inputDelta), cls: tokenDelta.inputDelta !== 0 ? 'diff-tilde' : 'diff-same' });
+  }
+  for (const c of cards) {
+    html += `<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">` +
+      `<div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">${esc(c.label)}</div>` +
+      `<div class="${c.cls}" style="font-size:14px;font-weight:700">${typeof c.val === 'number' ? c.val : esc(String(c.val))}</div>` +
+      `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+// ── 2.4 Messages tab ─────────────────────────────────────────────────────
+
+function _renderMessagesTab(diff) {
+  const { messages } = diff;
+  const allNew = diff.curCtx.messages;
+  const addedUuids = new Set(messages.added.map(m => m.uuid));
+
+  let html = '';
+  if (messages.unchanged_count > 0) {
+    html += `<div class="diff-fold-row" onclick="this.style.display='none';document.getElementById('diffUnchanged').style.display=''">` +
+      `▶ 折叠 ${messages.unchanged_count} 条未变化消息（点击展开）</div>` +
+      `<div id="diffUnchanged" style="display:none">`;
+    for (const m of allNew.filter(m => !addedUuids.has(m.uuid))) {
+      html += _renderMsgRow(m, 'same');
+    }
+    html += `</div>`;
+  }
+
+  if (messages.removed.length > 0) {
+    html += `<div class="diff-section-hdr">删除消息</div>`;
+    for (const m of messages.removed) html += _renderMsgRow(m, 'removed');
+  }
+
+  if (messages.added.length > 0) {
+    html += `<div class="diff-section-hdr">新增消息（${messages.added.length} 条）</div>`;
+    for (const m of messages.added) html += _renderMsgRow(m, 'added');
+  } else {
+    html += `<div class="diff-empty">本轮无新增消息。</div>`;
+  }
+  return html;
+}
+
+function _renderMsgRow(m, state) {
+  const mark = state === 'added' ? '+' : state === 'removed' ? '−' : '·';
+  const roleCls = m.role === 'user' ? 'diff-role-user' : m.role === 'assistant' ? 'diff-role-assistant' : 'diff-role-tool';
+  const tags = [];
+  if (m.hasSysReminder) tags.push('system-reminder');
+  if (m.hasToolResult)  tags.push('tool_result');
+  if (m.hasToolUse)     tags.push('tool_use');
+  if (m.hasThinking)    tags.push('thinking');
+  const tagsHtml = tags.map(t => `<span class="diff-special-tag">${esc(t)}</span>`).join(' ');
+  return `<div class="diff-msg-row diff-msg-${state}">` +
+    `<div class="diff-msg-hdr">` +
+      `<span class="diff-msg-mark">${mark}</span>` +
+      `<span class="diff-role-badge ${roleCls}">${esc(m.role)}</span>` +
+      tagsHtml +
+    `</div>` +
+    (m.summary ? `<div class="diff-msg-content">${esc(m.summary)}</div>` : '') +
+    `</div>`;
+}
+
+// ── 2.5a System tab ────────────────────────────────────────────────────────
+
+function _renderSystemTab(diff) {
+  const { system } = diff;
+  if (!system.changed) {
+    return `<div class="diff-empty">系统提示无变化（${system.same.length} 条保持不变）。</div>`;
+  }
+  let html = '';
+  if (system.isMetadataOnly) {
+    html += `<div style="background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.3);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--warning)">` +
+      `⚠ 仅元数据变化 — 变化内容仅涉及 cache hash / timestamp 等低价值字段，系统规则正文未实质变化。</div>`;
+  }
+  if (system.added.length) {
+    html += `<div class="diff-section-hdr diff-plus">+ 新增系统内容（${system.added.length} 条）</div>`;
+    for (const s of system.added) {
+      html += `<div class="diff-field-row diff-field-added"><div class="diff-schema-pre">${esc(s.slice(0,500))}${s.length>500?'\n[截断…]':''}</div></div>`;
+    }
+  }
+  if (system.removed.length) {
+    html += `<div class="diff-section-hdr diff-minus">- 删除系统内容（${system.removed.length} 条）</div>`;
+    for (const s of system.removed) {
+      html += `<div class="diff-field-row diff-field-removed"><div class="diff-schema-pre">${esc(s.slice(0,500))}${s.length>500?'\n[截断…]':''}</div></div>`;
+    }
+  }
+  return html;
+}
+
+// ── 2.5b Tools tab ────────────────────────────────────────────────────────
+
+function _renderToolRow(toolObj, state) {
+  const cls = state === 'added' ? 'diff-field-added' : state === 'removed' ? 'diff-field-removed' : 'diff-field-same';
+  const mark = state === 'added' ? '<span class="diff-field-new">＋新增</span>' : state === 'removed' ? '<span class="diff-field-old">已删除</span>' : '';
+  const inputHtml = toolObj.inputSummary
+    ? `<span style="font-size:10px;color:var(--text-tertiary);font-family:monospace;margin-left:8px">${esc(toolObj.inputSummary)}</span>`
+    : '';
+  return `<div class="diff-field-row ${cls}">` +
+    `<span class="diff-field-key">${esc(toolObj.name)}</span>` +
+    inputHtml + mark +
+    `</div>`;
+}
+
+function _renderToolsTab(diff) {
+  const { tools } = diff;
+  const notice = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">` +
+    `注：JSONL 只记录工具调用记录（name + input），不含工具定义（description/schema）。` +
+    `如需查看完整工具定义，请参考 Raw Req/Resp viewer。</div>`;
+
+  if (!tools.changed) {
+    if (tools.same.length === 0) return notice + `<div class="diff-empty">两个 turn 均无工具调用。</div>`;
+    return notice + `<div class="diff-section-hdr diff-same">无变化（${tools.same.length} 个工具）</div>` +
+      tools.same.map(t => _renderToolRow(t, 'same')).join('');
+  }
+  let html = notice;
+  if (tools.added.length) {
+    html += `<div class="diff-section-hdr diff-plus">+ 新增调用（${tools.added.length} 个）</div>`;
+    html += tools.added.map(t => _renderToolRow(t, 'added')).join('');
+  }
+  if (tools.removed.length) {
+    html += `<div class="diff-section-hdr diff-minus">- 减少调用（${tools.removed.length} 个）</div>`;
+    html += tools.removed.map(t => _renderToolRow(t, 'removed')).join('');
+  }
+  if (tools.same.length) {
+    html += `<div class="diff-section-hdr diff-same">相同（${tools.same.length} 个）</div>`;
+    html += tools.same.map(t => _renderToolRow(t, 'same')).join('');
+  }
+  return html;
+}
+
+// ── 2.5c Params tab ───────────────────────────────────────────────────────
+
+function _renderParamsTab(diff) {
+  const { params } = diff;
+  const notice = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">` +
+    `注：JSONL 只存储响应侧字段（model、stop_reason、token 用量）。` +
+    `请求侧参数（temperature、max_tokens、thinking 等）不在 JSONL 中，` +
+    `如需查看请参考 Raw Req/Resp viewer。</div>`;
+  if (params.changes.length === 0) {
+    return notice + `<div class="diff-empty">可比较的参数字段无变化（噪声字段已过滤）。</div>`;
+  }
+  let html = notice + `<div class="diff-section-hdr">参数变化（${params.changes.length} 项）</div>`;
+  for (const c of params.changes) {
+    const cls = c.oldVal == null ? 'diff-field-added' : c.newVal == null ? 'diff-field-removed' : 'diff-field-changed';
+    html += `<div class="diff-field-row ${cls}">` +
+      `<span class="diff-field-key">${esc(c.key)}</span>` +
+      (c.oldVal != null ? `<span class="diff-field-old">${esc(String(c.oldVal))}</span>` : '') +
+      (c.newVal != null ? `<span class="diff-field-new">${esc(String(c.newVal))}</span>` : '<span class="diff-field-old">（已删除）</span>') +
+      `</div>`;
+  }
+  html += `<div style="font-size:11px;color:var(--text-tertiary);margin-top:10px">注：cache_control、timestamp、request_id、authorization 等噪声字段已过滤。</div>`;
+  return html;
+}
+
+// ── 2.6 Raw JSON tab ──────────────────────────────────────────────────────
+
+function _renderRawJsonTab(diff) {
+  const { baseCtx, curCtx } = diff;
+  const _STRIP = new Set(['_source','_agentDesc','_gid','_idx','_turnKey','_fileLine','_lineNo']);
+  const cleanEntry = e => Object.fromEntries(Object.entries(e).filter(([k]) => !_STRIP.has(k)));
+
+  const baseUuids = new Set(baseCtx.rawEntries.map(e => e.uuid).filter(Boolean));
+  const addedEntries   = curCtx.rawEntries.filter(e => e.uuid && !baseUuids.has(e.uuid));
+  const baseLastEntry  = baseCtx.rawEntries[baseCtx.rawEntries.length - 1];
+
+  let html = `<div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px">Raw JSON 展示的是 JSONL 原始条目对象（已去除内部追踪字段）。</div>`;
+
+  if (addedEntries.length) {
+    html += `<div class="diff-section-hdr diff-plus">新增条目（${addedEntries.length} 条）</div>`;
+    for (const e of addedEntries) {
+      html += `<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">${esc(e.type||'?')} · ${esc(e.uuid?.slice(0,16)||'')} · Turn #${e._turnIdx ?? '?'}</div>` +
+        `<div class="diff-schema-pre">${esc(JSON.stringify(cleanEntry(e), null, 2))}</div></div>`;
+    }
+  } else {
+    html += `<div class="diff-empty" style="margin-bottom:12px">无新增原始条目。</div>`;
+  }
+
+  if (baseLastEntry) {
+    html += `<div class="diff-section-hdr diff-same" style="margin-top:14px">Base Turn 最后条条目（参考）</div>`;
+    html += `<div class="diff-schema-pre">${esc(JSON.stringify(cleanEntry(baseLastEntry), null, 2))}</div>`;
+  }
+
+  return html;
+}
+
+// ── 3.1 Entry points ─────────────────────────────────────────────────
+
+function _makeDiffBtn(turnKey) {
+  const btn = document.createElement('button');
+  btn.className = 'diff-entry-btn';
+  btn.textContent = '上下文变化';
+  btn.title = 'Turn Diff / Context Diff';
+  btn.onclick = (e) => { e.stopPropagation(); openDiffModal(turnKey); };
+  return btn;
+}
 
 document.addEventListener('DOMContentLoaded', init);
 </script>
+
+<!-- Diff Modal -->
+<div id="diffOverlay" class="diff-overlay" onclick="onDiffOverlayClick(event)">
+  <div class="diff-card">
+    <div class="diff-card-hdr">
+      <span class="diff-card-title">上下文变化 (Turn Diff)</span>
+      <button class="diff-card-close" onclick="closeDiffModal()">&times;</button>
+    </div>
+    <div id="diffInfoBar" class="diff-info-bar"></div>
+    <div class="diff-tab-nav">
+      <button class="diff-tab-btn active" data-dtab="overview" onclick="switchDiffTab('overview')">概览</button>
+      <button class="diff-tab-btn" data-dtab="messages" onclick="switchDiffTab('messages')">消息</button>
+      <button class="diff-tab-btn" data-dtab="system" onclick="switchDiffTab('system')">系统提示</button>
+      <button class="diff-tab-btn" data-dtab="tools" onclick="switchDiffTab('tools')">工具</button>
+      <button class="diff-tab-btn" data-dtab="params" onclick="switchDiffTab('params')">参数</button>
+      <button class="diff-tab-btn" data-dtab="rawjson" onclick="switchDiffTab('rawjson')">Raw JSON</button>
+    </div>
+    <div id="diffBody" class="diff-body"></div>
+  </div>
+</div>
 </body>
 </html>
