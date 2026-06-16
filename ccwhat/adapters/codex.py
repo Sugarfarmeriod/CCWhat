@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -193,6 +194,34 @@ def _cwd_from_entries(entries: list[dict]) -> str | None:
     return None
 
 
+def _normalize_ts(value: Any) -> str | None:
+    """Normalize a timestamp to ISO-8601 string.
+
+    Handles ISO strings (pass-through), Unix seconds, and Unix milliseconds.
+    Returns None for empty/invalid input.
+    """
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            number = float(stripped)
+        except ValueError:
+            return stripped
+    else:
+        return None
+    if number > 10_000_000_000:
+        number = number / 1000
+    try:
+        return datetime.fromtimestamp(number, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
 class CodexAdapter(AgentAdapter):
     def __init__(self, projects_dir: Path | None = None) -> None:
         self._projects_dir = projects_dir
@@ -329,10 +358,12 @@ class CodexAdapter(AgentAdapter):
             meta = sqlite_meta.get(sid, {})
             native_title = meta.get("title", "")
             display = native_title if native_title else sid[:8]
+            created_at = meta.get("created_at")
+            updated_at = meta.get("updated_at")
             proj_map[project_dir]["sessions"].append({
                 "id": sid,
-                "firstTimestamp": None,
-                "lastTimestamp": None,
+                "firstTimestamp": _normalize_ts(created_at),
+                "lastTimestamp": _normalize_ts(updated_at),
                 "title": native_title,
                 "displayName": display,
                 "canRenameSession": True,
@@ -801,5 +832,7 @@ class CodexAdapter(AgentAdapter):
                 result["title"] = native_title
                 result["displayName"] = display
                 result["canRenameSession"] = True
+                result["firstTimestamp"] = _normalize_ts(sqlite_meta.get("created_at"))
+                result["lastTimestamp"] = _normalize_ts(sqlite_meta.get("updated_at"))
                 return result
         return None

@@ -5394,8 +5394,22 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function fmtTs(ts) {
-  if (!ts) return '';
-  try { return new Date(ts).toLocaleString('zh-CN', {hour12:false}); } catch { return ts; }
+  if (ts === null || ts === undefined || ts === '' || ts === 0) return '';
+  var d;
+  if (typeof ts === 'number') {
+    d = ts > 1e12 ? new Date(ts) : new Date(ts * 1000);
+  } else {
+    var s = String(ts).trim();
+    if (!s) return '';
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      var n = parseFloat(s);
+      d = n > 1e12 ? new Date(n) : new Date(n * 1000);
+    } else {
+      d = new Date(s);
+    }
+  }
+  if (isNaN(d.getTime())) return '';
+  try { return d.toLocaleString('zh-CN', {hour12:false}); } catch { return ''; }
 }
 function trunc(s, n) { s = String(s??''); return s.length>n ? s.slice(0,n)+'…' : s; }
 
@@ -6141,12 +6155,9 @@ function fmtSessionLabel(s) {
   const first = typeof s === 'object' && s.firstTimestamp ? fmtTs(s.firstTimestamp) : null;
   const last  = typeof s === 'object' && s.lastTimestamp  ? fmtTs(s.lastTimestamp)  : null;
   const times = first ? (last && last !== first ? `${first} ~ ${last}` : first) : '';
-  const prefix = id.slice(0, 8);
-  if (displayName && displayName !== prefix) {
-    const label = displayName.length > 32 ? displayName.slice(0, 32) + '…' : displayName;
-    return times ? `${label} [${prefix}] (${times})` : `${label} [${prefix}]`;
-  }
-  return times ? `${id}  (${times})` : id;
+  const name = displayName || id;
+  const label = name.length > 32 ? name.slice(0, 32) + '…' : name;
+  return times ? `${label} (${times})` : label;
 }
 
 // ── Session rename UI ───────────────────────────────────────────────────
@@ -6173,7 +6184,13 @@ function updateSessionTitleBar(data) {
 
   nameEl.textContent = displayName;
   nameEl.title = title || displayName;
-  idEl.textContent = data.sessionId;
+  var _meta = data._metadata || {};
+  var _firstTs = data.firstTimestamp || _meta.firstTimestamp || _meta.created_at || _meta.time_created;
+  var _lastTs  = data.lastTimestamp  || _meta.lastTimestamp  || _meta.updated_at || _meta.time_updated;
+  var _firstStr = _firstTs ? fmtTs(_firstTs) : '';
+  var _lastStr  = _lastTs  ? fmtTs(_lastTs)  : '';
+  var _timeInfo = _firstStr ? (_lastStr && _lastStr !== _firstStr ? _firstStr + ' ~ ' + _lastStr : _firstStr) : '';
+  idEl.textContent = _timeInfo;
   renameBtn.style.display = canRename ? 'inline-block' : 'none';
   unsupported.style.display = canRename ? 'none' : 'inline';
   form.style.display = 'none';

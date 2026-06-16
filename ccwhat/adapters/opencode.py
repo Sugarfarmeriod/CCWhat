@@ -241,8 +241,8 @@ class OpenCodeAdapter(AgentAdapter):
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
                 "model": row.get("model"),
-                "firstTimestamp": str(row.get("time_created") or ""),
-                "lastTimestamp": str(row.get("time_updated") or ""),
+                "firstTimestamp": _to_iso_timestamp(row.get("time_created")),
+                "lastTimestamp": _to_iso_timestamp(row.get("time_updated")),
             }
             if ti is not None:
                 sess_data["tokensInput"] = ti
@@ -272,8 +272,8 @@ class OpenCodeAdapter(AgentAdapter):
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
                 "model": row.get("model"),
-                "firstTimestamp": str(row.get("time_created") or ""),
-                "lastTimestamp": str(row.get("time_updated") or ""),
+                "firstTimestamp": _to_iso_timestamp(row.get("time_created")),
+                "lastTimestamp": _to_iso_timestamp(row.get("time_updated")),
             }
             if ti is not None:
                 sess["tokensInput"] = ti
@@ -732,7 +732,7 @@ class OpenCodeAdapter(AgentAdapter):
         session_row = self._query_one(
             "SELECT id, project_id, directory, title, agent, model, "
             "tokens_input, tokens_output, tokens_reasoning, "
-            "tokens_cache_read, tokens_cache_write, cost, time_created "
+            "tokens_cache_read, tokens_cache_write, cost, time_created, time_updated "
             "FROM session WHERE id = ?",
             (session_id,),
         )
@@ -794,6 +794,8 @@ class OpenCodeAdapter(AgentAdapter):
             "title": native_title,
             "displayName": display,
             "canRenameSession": True,
+            "firstTimestamp": _to_iso_timestamp(session_row.get("time_created")),
+            "lastTimestamp": _to_iso_timestamp(session_row.get("time_updated")),
             "_metadata": {
                 "title": native_title,
                 "model": model_info,
