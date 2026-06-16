@@ -2121,9 +2121,9 @@ function buildMinimalTurns(conversation, startIndex = 0) {
               : String(b.content || '');
             addTurn('tool_result', e, i, {
               toolUseId: b.tool_use_id || null,
-              resultSummary: trunc(txt, 200),
+              resultSummary: txt,
               isError: b.is_error || false,
-              text: trunc(txt, 200),
+              text: txt,
             });
           } else if (b.type === 'text') {
             const t = (b.text || '').trim();
@@ -2359,7 +2359,7 @@ function formatToolResultBlock(block, fallbackTurn) {
  */
 function normalizeTurnFields(turn, entry) {
   const block = entry ? getTurnContentBlock(entry, turn) : null;
-  const fullText = turn.text || fullBlockText(block) || (entry ? extractFullText(entry) : '') || '';
+  const fullText = fullBlockText(block) || turn.text || (entry ? extractFullText(entry) : '') || '';
   const slots = {
     thinking: '',
     text: '',
@@ -4660,7 +4660,7 @@ function renderFieldAsAdded(label, content) {
   const display = typeof content === 'string' ? content : JSON.stringify(content);
   return `<div class="turn-diff-block">
     <div class="turn-diff-block-hdr"><span class="diff-icon turn-diff-added">+</span> ${esc(label)}</div>
-    <div class="turn-diff-block-body"><div class="turn-diff-content">${esc(trunc(display, 300))}</div></div>
+    <div class="turn-diff-block-body"><div class="turn-diff-content">${esc(display)}</div></div>
   </div>`;
 }
 
@@ -4677,21 +4677,21 @@ function renderDiffSection(section) {
     const baseDisplay = section.baselineVal || '（无）';
     if (section.status === 'changed') {
       bodyHtml = `<div style="margin-bottom:6px;"><span style="color:var(--success);font-size:10px">+ 当前:</span>
-        <div class="turn-diff-content" style="max-height:80px;">${esc(trunc(curDisplay, 300))}</div></div>
+        <div class="turn-diff-content">${esc(curDisplay)}</div></div>
         <div><span style="color:var(--danger);font-size:10px">- baseline:</span>
-        <div class="turn-diff-content" style="max-height:80px;opacity:.7">${esc(trunc(baseDisplay, 300))}</div></div>`;
+        <div class="turn-diff-content" style="opacity:.7">${esc(baseDisplay)}</div></div>`;
     } else {
-      bodyHtml = `<div class="turn-diff-content" style="max-height:80px;">${esc(trunc(curDisplay || baseDisplay, 300))}</div>`;
+      bodyHtml = `<div class="turn-diff-content">${esc(curDisplay || baseDisplay)}</div>`;
     }
   } else {
     // List fields (commands, files, errors)
     const items = section.currentVal || section.baselineVal || [];
     if (Array.isArray(items) && items.length) {
       bodyHtml = items.slice(0, 20).map(item => {
-        const display = typeof item === 'string' ? item : JSON.stringify(item);
-        return `<div class="turn-diff-row">
-          <span class="turn-diff-indicator ${cls}">${icon}</span>
-          <span class="turn-diff-content" style="max-height:40px;">${esc(trunc(display, 200))}</span>
+          const display = typeof item === 'string' ? item : JSON.stringify(item);
+          return `<div class="turn-diff-row">
+            <span class="turn-diff-indicator ${cls}">${icon}</span>
+          <span class="turn-diff-content">${esc(display)}</span>
         </div>`;
       }).join('');
       if (items.length > 20) bodyHtml += `<div style="font-size:10px;color:var(--text-tertiary);padding:4px 0;">... 还有 ${items.length - 20} 项（查看原始 JSON 获取完整列表）</div>`;
@@ -8677,7 +8677,10 @@ function renderDetail(e) {
           for (const b of sysTexts) {
             const d = document.createElement('div');
             d.className = 'content-text'; d.style.fontSize='11px'; d.style.color='#6e7681';
-            d.textContent = trunc(b.text, 500);
+            d.style.maxHeight = '320px';
+            d.style.overflowY = 'auto';
+            d.style.whiteSpace = 'pre-wrap';
+            d.textContent = b.text || '';
             body.appendChild(d);
           }
         }, true));
@@ -8771,11 +8774,12 @@ function renderDetail(e) {
       if (att.stdout) {
         const pre = document.createElement('div');
         pre.className = 'raw-json'; pre.style.marginTop = '8px';
-        let stdoutDisplay = trunc(att.stdout, 2000);
+        pre.style.maxHeight = '420px';
+        pre.style.overflowY = 'auto';
         try {
           pre.innerHTML = syntaxHighlightJson(JSON.parse(att.stdout));
         } catch {
-          pre.textContent = stdoutDisplay;
+          pre.textContent = att.stdout;
         }
         body.appendChild(pre);
       }
@@ -9280,7 +9284,7 @@ function summarizeTurnDiff(diff) {
 
 // ── 2.1 Modal UI ────────────────────────────────────────────────
 
-function openDiffModal(turnKeyOrEntry) {
+function openSchemaDiffModal(turnKeyOrEntry) {
   let turnKey;
   if (typeof turnKeyOrEntry === 'string') {
     turnKey = turnKeyOrEntry;
@@ -9297,12 +9301,12 @@ function openDiffModal(turnKeyOrEntry) {
   _renderDiffModal();
 }
 
-function closeDiffModal() {
+function closeSchemaDiffModal() {
   document.getElementById('diffOverlay').classList.remove('open');
 }
 
-function onDiffOverlayClick(e) {
-  if (e.target === document.getElementById('diffOverlay')) closeDiffModal();
+function onSchemaDiffOverlayClick(e) {
+  if (e.target === document.getElementById('diffOverlay')) closeSchemaDiffModal();
 }
 
 function switchDiffTab(tab) {
@@ -9609,7 +9613,7 @@ function _makeDiffBtn(turnKey) {
   btn.className = 'diff-entry-btn';
   btn.textContent = '上下文变化';
   btn.title = 'Turn Diff / Context Diff';
-  btn.onclick = (e) => { e.stopPropagation(); openDiffModal(turnKey); };
+  btn.onclick = (e) => { e.stopPropagation(); openSchemaDiffModal(turnKey); };
   return btn;
 }
 
@@ -9985,11 +9989,11 @@ document.addEventListener('DOMContentLoaded', init);
 </script>
 
 <!-- Diff Modal -->
-<div id="diffOverlay" class="diff-overlay" onclick="onDiffOverlayClick(event)">
+<div id="diffOverlay" class="diff-overlay" onclick="onSchemaDiffOverlayClick(event)">
   <div class="diff-card">
     <div class="diff-card-hdr">
       <span class="diff-card-title">上下文变化 (Turn Diff)</span>
-      <button class="diff-card-close" onclick="closeDiffModal()">&times;</button>
+      <button class="diff-card-close" onclick="closeSchemaDiffModal()">&times;</button>
     </div>
     <div id="diffInfoBar" class="diff-info-bar"></div>
     <div class="diff-tab-nav">

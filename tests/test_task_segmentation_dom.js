@@ -1908,6 +1908,34 @@ async function test_turn_diff_long_content_and_line_highlight() {
   );
   assert.strictEqual(fields.text, longText, 'normalizeTurnFields should preserve long text');
 
+  const longThinking = 'short-start\n' + 'thinking detail\n'.repeat(180) + 'short-end';
+  const thinkingFields = win.normalizeTurnFields(
+    {
+      turnKey: 'g:conv:0:turn:100',
+      kind: 'thinking',
+      text: 'short summary',
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    },
+    { type: 'assistant', message: { content: [{ type: 'thinking', thinking: longThinking }] } }
+  );
+  assert.strictEqual(thinkingFields.thinking, longThinking, 'thinking diff should prefer full content block over turn summary');
+
+  const longResult = 'result-start\n' + 'tool output line\n'.repeat(220) + 'result-end';
+  const resultFields = win.normalizeTurnFields(
+    {
+      turnKey: 'g:conv:0:turn:101',
+      kind: 'tool_result',
+      text: 'short result',
+      resultSummary: 'short result',
+      toolUseId: 'toolu_long',
+      sourceEntryIdx: 0,
+      contentIndex: 0,
+    },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_long', is_error: false, content: longResult }] } }
+  );
+  assert.ok(resultFields.toolResult.includes(longResult), 'tool result diff should preserve full block content');
+
   const html = win.buildFieldRow('TEXT', 'alpha\nold', 'alpha\nnew', true);
   assert.ok(html.includes('diff-line removed'), 'changed old line should be highlighted');
   assert.ok(html.includes('diff-line added'), 'changed new line should be highlighted');
