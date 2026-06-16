@@ -160,6 +160,78 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         self.assertIn("renderPage(workbenchState.activeView)", snippet)
 
 
+class TestTurnLevelDiffFrontend(unittest.TestCase):
+    """Turn Diff fixed-slot frontend contract."""
+
+    def test_diff_uses_fixed_four_slots(self):
+        self.assertIn("const TURN_DIFF_SLOT_DEFS", _HTML)
+        slot_start = _HTML.index("const TURN_DIFF_SLOT_DEFS")
+        slot_end = _HTML.index("function formatToolCallBlock", slot_start)
+        snippet = _HTML[slot_start:slot_end]
+        for slot in ["thinking", "text", "toolCall", "toolResult"]:
+            self.assertIn(f"key: '{slot}'", snippet)
+
+    def test_normalize_turn_fields_excludes_noise_fields(self):
+        fn_start = _HTML.index("function normalizeTurnFields")
+        fn_end = _HTML.index("function turnDiffSlotStatus", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        for forbidden in [
+            "metadataSummary",
+            "commands",
+            "filesRead",
+            "filesChanged",
+            "errors",
+            "changes",
+            "patches",
+            "taskSegmentReports",
+        ]:
+            self.assertNotIn(forbidden, snippet)
+
+    def test_modal_renders_from_four_slots_only(self):
+        fn_start = _HTML.index("function renderDiffModalContent")
+        fn_end = _HTML.index("function renderDiffLines", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("TURN_DIFF_SLOT_DEFS", snippet)
+        self.assertIn("buildFieldRow", snippet)
+        for forbidden in [
+            "元数据",
+            "命令",
+            "已修改文件",
+            "已读取文件",
+            "错误",
+            "buildListFieldRow",
+            "buildStringListFieldRow",
+        ]:
+            self.assertNotIn(forbidden, snippet)
+
+    def test_field_row_has_old_new_line_diff_and_empty_state(self):
+        fn_start = _HTML.index("function buildFieldRow")
+        fn_end = _HTML.index("function buildListFieldRow", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("renderDiffLines", snippet)
+        self.assertIn("OLD", snippet)
+        self.assertIn("NEW", snippet)
+        self.assertIn("（无）", _HTML[_HTML.index("function renderDiffLines"):fn_start])
+        self.assertNotIn("trunc(", snippet)
+
+    def test_scroll_container_preserves_long_content(self):
+        css_start = _HTML.index(".diff-field-side {")
+        css_end = _HTML.index(".diff-field-side:first-child", css_start)
+        snippet = _HTML[css_start:css_end]
+        self.assertIn("max-height: 260px", snippet)
+        self.assertIn("overflow-y: auto", snippet)
+        self.assertIn("white-space: pre-wrap", snippet)
+
+    def test_diff_page_is_turn_index_not_task_dataset_files(self):
+        fn_start = _HTML.index("function renderDifferentialPage")
+        fn_end = _HTML.index("function refreshDiffPage", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("buildTurnDiffForTurn", snippet)
+        self.assertIn("openDiffModal", _HTML[_HTML.index("function openDiffFromDiffPage"): _HTML.index("// ── Turn Diff Modal")])
+        for forbidden in ["taskSegmentReports", "evidence?.filesChanged", "evidence?.filesRead"]:
+            self.assertNotIn(forbidden, snippet)
+
+
 class TestTaskSegmentationCache(unittest.TestCase):
     """7.2 — cache and state behavior"""
 
