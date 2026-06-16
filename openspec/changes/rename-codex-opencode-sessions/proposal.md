@@ -4,7 +4,7 @@ Codex 和 OpenCode adapter 已能读取本地会话元数据，但 Viewer 仍主
 
 ## What Changes
 
-- Viewer 在 session 列表、当前 session 标题区和必要的状态反馈中显示 session 名称；无名称时回退到 session id 或现有可读摘要。
+- Viewer 在 session 列表、当前 session 标题区和必要的状态反馈中显示 session 名称；无名称时回退到非 id 文案或现有可读摘要，默认可见 UI 不显示 raw/short session id。
 - Viewer 提供修改 session 名称的入口，支持保存中、成功、失败和取消状态。
 - 后端提供 session rename API，按当前 agent 路由到对应 adapter，并返回更新后的 session metadata。
 - Codex rename 成功后必须同步写回 `~/.codex/state_5.sqlite` 的 `threads.title`。

@@ -61,7 +61,7 @@ def _truncate(text: Any, max_len: int = 120) -> str:
 
 
 def _to_iso_timestamp(value: Any) -> str | None:
-    if value in (None, ""):
+    if value in (None, "") or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         number = float(value)
@@ -72,6 +72,10 @@ def _to_iso_timestamp(value: Any) -> str | None:
         try:
             number = float(stripped)
         except ValueError:
+            try:
+                datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+            except ValueError:
+                return None
             return stripped
     else:
         return None
@@ -236,7 +240,7 @@ class OpenCodeAdapter(AgentAdapter):
             sess_data: dict[str, Any] = {
                 "id": row["id"],
                 "title": row.get("title") or "",
-                "displayName": (row.get("title") or "") if row.get("title") else row["id"][:8],
+                "displayName": (row.get("title") or "") if row.get("title") else "Untitled session",
                 "canRenameSession": True,
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
@@ -267,7 +271,7 @@ class OpenCodeAdapter(AgentAdapter):
                 "id": row["id"],
                 "projectDir": row.get("project_dir") or "",
                 "title": row.get("title") or "",
-                "displayName": (row.get("title") or "") if row.get("title") else row["id"][:8],
+                "displayName": (row.get("title") or "") if row.get("title") else "Untitled session",
                 "canRenameSession": True,
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
@@ -781,7 +785,7 @@ class OpenCodeAdapter(AgentAdapter):
             usage["totalTokens"] = inp + outp
 
         native_title = session_row.get("title") or ""
-        display = native_title if native_title else session_id[:8]
+        display = native_title if native_title else "Untitled session"
         result: dict[str, Any] = {
             "sessionId": session_id,
             "projectDir": project_dir,

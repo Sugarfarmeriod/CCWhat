@@ -6151,11 +6151,13 @@ async function init() {
 
 function fmtSessionLabel(s) {
   const id = typeof s === 'string' ? s : s.id;
-  const displayName = typeof s === 'object' && s.displayName ? s.displayName : '';
+  const rawDisplayName = typeof s === 'object' && s.displayName ? String(s.displayName) : '';
+  const shortId = id ? String(id).slice(0, 8) : '';
+  const displayName = rawDisplayName && rawDisplayName !== id && rawDisplayName !== shortId ? rawDisplayName : '';
   const first = typeof s === 'object' && s.firstTimestamp ? fmtTs(s.firstTimestamp) : null;
   const last  = typeof s === 'object' && s.lastTimestamp  ? fmtTs(s.lastTimestamp)  : null;
   const times = first ? (last && last !== first ? `${first} ~ ${last}` : first) : '';
-  const name = displayName || id;
+  const name = displayName || 'Untitled session';
   const label = name.length > 32 ? name.slice(0, 32) + '…' : name;
   return times ? `${label} (${times})` : label;
 }
@@ -6178,12 +6180,15 @@ function updateSessionTitleBar(data) {
   }
 
   const title = data.title || '';
-  const displayName = data.displayName || data.sessionId.slice(0, 8);
+  const rawDisplayName = data.displayName ? String(data.displayName) : '';
+  const shortId = String(data.sessionId).slice(0, 8);
+  const hasVisibleDisplayName = rawDisplayName && rawDisplayName !== data.sessionId && rawDisplayName !== shortId;
+  const displayName = hasVisibleDisplayName ? rawDisplayName : 'Untitled session';
   const canRename = !!data.canRenameSession;
   currentSessionTitleMeta = { title, displayName, canRenameSession: canRename, sessionId: data.sessionId };
 
   nameEl.textContent = displayName;
-  nameEl.title = title || displayName;
+  nameEl.title = title || (hasVisibleDisplayName ? displayName : `Session ID: ${data.sessionId}`);
   var _meta = data._metadata || {};
   var _firstTs = data.firstTimestamp || _meta.firstTimestamp || _meta.created_at || _meta.time_created;
   var _lastTs  = data.lastTimestamp  || _meta.lastTimestamp  || _meta.updated_at || _meta.time_updated;

@@ -1113,6 +1113,22 @@ class TestSessionLabelBehavior(unittest.TestCase):
         self.assertIn("…", label)
         self.assertLess(len(label), len(long_name))
 
+    def test_missing_displayname_uses_non_id_fallback(self):
+        """Missing displayName must not expose raw or short session id in visible label."""
+        sid = "019ec10a-1234-5678-abcd-ef1234567890"
+        label = self._run_label({"id": sid})
+        self.assertEqual(label, "Untitled session")
+        self.assertNotIn(sid, label)
+        self.assertNotIn(sid[:8], label)
+
+    def test_id_like_displayname_uses_non_id_fallback(self):
+        """Adapter-provided id fallback must not become default visible UI text."""
+        sid = "019ec10a-1234-5678-abcd-ef1234567890"
+        raw_label = self._run_label({"id": sid, "displayName": sid})
+        short_label = self._run_label({"id": sid, "displayName": sid[:8]})
+        self.assertEqual(raw_label, "Untitled session")
+        self.assertEqual(short_label, "Untitled session")
+
 
 class TestTitleBarNoSessionId(unittest.TestCase):
     """Structural-behavioral tests: title bar must not expose raw session id."""
@@ -1191,7 +1207,7 @@ class TestCodexTimestampPropagation(unittest.TestCase):
             self.assertIn("2025-06-01", str(sess["firstTimestamp"]))
 
     def test_codex_no_timestamps_when_absent(self):
-        """When SQLite lacks created_at/updated_at, timestamps remain None."""
+        """When SQLite lacks created_at/updated_at, title/displayName remain readable."""
         with TemporaryDirectory() as tmp:
             pd = Path(tmp) / "sessions"
             session_dir = pd / "2025" / "06" / "03"
@@ -1218,6 +1234,8 @@ class TestCodexTimestampPropagation(unittest.TestCase):
             sess = projects[0]["sessions"][0]
             self.assertIsNone(sess["firstTimestamp"])
             self.assertIsNone(sess["lastTimestamp"])
+            self.assertEqual(sess["title"], "No TS")
+            self.assertEqual(sess["displayName"], "No TS")
 
 
 class TestCodexOpenCodeConsistency(unittest.TestCase):
@@ -1527,6 +1545,22 @@ class TestOpenCodeTimestampNormalization(unittest.TestCase):
             self.assertIsNone(data["firstTimestamp"])
             self.assertIsNone(data["lastTimestamp"])
 
+    def test_invalid_timestamp_strings_return_none(self):
+        """Invalid OpenCode timestamp strings must not be returned verbatim."""
+        with TemporaryDirectory() as tmp:
+            adapter = self._make_env(
+                tmp,
+                time_created="dirty-created",
+                time_updated="not a timestamp",
+            )
+            sess = adapter.list_projects()[0]["sessions"][0]
+            self.assertIsNone(sess["firstTimestamp"])
+            self.assertIsNone(sess["lastTimestamp"])
+            self.assertNotEqual(sess["firstTimestamp"], "dirty-created")
+            data = adapter.load_session("oc-ts-001")
+            self.assertIsNone(data["firstTimestamp"])
+            self.assertIsNone(data["lastTimestamp"])
+
 
 class TestCodexTimestampNormalization(unittest.TestCase):
     """Codex adapter must normalize SQLite timestamps to ISO."""
@@ -1622,6 +1656,24 @@ class TestCodexTimestampNormalization(unittest.TestCase):
             sess = adapter.list_projects()[0]["sessions"][0]
             self.assertIsNone(sess["firstTimestamp"])
             self.assertIsNone(sess["lastTimestamp"])
+            data = adapter.load_session(sid)
+            self.assertIsNone(data["firstTimestamp"])
+            self.assertIsNone(data["lastTimestamp"])
+            self.assertEqual(data["title"], "No TS")
+            self.assertEqual(data["displayName"], "No TS")
+
+    def test_invalid_timestamp_strings_return_none(self):
+        """Invalid SQLite timestamp strings must not be returned verbatim."""
+        with TemporaryDirectory() as tmp:
+            adapter, sid = self._make_env(
+                tmp,
+                created_at="dirty-created",
+                updated_at="not a timestamp",
+            )
+            sess = adapter.list_projects()[0]["sessions"][0]
+            self.assertIsNone(sess["firstTimestamp"])
+            self.assertIsNone(sess["lastTimestamp"])
+            self.assertNotEqual(sess["firstTimestamp"], "dirty-created")
             data = adapter.load_session(sid)
             self.assertIsNone(data["firstTimestamp"])
             self.assertIsNone(data["lastTimestamp"])
