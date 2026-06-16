@@ -84,7 +84,7 @@ CCWhat 现有多 agent adapter 已支持 Claude、Codex 和 OpenCode。Codex ada
 adapter/API 应按以下口径返回：
 
 - `title`: native 存储中的原始标题，可能为空字符串。
-- `displayName`: Viewer 展示用名称；优先使用非空 `title`，否则回退到短 session id、cwd/project basename 或现有 session id 标签。Viewer 默认可见 UI 使用 `displayName` 作为主要标签，不再额外拼接 `[shortId]` 或显示 raw session id。
+- `displayName`: Viewer 展示用名称；优先使用非空 `title`，否则回退到非 id 文案、cwd/project basename 或既有可读摘要。Viewer 默认可见 UI 使用 `displayName` 作为主要标签，但如果 adapter 或旧数据提供的是 raw session id / short session id fallback，前端必须改用非 id 文案，不得额外拼接 `[shortId]` 或显示 raw session id。
 - `canRenameSession`: 当前 session 是否允许通过 Viewer 写回 native title。
 
 `GET /api/projects` 中每个 session entry 和 `GET /api/session/<sessionId>` 的 loaded session metadata 都应包含这些字段。为了兼容现有代码，原有 `id`、`sessionId`、`projectDir`、`_metadata`、`events`、`turns` 等字段继续保留。
@@ -147,6 +147,7 @@ rename 只新增展示字段，不改变 session 的寻址模型：
 - adapter `load_session(session_id)` 继续以 session id 查找，不通过 title/displayName 解析目标。
 - export/import 和 Dataset 引用继续存储 session id。
 - 调试日志、错误响应、rename 成功/失败响应始终携带原始 `sessionId`。
+- session id 仍应保留在 tooltip、详情、复制字段、调试日志和 API 响应等识别/排障位置，但不得作为默认可见标题或 selector 标签 fallback。
 - 当多个 session 的 displayName 相同或相近时，前端在 selector option / 标题区同时展示非 id 区分信息（如时间范围、agent、项目路径摘要），不再使用 raw session id 或 short session id 作为可见区分信息。
 - Codex adapter 从 SQLite `threads.created_at` / `threads.updated_at` 向 session entry 的 `firstTimestamp` / `lastTimestamp` 传播时间，使同名 session 可通过时间区分。
 
