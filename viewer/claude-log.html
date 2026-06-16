@@ -1205,6 +1205,17 @@ body {
     cursor: pointer; white-space: nowrap; flex-shrink: 0; line-height: 1.6;
   }
   .diff-entry-btn:hover { background: color-mix(in srgb, var(--accent) 25%, var(--bg-surface)); }
+
+  /* ── Dark theme overrides ── */
+  [data-theme="dark"] .diff-msg-added  { background: rgba(48,209,88,0.18); }
+  [data-theme="dark"] .diff-msg-removed{ background: rgba(255,59,48,0.18); }
+  [data-theme="dark"] .diff-field-added   { background: rgba(48,209,88,0.18); }
+  [data-theme="dark"] .diff-field-removed { background: rgba(255,59,48,0.18); }
+  [data-theme="dark"] .diff-field-changed { background: rgba(255,159,10,0.18); }
+  [data-theme="dark"] .diff-special-tag {
+    background: rgba(175,82,222,0.20);
+    color: #bc8cff;
+  }
 </style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body class="app-shell">
