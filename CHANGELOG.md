@@ -2,6 +2,26 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.0 - 2026-06-17
+
+### Session 重命名 + 请求回放
+
+V2.2.0 新增两个面向实际使用场景的交互功能：在 Viewer 中直接为 Codex / OpenCode session 命名，以及在抓包页面回放历史请求并编辑内容再次发送。
+
+### 新增
+
+- **Session 重命名**：Viewer 顶部新增 session title bar，显示 session 名称和时间范围。Codex 和 OpenCode session 支持点击「✏️ 重命名」内联编辑，直接写入各自原生 DB（Codex 写 `state_5.sqlite`，OpenCode 写 `opencode.db`）。Claude Code session 标记为不支持重命名（无原生 title 存储）。
+- **`POST /api/session/<id>/rename` 接口**：标准化的重命名 API，含 session id 白名单校验、空 title 拦截，以及 `invalid_title` / `session_not_found` / `rename_not_supported` / `native_title_unavailable` / `native_title_write_failed` 五个错误码的精确 HTTP 状态映射。
+- **统一 title 元数据**：三个 Adapter（Claude / Codex / OpenCode）的 `list_projects`、`list_sessions`、`get_session` 返回值统一携带 `title`、`displayName`、`canRenameSession` 字段，前端可无差别消费。
+- **请求回放**：抓包页面（req-resp.html）支持对包含用户消息的请求发起回放，后端改为 JSON 非流式模式（`stream: false`），自动从 `ANTHROPIC_CUSTOM_HEADERS` 环境变量注入最新 `X-Client-Token`，解决录制 token 过期导致的 401 问题。前端移除 SSE 解析逻辑，直接渲染完整响应文本。
+
+### 改进
+
+- Codex SQLite 读取从位置索引（`row[0]`）升级为命名访问（`row["id"]`），并在读取前做 `PRAGMA table_info` 列名检查，兼容不同 Codex schema 版本。
+- Codex / OpenCode 时间戳归一化逻辑统一，正确处理 Unix 秒、Unix 毫秒和 ISO 字符串三种格式，并过滤 bool / 空值输入。
+
+---
+
 ## v2.1.0 - 2026-06-16
 
 ### Turn-Level Diff Viewer

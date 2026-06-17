@@ -2,37 +2,24 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v2.0.0 preview` · [更新日志](CHANGELOG.md)
+当前版本：`v2.2.0` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-### v2.0.0 preview — Task Dataset Builder：数据标准化
+### v2.2.0 — Session 重命名 + 请求回放
 
-从 Agent Session 中切分出的 Task 被清洗为标准 Dataset 格式，核心是四层结构：
+- **Session 重命名**：Viewer 顶部 title bar 直接显示 session 名称和时间范围。Codex / OpenCode session 支持内联重命名，写入各自原生 DB；Claude Code 标记为不支持（无原生 title 存储）。
+- **请求回放**：抓包页面对包含用户消息的请求发起回放，自动注入最新 `X-Client-Token`，以 JSON 非流式模式返回完整响应，支持原文回放和改写后发送。
 
-```text
-ccwhat-dataset/
-├── manifest.json        # 数据集元信息
-├── dataset.jsonl        # 任务定义索引，每行一个 task
-├── traces/              # task 执行过程详情
-│   ├── trace-task-001.json
-│   └── trace-task-002.json
-└── scores.jsonl         # 评分占位，第一版为空
-```
+### v2.1.0 — Turn-Level Diff Viewer
 
-- **`dataset.jsonl`**：只存任务定义，`id`、`input.instruction`、`input.repo`、`expected.success_criteria`、`metadata.agent/session_id/task_source/trace_path` 等。
-- **`traces/*.json`**：存完整执行过程，events、commands、files.read/changed、changes、patches、errors、final_claim、repo_state。
-- **`scores.jsonl`**：第一版为空，留给后续 evaluator 追加。
-- **`manifest.json`**：schema_version、tool、session、counts 等。
+- **`Diff with Prev` Modal**：在 Turn/Step 详情区一键打开相邻 Turn 结构对比弹层，9 个字段网格逐行展示，绿/红/橙色区分新增、删除、变更。支持上一组/下一组导航和手动 baseline 切换。
+- **Diff 页面升级**：左侧 Diff 页面改为 Turn diff 总览，列出所有 primary Turn 的变化摘要，点击直接打开对比 Modal。
 
-Dataset 可保存到 `~/.ccwhat/datasets/` 本地 Registry，也可导出为 `dataset-*.tar.gz` 压缩包。格式由 Dataset validator 自动校验。
+### v2.0.0 — Task Dataset Builder
 
-### v1.0.0 — Session Trace 双视图 + 自动任务切分闭环
-
-- **Session Trace 双视图**：默认视图只展示主执行 Step（用户请求、思考过程、Agent 回复、工具调用/结果），调试视图展示完整 Turn 时间线（含 system/context/permission/snapshot/queue 等内部事件）。
-- **自动任务切分**：从长 Session 中自动识别多个 Coding Task，切分后 Session Trace 自动切换为 `Task → 会话 → Step/Turn` 树形结构。
-- **Turn Detail 完整证据**：右侧详情区展示当前选中 Turn 的完整 tool input/output、thinking 全文、internal event 结构化字段、可展开 raw JSON 和定位信息。
-- **三 Agent 支持**：Claude Code（VS Code）、Codex、OpenCode 三类 Agent 的日志查看、任务切分、证据定位和分析报告完整覆盖。
+- 从 Session 中切分出的 Task 清洗为标准 Dataset 格式：`manifest.json` + `dataset.jsonl` + `traces/*.json` + `scores.jsonl`。
+- 支持保存到 `~/.ccwhat/datasets/` 本地 Registry 并导出 `dataset-*.tar.gz`，格式由 validator 自动校验。
 
 ---
 
