@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -13,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+import urllib.request
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
 from ccwhat.adapters.claude import ClaudeAdapter
@@ -118,6 +120,37 @@ def get_logs(
         all_records = [r for r in all_records if r.get("claude_session_id") == session_filter]
     all_records.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
     return {"records": all_records, "sessions": sessions}
+
+
+def _read_auth_token_from_config() -> str | None:
+    """Read AUTHORIZATION token from ~/.config/mcopilot-cli/.config.yaml."""
+    config_path = Path.home() / ".config" / "mcopilot-cli" / ".config.yaml"
+    try:
+        for line in config_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("AUTHORIZATION:"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def _parse_x_client_token_from_env() -> str | None:
+    """Parse X-Client-Token from ANTHROPIC_CUSTOM_HEADERS environment variable.
+
+    ANTHROPIC_CUSTOM_HEADERS format:
+        X-Repo-Url: xxx
+        X-Branch: xxx
+        X-Client-Token: <token-value>
+        ...
+    """
+    custom_headers = os.environ.get("ANTHROPIC_CUSTOM_HEADERS", "")
+    for line in custom_headers.split("\n"):
+        line = line.strip()
+        if line.startswith("X-Client-Token:"):
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                return parts[1].strip()
+    return None
 
 
 def get_req_resp_sessions(logs_dir: Path) -> dict[str, Any]:
@@ -229,6 +262,7 @@ def _make_handler(
     _analyzer_agent = analyzer_agent
     _analyzer_timeout = analyzer_timeout
     report_store: dict[str, dict] = {}
+    replay_store: dict[str, dict] = {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:
@@ -276,6 +310,113 @@ def _make_handler(
             self.end_headers()
             self.wfile.write(data)
 
+        def _handle_replay_create_session(self) -> None:
+            """Create a new replay session and store it in server memory."""
+            payload = self._read_json_body()
+            if payload is None:
+                self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
+                return
+
+            record = payload.get("record", {})
+            req_json = payload.get("reqJson", {})
+            original_text = payload.get("originalText", "")
+            record_key = payload.get("recordKey", "")
+
+            if not record or not req_json:
+                self._send_json({"ok": False, "error": "missing record or reqJson"}, 400)
+                return
+
+            session_id = uuid.uuid4().hex
+            session_data = {
+                "record": record,
+                "reqJson": req_json,
+                "originalText": original_text,
+                "editedText": original_text,
+                "isLoading": False,
+                "result": None,
+                "error": None,
+            }
+            replay_store[session_id] = session_data
+            if record_key:
+                replay_store[f"rk:{record_key}"] = session_data
+
+            self._send_json({"ok": True, "sessionId": session_id})
+
+        def _handle_replay_send(self) -> None:
+            """Send replay request using stored session."""
+            payload = self._read_json_body()
+            if payload is None:
+                self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
+                return
+
+            session_id = payload.get("sessionId", "")
+            edited_text = payload.get("editedText")
+
+            if not session_id or session_id not in replay_store:
+                self._send_json({"ok": False, "error": "session not found"}, 404)
+                return
+
+            session = replay_store[session_id]
+            if edited_text is not None:
+                session["editedText"] = edited_text
+
+            session["isLoading"] = True
+            req_body = json.loads(json.dumps(session["reqJson"]))
+            msgs = req_body.get("messages", [])
+
+            if msgs:
+                last_msg = msgs[-1]
+                content = last_msg.get("content", "")
+                if isinstance(content, str):
+                    last_msg["content"] = session["editedText"]
+                elif isinstance(content, list):
+                    for block in content:
+                        if block.get("type") == "text":
+                            block["text"] = session["editedText"]
+                            break
+                    if not any(b.get("type") == "text" for b in content):
+                        last_msg["content"] = session["editedText"]
+
+            api_url = os.environ.get("CLAUDE_API_URL", "https://mcli.sankuai.com/v1/messages")
+            if "?" not in api_url:
+                api_url += "?beta=true"
+
+            record = session["record"]
+            orig_headers = record.get("request", {}).get("headers", {})
+            hop_by_hop = {"host", "content-length", "accept-encoding", "connection", "transfer-encoding", "keep-alive"}
+            headers = {k: v for k, v in orig_headers.items() if k.lower() not in hop_by_hop}
+
+            fresh_token = _parse_x_client_token_from_env()
+            if fresh_token:
+                headers["X-Client-Token"] = fresh_token
+
+            auth_token = _read_auth_token_from_config() or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            if auth_token:
+                headers["Authorization"] = f"Bearer {auth_token}"
+
+            req_body["stream"] = False
+            headers["Accept"] = "application/json"
+
+            try:
+                data = json.dumps(req_body).encode("utf-8")
+                req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+                response = urllib.request.urlopen(req, timeout=600)
+                status = response.getcode()
+                if status != 200:
+                    error_body = response.read().decode("utf-8", errors="replace")[:500]
+                    response.close()
+                    raise Exception(f"API returned status {status}: {error_body}")
+                response_data = response.read()
+                response.close()
+                result = json.loads(response_data)
+                session["result"] = result
+                session["isLoading"] = False
+                self._send_json({"ok": True, "result": result})
+            except Exception as e:
+                session["isLoading"] = False
+                session["error"] = str(e)
+                self._send_json({"ok": False, "error": str(e)}, 500)
+
         def _get_sessions_data(self) -> list[dict[str, Any]]:
             if _adapter is not None:
                 return _adapter.list_projects()
@@ -302,6 +443,15 @@ def _make_handler(
             total_started = time.monotonic()
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/")
+
+            # Handle replay endpoints (no session validation required)
+            if path == "/api/replay/session":
+                self._handle_replay_create_session()
+                return
+            if path == "/api/replay/send":
+                self._handle_replay_send()
+                return
+
             if path not in ("/api/analyze", "/api/task-segments", "/api/save-task-dataset"):
                 self._send_json({"ok": False, "error": "not found"}, 404)
                 return
@@ -452,6 +602,28 @@ def _make_handler(
             }
             if path in _static:
                 self._send_file(viewer_dir / _static[path])
+                return
+            if path == "/api/replay/status":
+                from urllib.parse import parse_qs
+                params = parse_qs(query)
+                record_key = params.get("recordKey", [""])[0]
+                if not record_key:
+                    self._send_json({"error": "missing recordKey parameter"}, 400)
+                    return
+                rk_key = f"rk:{record_key}"
+                if rk_key in replay_store:
+                    session = replay_store[rk_key]
+                    self._send_json({
+                        "ok": True,
+                        "hasReplay": True,
+                        "originalText": session["originalText"],
+                        "editedText": session["editedText"],
+                        "result": session.get("result"),
+                        "isLoading": session.get("isLoading", False),
+                        "error": session.get("error"),
+                    })
+                else:
+                    self._send_json({"ok": True, "hasReplay": False})
                 return
             if path == "/api/viewer/status":
                 self._send_json({

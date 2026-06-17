@@ -418,6 +418,121 @@ select.field { cursor: pointer; }
 .source-chip-agent { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
 .source-chip-unknown { background: var(--bg-surface); color: var(--text-secondary); border-color: var(--border); }
 .source-loading { font-size: 11px; color: var(--accent); display: flex; align-items: center; }
+
+/* ── Replay Modal ─────────────────────────────────────────────────────────── */
+#replayModal {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6); z-index: 1000;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+#replayModal.open { display: flex; }
+.replay-modal-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  width: min(95vw, 1400px); height: min(95vh, 900px);
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-md);
+}
+.replay-modal-header {
+  background: var(--bg-surface); padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.replay-modal-header h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.replay-modal-close {
+  background: none; border: none; color: var(--text-tertiary); font-size: 20px;
+  cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s;
+}
+.replay-modal-close:hover { color: var(--text-primary); }
+.replay-modal-body {
+  flex: 1; overflow: auto; padding: 16px;
+  background: var(--bg-base);
+}
+.replay-edit-section {
+  display: flex; flex-direction: column; gap: 12px; height: 100%;
+}
+.replay-textarea {
+  flex: 1; width: 100%; min-height: 200px;
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px; font-size: 13px; font-family: var(--font-mono);
+  resize: none; line-height: 1.6;
+}
+.replay-textarea:focus { outline: none; border-color: var(--accent); }
+.replay-actions {
+  display: flex; gap: 10px; justify-content: flex-end; padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.replay-btn {
+  padding: 8px 16px; font-size: 13px; cursor: pointer;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  font-family: var(--font-sans); transition: all 0.15s;
+}
+.replay-btn-primary {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.replay-btn-primary:hover { background: var(--accent-hover); }
+.replay-btn-secondary {
+  background: var(--bg-surface); color: var(--text-primary);
+}
+.replay-btn-secondary:hover { background: var(--bg-elevated); }
+.replay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.replay-loading {
+  display: flex; align-items: center; gap: 10px;
+  padding: 20px; color: var(--text-secondary);
+  font-size: 13px;
+}
+.replay-spinner {
+  width: 16px; height: 16px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.replay-diff-section {
+  display: flex; flex-direction: column; height: 100%;
+}
+.replay-diff-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.replay-diff-header h4 { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.replay-diff-grid {
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 12px; flex: 1; min-height: 0;
+}
+.replay-diff-cell {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.replay-diff-cell-header {
+  background: var(--bg-elevated); padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.replay-diff-cell-header h5 {
+  font-size: 12px; font-weight: 600; color: var(--text-primary); margin: 0;
+}
+.replay-diff-cell-content {
+  flex: 1; overflow: auto; padding: 12px;
+  font-size: 12px; line-height: 1.6;
+}
+.replay-diff-cell-content pre {
+  margin: 0; white-space: pre-wrap; word-break: break-all;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-secondary);
+}
+.replay-btn-sm {
+  padding: 4px 10px; font-size: 11px;
+}
+/* Replay button in record list */
+.replay-action-btn {
+  font-size: 10px; padding: 2px 8px;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 3px; cursor: pointer; margin-left: 6px;
+  opacity: 0.9; transition: opacity 0.15s;
+}
+.replay-action-btn:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -920,6 +1035,8 @@ function renderList() {
       }
     }
 
+    const cacheKey = getRecordCacheKey(r, i);
+    const isRunning = isReplayRunning && runningReplayKey === cacheKey;
     el.innerHTML =
       `<div class="ri-row1">` +
         `<span class="ri-lineno">#${i + 1}</span>` +
@@ -927,6 +1044,7 @@ function renderList() {
         `<span class="ri-method">${esc(r.method || '')}</span>` +
         `<span class="ri-status ${statusCls}">${status}</span>` +
         (isSSE ? `<span class="sse-badge">SSE</span>` : '') +
+        (isSSE ? `<button class="replay-action-btn" data-idx="${i}" ${isRunning ? 'disabled' : ''}>${isRunning ? '⏳' : '▶'} 回放</button>` : '') +
         (totalInTokens || outTokens
           ? `<span style="font-size:10px;color:#6e7681;margin-left:auto;font-family:monospace;display:flex;gap:6px">` +
             (totalInTokens ? `<span title="总输入 tokens">in:${totalInTokens}</span>` : '') +
@@ -936,7 +1054,21 @@ function renderList() {
       `</div>` +
       `<div class="ri-url">${esc(urlDisplay)}</div>`;
 
-    el.onclick = () => selectRecord(i);
+    el.onclick = (e) => {
+      if (e.target.classList.contains('replay-action-btn')) {
+        e.stopPropagation();
+        const record = allRecords[i];
+        const reqJson = JSON.parse(record.request?.body || '{}');
+        const msgs = reqJson.messages || [];
+        let userMsg = null;
+        for (let j = msgs.length - 1; j >= 0; j--) {
+          if (msgs[j].role === 'user') { userMsg = msgs[j]; break; }
+        }
+        openReplayModal(record, i, reqJson, userMsg);
+      } else {
+        selectRecord(i);
+      }
+    };
     list.appendChild(el);
   });
 }
@@ -1843,8 +1975,299 @@ function renderDetail(r, idx) {
   }
 }
 
+// ── Replay functions ───────────────────────────────────────────────────────
+let isReplayRunning = false;
+let runningReplayKey = null;
+let currentModalRecord = null;
+let currentModalRecordKey = null;
+let currentModalRecordIdx = null;
+
+function setReplayRunning(running, cacheKey) {
+  isReplayRunning = running;
+  runningReplayKey = running ? cacheKey : null;
+  renderList();
+}
+
+function getRecordCacheKey(record, idx) {
+  if (record._message_id) return `msg:${record._message_id}`;
+  if (record._fileLine) return `line:${record._fileLine}`;
+  return `idx:${idx}`;
+}
+
+async function openReplayModal(record, recordIdx, reqJson, userMsg) {
+  currentModalRecord = record;
+  currentModalRecordIdx = recordIdx;
+  currentModalRecordKey = getRecordCacheKey(record, recordIdx);
+  try {
+    const statusUrl = `${apiBase()}/api/replay/status?recordKey=${encodeURIComponent(currentModalRecordKey)}`;
+    const statusResp = await fetch(statusUrl);
+    const statusData = await statusResp.json();
+    if (statusData.ok && statusData.hasReplay && statusData.result) {
+      renderReplayDiffView(statusData);
+    } else {
+      renderReplayEditView(record, reqJson, userMsg);
+    }
+    document.getElementById('replayModal').classList.add('open');
+  } catch (err) {
+    alert('打开回放弹窗失败: ' + err.message);
+  }
+}
+
+function closeReplayModal() {
+  document.getElementById('replayModal').classList.remove('open');
+  currentModalRecord = null;
+  currentModalRecordKey = null;
+  currentModalRecordIdx = null;
+}
+
+function renderReplayEditView(record, reqJson, userMsg) {
+  const modalBody = document.getElementById('replayModalBody');
+  const msgs = reqJson.messages || [];
+  const lastMsg = msgs[msgs.length - 1];
+  const editText = extractMsgText(lastMsg);
+  const msgTypeHint = lastMsg ? `[${lastMsg.role}${lastMsg.name ? ': ' + lastMsg.name : ''}]` : '';
+  modalBody.innerHTML = `
+    <div class="replay-edit-section">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">编辑消息内容 ${esc(msgTypeHint)}</div>
+      <textarea id="replayModalTextarea" class="replay-textarea" placeholder="输入消息内容...">${esc(editText)}</textarea>
+      <div class="replay-actions">
+        <button class="replay-btn replay-btn-secondary" onclick="sendReplayFromModal(true)">原文不改，直接回放</button>
+        <button class="replay-btn replay-btn-primary" onclick="sendReplayFromModal(false)">发送改写版本</button>
+      </div>
+    </div>
+    <div id="replayModalResult" style="flex:1;overflow:auto;"></div>
+  `;
+}
+
+function renderReplayDiffView(statusData) {
+  const modalBody = document.getElementById('replayModalBody');
+  const originalReqJson = currentModalRecord?.request?.body ? JSON.parse(currentModalRecord.request.body) : {};
+  const originalMsgs = originalReqJson.messages || [];
+  const originalLastMsg = originalMsgs[originalMsgs.length - 1];
+  const originalPrompt = extractMsgText(originalLastMsg);
+  const editedPrompt = statusData.editedText || statusData.originalText || originalPrompt;
+  const originalParsed = currentModalRecord?._sse_parsed;
+  const originalResult = originalParsed ? convertSseParsedToResult(originalParsed) : null;
+  const replayResult = statusData.result;
+  modalBody.innerHTML = `
+    <div class="replay-diff-section">
+      <div class="replay-diff-header">
+        <h4>对比视图</h4>
+        <button class="replay-btn replay-btn-secondary replay-btn-sm" onclick="switchToEditView()">重新编辑</button>
+      </div>
+      <div class="replay-diff-grid">
+        <div class="replay-diff-cell">
+          <div class="replay-diff-cell-header"><h5>原始 Prompt</h5></div>
+          <div class="replay-diff-cell-content"><pre>${esc(originalPrompt)}</pre></div>
+        </div>
+        <div class="replay-diff-cell">
+          <div class="replay-diff-cell-header"><h5>回放 Prompt</h5></div>
+          <div class="replay-diff-cell-content"><pre>${esc(editedPrompt)}</pre></div>
+        </div>
+        <div class="replay-diff-cell">
+          <div class="replay-diff-cell-header"><h5>原始响应</h5></div>
+          <div class="replay-diff-cell-content">${renderResponseMarkdownNoThinking(originalResult)}</div>
+        </div>
+        <div class="replay-diff-cell">
+          <div class="replay-diff-cell-header"><h5>回放响应</h5></div>
+          <div class="replay-diff-cell-content">${renderResponseMarkdown(replayResult)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function extractMsgText(msg) {
+  if (!msg) return '';
+  const content = msg.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const block of content) {
+      if (block.type === 'text' && block.text) parts.push(block.text);
+      else if (block.type === 'thinking' && block.thinking) parts.push(`[Thinking] ${block.thinking}`);
+      else if (block.type === 'tool_result' && block.content) {
+        if (typeof block.content === 'string') parts.push(`[Tool Result] ${block.content}`);
+        else if (Array.isArray(block.content)) {
+          const toolTexts = block.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+          parts.push(`[Tool Result] ${toolTexts}`);
+        }
+      } else if (block.type === 'tool_use') {
+        parts.push(`[Tool Use: ${block.name}] ${JSON.stringify(block.input)}`);
+      }
+    }
+    return parts.join('\n\n');
+  }
+  if (msg.text) return msg.text;
+  if (msg.thinking) return msg.thinking;
+  return '';
+}
+
+function convertSseParsedToResult(sseParsed) {
+  if (!sseParsed || !sseParsed.contents) return null;
+  const content = [];
+  sseParsed.contents.forEach(item => {
+    if (item.type === 'text') content.push({ type: 'text', text: item.text });
+    else if (item.type === 'tool_use') content.push({ type: 'tool_use', name: item.name, input: item.input });
+    else if (item.type === 'tool_result') content.push({ type: 'tool_result', content: item.content });
+  });
+  return { content };
+}
+
+function renderResponseMarkdown(responseJson) {
+  if (!responseJson) return '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+  const content = responseJson.content || [];
+  if (content.length === 0) return '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+  let html = '';
+  content.forEach(block => {
+    if (block.type === 'text' && block.text) {
+      html += renderMarkdown(block.text);
+    } else if (block.type === 'tool_use') {
+      html += `<div style="background:var(--bg-surface);padding:10px;border-radius:4px;margin:8px 0;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--accent);margin-bottom:4px">Tool: ${esc(block.name || '')}</div>
+        <pre style="font-size:11px;overflow-x:auto">${esc(JSON.stringify(block.input, null, 2))}</pre>
+      </div>`;
+    } else if (block.type === 'tool_result') {
+      let toolContent = '';
+      if (typeof block.content === 'string') toolContent = block.content;
+      else if (Array.isArray(block.content)) toolContent = block.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      html += `<div style="background:color-mix(in srgb, var(--success) 8%, transparent);padding:10px;border-radius:4px;margin:8px 0;border-left:3px solid var(--success)">
+        <div style="font-size:10px;color:var(--success);margin-bottom:4px">Tool Result</div>
+        <div style="font-size:12px">${esc(toolContent)}</div>
+      </div>`;
+    }
+  });
+  return html || '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+}
+
+function renderResponseMarkdownNoThinking(responseJson) {
+  if (!responseJson) return '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+  const content = responseJson.content || [];
+  if (content.length === 0) return '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+  let html = '';
+  content.forEach(block => {
+    if (block.type === 'text' && block.text) html += renderMarkdown(block.text);
+    else if (block.type === 'tool_use') {
+      html += `<div style="background:var(--bg-surface);padding:10px;border-radius:4px;margin:8px 0;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--accent);margin-bottom:4px">Tool: ${esc(block.name || '')}</div>
+        <pre style="font-size:11px;overflow-x:auto">${esc(JSON.stringify(block.input, null, 2))}</pre>
+      </div>`;
+    } else if (block.type === 'tool_result') {
+      let toolContent = '';
+      if (typeof block.content === 'string') toolContent = block.content;
+      else if (Array.isArray(block.content)) toolContent = block.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      html += `<div style="background:color-mix(in srgb, var(--success) 8%, transparent);padding:10px;border-radius:4px;margin:8px 0;border-left:3px solid var(--success)">
+        <div style="font-size:10px;color:var(--success);margin-bottom:4px">Tool Result</div>
+        <div style="font-size:12px">${esc(toolContent)}</div>
+      </div>`;
+    }
+  });
+  return html || '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
+}
+
+async function switchToEditView() {
+  if (!currentModalRecord) return;
+  const statusResp = await fetch(`${apiBase()}/api/replay/status?recordKey=${encodeURIComponent(currentModalRecordKey)}`);
+  const statusData = await statusResp.json();
+  let editText = '';
+  if (statusData.ok && statusData.hasReplay) {
+    editText = statusData.editedText || statusData.originalText || '';
+  } else {
+    try {
+      const body = JSON.parse(currentModalRecord.request?.body || '{}');
+      const msgs = body.messages || [];
+      const lastMsg = msgs[msgs.length - 1];
+      if (lastMsg) editText = extractMsgText(lastMsg);
+    } catch {}
+  }
+  let msgTypeHint = '';
+  try {
+    const body = JSON.parse(currentModalRecord.request?.body || '{}');
+    const msgs = body.messages || [];
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg) msgTypeHint = `[${lastMsg.role}${lastMsg.name ? ': ' + lastMsg.name : ''}]`;
+  } catch {}
+  const modalBody = document.getElementById('replayModalBody');
+  modalBody.innerHTML = `
+    <div class="replay-edit-section">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">编辑消息内容 ${esc(msgTypeHint)}</div>
+      <textarea id="replayModalTextarea" class="replay-textarea" placeholder="输入消息内容...">${esc(editText)}</textarea>
+      <div class="replay-actions">
+        <button class="replay-btn replay-btn-secondary" onclick="sendReplayFromModal(true)">原文不改，直接回放</button>
+        <button class="replay-btn replay-btn-primary" onclick="sendReplayFromModal(false)">发送改写版本</button>
+      </div>
+    </div>
+    <div id="replayModalResult" style="flex:1;overflow:auto;"></div>
+  `;
+}
+
+async function sendReplayFromModal(useOriginal) {
+  const textarea = document.getElementById('replayModalTextarea');
+  const resultDiv = document.getElementById('replayModalResult');
+  const editedText = useOriginal ? null : textarea.value;
+  setReplayRunning(true, currentModalRecordKey);
+  resultDiv.innerHTML = `<div class="replay-loading"><span class="replay-spinner"></span><span>请求中...</span></div>`;
+  document.querySelectorAll('.replay-btn').forEach(btn => btn.disabled = true);
+  try {
+    const record = currentModalRecord;
+    const reqJson = JSON.parse(record.request?.body || '{}');
+    let userMsg = null;
+    let originalText = '';
+    const msgs = reqJson.messages || [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        userMsg = msgs[i];
+        const content = userMsg.content || '';
+        originalText = typeof content === 'string' ? content : (content.find(b => b.type === 'text')?.text || '');
+        break;
+      }
+    }
+    const createResp = await fetch(`${apiBase()}/api/replay/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record, reqJson, userMsg, originalText, recordKey: currentModalRecordKey })
+    });
+    if (!createResp.ok) throw new Error(`Failed to create session: ${createResp.status}`);
+    const createData = await createResp.json();
+    if (!createData.ok) throw new Error(createData.error || 'Failed to create session');
+    const sendResp = await fetch(`${apiBase()}/api/replay/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: createData.sessionId, editedText })
+    });
+    if (!sendResp.ok) {
+      const errorText = await sendResp.text();
+      throw new Error(`HTTP ${sendResp.status}: ${errorText}`);
+    }
+    const sendData = await sendResp.json();
+    if (!sendData.ok) throw new Error(sendData.error || 'Unknown error');
+    const statusResp = await fetch(`${apiBase()}/api/replay/status?recordKey=${encodeURIComponent(currentModalRecordKey)}`);
+    const statusData = await statusResp.json();
+    if (statusData.ok && statusData.hasReplay) renderReplayDiffView(statusData);
+  } catch (err) {
+    resultDiv.innerHTML = `<div style="color:var(--danger);padding:20px">错误: ${esc(err.message)}</div>`;
+  } finally {
+    document.querySelectorAll('.replay-btn').forEach(btn => btn.disabled = false);
+    setReplayRunning(false, null);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 init();
 </script>
+
+<!-- Replay Modal -->
+<div id="replayModal">
+  <div class="replay-modal-card">
+    <div class="replay-modal-header">
+      <h3>🔁 请求回放</h3>
+      <button class="replay-modal-close" onclick="closeReplayModal()">&times;</button>
+    </div>
+    <div class="replay-modal-body" id="replayModalBody">
+      <!-- Content will be dynamically inserted here -->
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
