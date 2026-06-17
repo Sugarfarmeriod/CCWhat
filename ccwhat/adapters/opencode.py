@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ccwhat.adapters.base import AgentAdapter
+from ccwhat.adapters.base import AgentAdapter, SessionRenameError
 
 
 _OPCODE_DB_PATH = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
@@ -61,7 +61,7 @@ def _truncate(text: Any, max_len: int = 120) -> str:
 
 
 def _to_iso_timestamp(value: Any) -> str | None:
-    if value in (None, ""):
+    if value in (None, "") or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         number = float(value)
@@ -72,6 +72,10 @@ def _to_iso_timestamp(value: Any) -> str | None:
         try:
             number = float(stripped)
         except ValueError:
+            try:
+                datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+            except ValueError:
+                return None
             return stripped
     else:
         return None
@@ -236,11 +240,13 @@ class OpenCodeAdapter(AgentAdapter):
             sess_data: dict[str, Any] = {
                 "id": row["id"],
                 "title": row.get("title") or "",
+                "displayName": (row.get("title") or "") if row.get("title") else "Untitled session",
+                "canRenameSession": True,
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
                 "model": row.get("model"),
-                "firstTimestamp": str(row.get("time_created") or ""),
-                "lastTimestamp": str(row.get("time_updated") or ""),
+                "firstTimestamp": _to_iso_timestamp(row.get("time_created")),
+                "lastTimestamp": _to_iso_timestamp(row.get("time_updated")),
             }
             if ti is not None:
                 sess_data["tokensInput"] = ti
@@ -265,11 +271,13 @@ class OpenCodeAdapter(AgentAdapter):
                 "id": row["id"],
                 "projectDir": row.get("project_dir") or "",
                 "title": row.get("title") or "",
+                "displayName": (row.get("title") or "") if row.get("title") else "Untitled session",
+                "canRenameSession": True,
                 "agent": "opencode",
                 "opencodeAgent": raw_agent,
                 "model": row.get("model"),
-                "firstTimestamp": str(row.get("time_created") or ""),
-                "lastTimestamp": str(row.get("time_updated") or ""),
+                "firstTimestamp": _to_iso_timestamp(row.get("time_created")),
+                "lastTimestamp": _to_iso_timestamp(row.get("time_updated")),
             }
             if ti is not None:
                 sess["tokensInput"] = ti
@@ -277,6 +285,81 @@ class OpenCodeAdapter(AgentAdapter):
                 sess["tokensOutput"] = to
             sessions.append(sess)
         return sessions
+
+    @property
+    def can_rename_session(self) -> bool:
+        return True
+
+    def rename_session(self, session_id: str, title: str) -> dict[str, Any]:
+        """Write title to OpenCode opencode.db session.title."""
+        title = title.strip()
+        if not title:
+            raise SessionRenameError("invalid_title", "Title must not be empty after trimming.")
+
+        db_path = self._get_db_path()
+        if db_path is None or not db_path.exists():
+            raise SessionRenameError(
+                "native_title_unavailable",
+                "OpenCode database not found.",
+            )
+
+        try:
+            conn = sqlite3.connect(str(db_path), timeout=5)
+            cur = conn.cursor()
+            # Verify schema
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session'")
+            if cur.fetchone() is None:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "OpenCode database missing 'session' table.",
+                )
+            # Check columns
+            cur.execute("PRAGMA table_info(session)")
+            columns = {row[1] for row in cur.fetchall()}
+            if "id" not in columns or "title" not in columns:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "OpenCode session table missing 'id' or 'title' column.",
+                )
+            # Perform update under lock
+            with self._conn_lock:
+                cur.execute("UPDATE session SET title = ? WHERE id = ?", (title, session_id))
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    conn.close()
+                    raise SessionRenameError(
+                        "session_not_found",
+                        f"No session with id '{session_id}' found in OpenCode DB.",
+                    )
+                conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"OpenCode SQLite write failed: {exc}",
+            ) from exc
+        except sqlite3.DatabaseError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"OpenCode SQLite error: {exc}",
+            ) from exc
+
+        # Reset cached connection so subsequent reads reflect new title
+        with self._conn_lock:
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:
+                    pass
+                self._conn = None
+
+        return {
+            "title": title,
+            "displayName": title,
+            "canRenameSession": True,
+        }
 
     def raw_to_normalized_events(
         self, raw_entry: dict[str, Any], session_id: str
@@ -653,7 +736,7 @@ class OpenCodeAdapter(AgentAdapter):
         session_row = self._query_one(
             "SELECT id, project_id, directory, title, agent, model, "
             "tokens_input, tokens_output, tokens_reasoning, "
-            "tokens_cache_read, tokens_cache_write, cost, time_created "
+            "tokens_cache_read, tokens_cache_write, cost, time_created, time_updated "
             "FROM session WHERE id = ?",
             (session_id,),
         )
@@ -701,6 +784,8 @@ class OpenCodeAdapter(AgentAdapter):
         if inp is not None and outp is not None:
             usage["totalTokens"] = inp + outp
 
+        native_title = session_row.get("title") or ""
+        display = native_title if native_title else "Untitled session"
         result: dict[str, Any] = {
             "sessionId": session_id,
             "projectDir": project_dir,
@@ -710,8 +795,13 @@ class OpenCodeAdapter(AgentAdapter):
             "events": events,
             "turns": turns,
             "usage": usage,
+            "title": native_title,
+            "displayName": display,
+            "canRenameSession": True,
+            "firstTimestamp": _to_iso_timestamp(session_row.get("time_created")),
+            "lastTimestamp": _to_iso_timestamp(session_row.get("time_updated")),
             "_metadata": {
-                "title": session_row.get("title") or "",
+                "title": native_title,
                 "model": model_info,
                 "cost": session_row.get("cost") or 0,
                 "opencodeAgent": agent_name,
