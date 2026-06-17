@@ -346,49 +346,68 @@ def run(
         )
         sys.exit(1)
 
+    agent_name = infer_agent_from_target(target_args)
     cfg = load_config(config_path)
 
+    # Auto-detect domains from agent config when no manual config exists
+    _auto_domains: list[str] = []
+    _auto_paths: list[str] = []
     if not no_setup and (cfg is None or not cfg.is_valid_for_recording()):
-        is_interactive = sys.stdin.isatty()
-        if is_interactive:
-            click.echo(
-                "No recording configuration found.\n"
-                "Starting first-run setup wizard...\n"
-            )
-            from ccwhat.commands.setup import _run_setup_wizard
-            cfg = _run_setup_wizard(config_path)
+        from ccwhat import agent_config as _agent_config
+        _auto_domains = _agent_config.detect_domains(agent_name)
+        if _auto_domains:
+            _auto_paths = _agent_config.detect_default_paths(agent_name)
         else:
-            click.echo(
-                "Error: no recording domains configured. Set up recording with:\n"
-                "  ccwhat setup --preset claude --yes\n"
-                "  ccwhat setup --preset codex --yes\n"
-                "  ccwhat discover\n"
-                "Or pass --no-setup to launch without payload recording.",
-                err=True,
-            )
-            sys.exit(1)
+            is_interactive = sys.stdin.isatty()
+            if is_interactive:
+                click.echo(
+                    "No recording configuration found.\n"
+                    "Starting first-run setup wizard...\n"
+                )
+                from ccwhat.commands.setup import _run_setup_wizard
+                cfg = _run_setup_wizard(config_path)
+            else:
+                click.echo(
+                    "Error: no recording domains configured. Set up recording with:\n"
+                    "  ccwhat setup --preset claude --yes\n"
+                    "  ccwhat setup --preset codex --yes\n"
+                    "  ccwhat discover\n"
+                    "Or pass --no-setup to launch without payload recording.",
+                    err=True,
+                )
+                sys.exit(1)
 
-    if no_setup or cfg is None or not cfg.is_valid_for_recording():
+    from ccwhat.config import DEFAULT_MAX_BODY_BYTES, DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_PATTERNS
+    if no_setup:
         effective_domains: list[str] = []
         effective_paths: list[str] = []
-        from ccwhat.config import DEFAULT_MAX_BODY_BYTES, DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_PATTERNS
         max_body_bytes = DEFAULT_MAX_BODY_BYTES
         redact_headers = list(DEFAULT_REDACT_HEADERS)
         redact_patterns = list(DEFAULT_REDACT_PATTERNS)
-        if no_setup:
-            click.echo("Note: payload recording disabled (--no-setup). Traffic is proxied for discovery only.")
-    else:
+        click.echo("Note: payload recording disabled (--no-setup). Traffic is proxied for discovery only.")
+    elif _auto_domains:
+        effective_domains = _auto_domains
+        effective_paths = _auto_paths
+        max_body_bytes = DEFAULT_MAX_BODY_BYTES
+        redact_headers = list(DEFAULT_REDACT_HEADERS)
+        redact_patterns = list(DEFAULT_REDACT_PATTERNS)
+        click.echo(f"Auto-detected domains : {', '.join(effective_domains)} (from {agent_name} config)")
+    elif cfg is not None and cfg.is_valid_for_recording():
         effective_domains = cfg.effective_domains()
         effective_paths = cfg.effective_paths()
         max_body_bytes = cfg.max_body_bytes
         redact_headers = cfg.redact_headers
         redact_patterns = cfg.redact_header_patterns
+    else:
+        effective_domains = []
+        effective_paths = []
+        max_body_bytes = DEFAULT_MAX_BODY_BYTES
+        redact_headers = list(DEFAULT_REDACT_HEADERS)
+        redact_patterns = list(DEFAULT_REDACT_PATTERNS)
 
     local_session_id = generate_local_session_id()
     proxy_proc: subprocess.Popen | None = None
     web_server: HTTPServer | None = None
-
-    agent_name = infer_agent_from_target(target_args)
 
     if _proxy_is_running(port):
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")

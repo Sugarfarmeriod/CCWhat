@@ -1,0 +1,87 @@
+## Context
+
+ccwhat 通过 mitmproxy 拦截 coding agent 的 HTTPS 流量，录制的 domain 列表由 `~/.ccwhat/config.toml` 提供。当前用户必须提前执行 `ccwhat setup` 完成配置，否则 `run` 命令会触发交互式向导或直接报错退出。
+
+各主流 coding agent 在固定路径存储自己的 API 配置：
+
+| Agent | 配置文件 | 格式 |
+|-------|---------|------|
+| opencode | `~/.config/opencode/opencode.jsonc` | JSONC（含注释） |
+| claude | `~/.claude/settings.json` | JSON |
+| codex | `~/.codex/config.toml` | TOML |
+
+agent 名在 `run.py` 中已通过 `infer_agent_from_target()` 推断出来，可直接复用。
+
+## Goals / Non-Goals
+
+**Goals:**
+- `ccwhat -- opencode` 无需任何前置配置即可录制流量
+- 从 agent 配置读取**全量** provider baseURL，支持用户中途切换 model 仍能被录制
+- `~/.ccwhat/config.toml` 中已有的 domain 配置继续生效（手动配置优先级最高）
+
+**Non-Goals:**
+- 不支持运行时动态追加新 domain（代理启动后 domain 列表固定）
+- 不解析 `--model` 参数做精确 provider 匹配
+- 不修改 recorder.py 逻辑
+- 不废弃 `ccwhat setup` 命令
+
+## Decisions
+
+### 决策一：全量提取所有 provider 的 baseURL，而非按 --model 精确匹配
+
+**选择**：读取 config 里所有 provider 的 `baseURL`，全部加入录制 domain。
+
+**理由**：
+- 用户在会话中可随时切换 model/provider，精确匹配只能命中启动时的 provider，切换后流量漏录
+- domain 列表多几项对 mitmproxy 过滤性能无实质影响
+- 实现简单，不需要解析 CLI 参数与 config 做映射
+
+**放弃的方案**：解析 `--model` 参数反查 provider → 复杂且容易漏录
+
+---
+
+### 决策二：新建独立模块 `agent_config.py`，不在 run.py 内联
+
+**选择**：将各 agent 的配置读取逻辑封装到 `ccwhat/agent_config.py`。
+
+**理由**：
+- 每个 agent 的解析逻辑不同（JSONC vs JSON vs TOML），集中管理便于后续扩展新 agent
+- `run.py` 保持职责单一，只调用 `detect_domains(agent_name) -> list[str]`
+
+---
+
+### 决策三：JSONC 注释剥离用正则，不引入额外依赖
+
+**选择**：用正则去掉 `//` 行注释和 `/* */` 块注释，再交给 `json.loads()`。
+
+**理由**：
+- opencode.jsonc 仅含 `//` 行注释，模式简单可控
+- 引入 `jsonc-parser` 等第三方库增加依赖成本，不值得
+
+**风险**：字符串中含 `//` 的值会被误删 → 针对 baseURL 字段不会出现此模式，可接受
+
+---
+
+### 决策四：domain 填充优先级
+
+```
+1. config.toml 中配置的 domains（用户手动，最高优先级）
+2. agent_config.detect_domains(agent_name) 自动检测
+3. agent 类型对应的硬编码默认值（api.anthropic.com / api.openai.com）
+```
+
+`run.py` 中只有在 `effective_domains` 为空时才触发自动检测，不破坏现有用户的配置。
+
+## Risks / Trade-offs
+
+**[风险] 配置文件路径在不同平台或安装方式下可能不同**
+→ 缓解：用 `Path.home()` 拼接相对路径，覆盖 macOS/Linux 主流安装；路径不存在时静默跳过，不报错
+
+**[风险] opencode.jsonc 格式更新，字段路径变化导致读取失败**
+→ 缓解：读取失败时回退到环境变量 `ANTHROPIC_BASE_URL`，再回退到默认值，不影响启动
+
+**[风险] 用户配置了多个 provider 但只有一个有效（其余是废弃的测试配置）**
+→ 可接受：多录不漏录，流量不匹配也只是透明转发，不影响用户体验
+
+**[Trade-off] 不读 env var 作为中间层**
+→ 已在 run.py 子进程中保留了原有 env var 传递，agent 自身使用的 env var 与 ccwhat 录制 domain 是两条独立链路，无需混合
