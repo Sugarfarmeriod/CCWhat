@@ -5,10 +5,11 @@ import os
 import re
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ccwhat.adapters.base import AgentAdapter
+from ccwhat.adapters.base import AgentAdapter, SessionRenameError
 
 
 _SESSION_ID_RE = re.compile(
@@ -193,6 +194,38 @@ def _cwd_from_entries(entries: list[dict]) -> str | None:
     return None
 
 
+def _normalize_ts(value: Any) -> str | None:
+    """Normalize a timestamp to ISO-8601 string.
+
+    Handles ISO strings (pass-through), Unix seconds, and Unix milliseconds.
+    Returns None for empty/invalid input.
+    """
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            number = float(stripped)
+        except ValueError:
+            try:
+                datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            return stripped
+    else:
+        return None
+    if number > 10_000_000_000:
+        number = number / 1000
+    try:
+        return datetime.fromtimestamp(number, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
 class CodexAdapter(AgentAdapter):
     def __init__(self, projects_dir: Path | None = None) -> None:
         self._projects_dir = projects_dir
@@ -234,30 +267,51 @@ class CodexAdapter(AgentAdapter):
             return result
         try:
             conn = sqlite3.connect(str(sp))
+            conn.row_factory = sqlite3.Row
             cur = conn.cursor()
+            cur.execute("PRAGMA table_info(threads)")
+            columns = {str(row["name"]) for row in cur.fetchall()}
+            if "id" not in columns:
+                conn.close()
+                self._sqlite_cache = result
+                return result
+
+            wanted = [
+                "id",
+                "title",
+                "cwd",
+                "model",
+                "model_provider",
+                "updated_at",
+                "tokens_used",
+                "created_at",
+                "rollout_path",
+            ]
+            select_cols = [col for col in wanted if col in columns]
             cur.execute(
-                "SELECT id, title, cwd, model, model_provider, updated_at, tokens_used, "
-                "created_at, rollout_path FROM threads LIMIT 10000"
+                f"SELECT {', '.join(select_cols)} FROM threads LIMIT 10000"
             )
             for row in cur.fetchall():
-                tid = str(row[0]) if row[0] else ""
+                tid = str(row["id"]) if row["id"] else ""
+                if not tid:
+                    continue
                 meta: dict[str, Any] = {}
-                if row[1]:
-                    meta["title"] = row[1]
-                if row[2]:
-                    meta["cwd"] = row[2]
-                if row[3]:
-                    meta["model"] = row[3]
-                if row[4]:
-                    meta["provider"] = row[4]
-                if row[5]:
-                    meta["updated_at"] = row[5]
-                if row[6]:
-                    meta["tokens_used"] = row[6]
-                if len(row) > 7 and row[7]:
-                    meta["created_at"] = row[7]
-                if len(row) > 8 and row[8]:
-                    meta["rollout_path"] = row[8]
+                if "title" in row.keys() and row["title"]:
+                    meta["title"] = row["title"]
+                if "cwd" in row.keys() and row["cwd"]:
+                    meta["cwd"] = row["cwd"]
+                if "model" in row.keys() and row["model"]:
+                    meta["model"] = row["model"]
+                if "model_provider" in row.keys() and row["model_provider"]:
+                    meta["provider"] = row["model_provider"]
+                if "updated_at" in row.keys() and row["updated_at"]:
+                    meta["updated_at"] = row["updated_at"]
+                if "tokens_used" in row.keys() and row["tokens_used"]:
+                    meta["tokens_used"] = row["tokens_used"]
+                if "created_at" in row.keys() and row["created_at"]:
+                    meta["created_at"] = row["created_at"]
+                if "rollout_path" in row.keys() and row["rollout_path"]:
+                    meta["rollout_path"] = row["rollout_path"]
                 result[tid] = meta
             conn.close()
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -318,6 +372,7 @@ class CodexAdapter(AgentAdapter):
 
     def list_projects(self) -> list[dict[str, Any]]:
         files = self._scan_rollout_files()
+        sqlite_meta = self._load_sqlite_metadata()
         proj_map: dict[str, dict[str, Any]] = {}
         for fp, sid, project_dir in files:
             if project_dir not in proj_map:
@@ -325,10 +380,18 @@ class CodexAdapter(AgentAdapter):
                     "projectDir": project_dir,
                     "sessions": [],
                 }
+            meta = sqlite_meta.get(sid, {})
+            native_title = meta.get("title", "")
+            display = native_title if native_title else "Untitled session"
+            created_at = meta.get("created_at")
+            updated_at = meta.get("updated_at")
             proj_map[project_dir]["sessions"].append({
                 "id": sid,
-                "firstTimestamp": None,
-                "lastTimestamp": None,
+                "firstTimestamp": _normalize_ts(created_at),
+                "lastTimestamp": _normalize_ts(updated_at),
+                "title": native_title,
+                "displayName": display,
+                "canRenameSession": True,
             })
         result = list(proj_map.values())
         for proj in result:
@@ -343,6 +406,74 @@ class CodexAdapter(AgentAdapter):
             for s in proj.get("sessions", []):
                 sessions.append({**s, "projectDir": proj["projectDir"]})
         return sessions
+
+    @property
+    def can_rename_session(self) -> bool:
+        return True
+
+    def rename_session(self, session_id: str, title: str) -> dict[str, Any]:
+        """Write title to Codex state_5.sqlite threads.title."""
+        title = title.strip()
+        if not title:
+            raise SessionRenameError("invalid_title", "Title must not be empty after trimming.")
+
+        sp = self._get_sqlite_path()
+        if sp is None or not sp.exists():
+            raise SessionRenameError(
+                "native_title_unavailable",
+                "Codex state_5.sqlite not found.",
+            )
+
+        try:
+            conn = sqlite3.connect(str(sp), timeout=5)
+            cur = conn.cursor()
+            # Verify schema
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='threads'")
+            if cur.fetchone() is None:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "Codex state_5.sqlite missing 'threads' table.",
+                )
+            # Check columns
+            cur.execute("PRAGMA table_info(threads)")
+            columns = {row[1] for row in cur.fetchall()}
+            if "id" not in columns or "title" not in columns:
+                conn.close()
+                raise SessionRenameError(
+                    "native_title_unavailable",
+                    "Codex threads table missing 'id' or 'title' column.",
+                )
+            # Perform update in transaction
+            cur.execute("UPDATE threads SET title = ? WHERE id = ?", (title, session_id))
+            if cur.rowcount == 0:
+                conn.rollback()
+                conn.close()
+                raise SessionRenameError(
+                    "session_not_found",
+                    f"No thread with id '{session_id}' found in Codex DB.",
+                )
+            conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"Codex SQLite write failed: {exc}",
+            ) from exc
+        except sqlite3.DatabaseError as exc:
+            raise SessionRenameError(
+                "native_title_write_failed",
+                f"Codex SQLite error: {exc}",
+            ) from exc
+
+        # Invalidate cache so subsequent reads reflect new title
+        self._sqlite_cache = None
+
+        return {
+            "title": title,
+            "displayName": title,
+            "canRenameSession": True,
+        }
 
     def raw_to_normalized_events(self, raw_entry: dict[str, Any], session_id: str) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
@@ -720,5 +851,13 @@ class CodexAdapter(AgentAdapter):
                 }
                 if sqlite_meta:
                     result["_metadata"] = sqlite_meta
+                # Add title metadata
+                native_title = sqlite_meta.get("title", "")
+                display = native_title if native_title else "Untitled session"
+                result["title"] = native_title
+                result["displayName"] = display
+                result["canRenameSession"] = True
+                result["firstTimestamp"] = _normalize_ts(sqlite_meta.get("created_at"))
+                result["lastTimestamp"] = _normalize_ts(sqlite_meta.get("updated_at"))
                 return result
         return None
