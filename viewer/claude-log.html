@@ -8212,6 +8212,7 @@ function normalizeUserText(t) {
 
 function isUserTurnRoot(e, previousTurn) {
   if (e.type !== 'user') return false;
+  if (e.isMeta === true) return false;
   const content = e.message?.content;
   if (!content) return false;
 
