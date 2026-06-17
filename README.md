@@ -2,13 +2,13 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v2.2.0` · [更新日志](CHANGELOG.md)
+当前版本：`v2.1.1` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
 
-### v2.2.0 — Session 重命名 + 请求回放
+### v2.1.1 — Session 重命名 + 请求回放
 
-- **Session 重命名**：Viewer 顶部 title bar 直接显示 session 名称和时间范围。Codex / OpenCode session 支持内联重命名，写入各自原生 DB；Claude Code 标记为不支持（无原生 title 存储）。
+- **Session 重命名**：Viewer 顶部 title bar 直接显示 session 名称和时间范围。Codex / OpenCode session 支持内联重命名，写入各自原生 DB；Claude Code 标记为不支持（无原生 title 存储）。_由 [@tanzunsheng](https://github.com/tanzunsheng) 贡献。_
 - **请求回放**：抓包页面对包含用户消息的请求发起回放，自动注入最新 `X-Client-Token`，以 JSON 非流式模式返回完整响应，支持原文回放和改写后发送。
 
 ### v2.1.0 — Turn-Level Diff Viewer
