@@ -1422,6 +1422,9 @@ function parseSseEvents(events) {
   const blocks = {};
   let stopReason = null;
   let usage = null;
+  // OpenAI format accumulator (single text block)
+  let openaiText = '';
+  let hasOpenAiFormat = false;
 
   for (const ev of events) {
     for (const line of ev.split('\n')) {
@@ -1431,6 +1434,7 @@ function parseSseEvents(events) {
       let d;
       try { d = JSON.parse(raw); } catch { continue; }
 
+      // Claude API format
       const type = d.type;
       if (type === 'content_block_start') {
         const idx = d.index;
@@ -1451,7 +1455,32 @@ function parseSseEvents(events) {
       } else if (type === 'message_start') {
         if (d.message?.usage) usage = { ...d.message.usage, ...usage };
       }
+      // OpenAI compatible format (OpenCode, etc.)
+      else if (d.object === 'chat.completion.chunk') {
+        hasOpenAiFormat = true;
+        const choice = d.choices?.[0];
+        if (choice) {
+          const delta = choice.delta || {};
+          // Accumulate content or reasoning_content
+          const content = delta.content;
+          const reasoning = delta.reasoning_content;
+          if (content) openaiText += content;
+          if (reasoning) openaiText += reasoning;
+          // Check finish reason
+          if (choice.finish_reason) {
+            stopReason = choice.finish_reason;
+          }
+        }
+        if (d.usage) {
+          usage = { ...usage, ...d.usage };
+        }
+      }
     }
+  }
+
+  // If OpenAI format was detected, create a single text block
+  if (hasOpenAiFormat && openaiText) {
+    blocks[0] = { type: 'text', name: null, id: null, text: openaiText, inputJson: '' };
   }
 
   // Build contents array in index order

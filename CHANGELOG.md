@@ -2,6 +2,23 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.1 - 2026-06-18
+
+### 零配置自动录制 + OpenAI 格式 SSE 解析
+
+### 新增
+
+- **零配置自动录制**：启动 `ccwhat` 时自动读取目标 agent 的本地配置文件，提取 API domain，与 `~/.ccwhat/config.toml` 已配置的 domain 去重合并后作为录制目标，无需手动执行 `ccwhat setup`。支持三种 agent：
+  - **opencode**：读取 `~/.config/opencode/opencode.jsonc`，提取全部 `provider.*.options.baseURL`
+  - **claude**：读取 `~/.claude/settings.json`，提取 `env.ANTHROPIC_BASE_URL`，无则回退 `api.anthropic.com`
+  - **codex**：读取 `~/.codex/config.toml`，提取 `shell_environment_policy.set` 中所有 `*_BASE_URL`，无则回退 `api.openai.com`
+
+### 改进
+
+- 抓包页面 SSE 解析新增 OpenAI 兼容格式支持（`chat.completion.chunk`），OpenCode 等使用 OpenAI API 格式的 agent 的流式响应现在可以正确解析和展示。
+
+---
+
 ## v2.2.0 - 2026-06-18
 
 ### 请求回放
