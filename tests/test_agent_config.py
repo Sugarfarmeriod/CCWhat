@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from unittest import mock
 
 from ccwhat.agent_config import (
+    _opencode_hosts_from_models_output,
     _strip_jsonc_comments,
     detect_default_paths,
     detect_domains,
@@ -58,6 +61,45 @@ class TestDetectOpencodeDomains:
         result = detect_domains("opencode", _home=tmp_path)
         assert result == ["aigc.sankuai.com"]
 
+    def test_models_output_extracts_builtin_provider_url(self):
+        output = '''
+opencode/deepseek-v4-flash-free
+{
+  "id": "deepseek-v4-flash-free",
+  "providerID": "opencode",
+  "api": {
+    "url": "https://opencode.ai/zen/v1",
+    "npm": "@ai-sdk/openai-compatible"
+  }
+}
+friday/deepseek-v4-flash
+{
+  "id": "deepseek-v4-flash",
+  "providerID": "friday",
+  "api": {
+    "url": "openai",
+    "npm": "@ai-sdk/openai-compatible"
+  }
+}
+'''
+        assert _opencode_hosts_from_models_output(output) == ["opencode.ai"]
+
+    def test_real_home_merges_config_and_builtin_catalog(self, tmp_path):
+        self._write_opencode_config(tmp_path, {
+            "friday": {"options": {"baseURL": "https://aigc.sankuai.com/v1/openai/native"}}
+        })
+        fake_completed = mock.MagicMock()
+        fake_completed.returncode = 0
+        fake_completed.stdout = '''
+opencode/deepseek-v4-flash-free
+{"api":{"url":"https://opencode.ai/zen/v1"}}
+'''
+        with mock.patch("pathlib.Path.home", return_value=tmp_path), \
+             mock.patch("ccwhat.agent_config.subprocess.run", return_value=fake_completed):
+            result = detect_domains("opencode")
+
+        assert result == ["aigc.sankuai.com", "opencode.ai"]
+
     def test_multiple_providers(self, tmp_path):
         self._write_opencode_config(tmp_path, {
             "p1": {"options": {"baseURL": "https://a.example.com/v1"}},
@@ -78,14 +120,14 @@ class TestDetectOpencodeDomains:
 
     def test_missing_config_returns_default(self, tmp_path):
         result = detect_domains("opencode", _home=tmp_path)
-        assert result == ["api.anthropic.com"]
+        assert result == ["opencode.ai"]
 
     def test_invalid_config_returns_default(self, tmp_path):
         config_dir = tmp_path / ".config" / "opencode"
         config_dir.mkdir(parents=True)
         (config_dir / "opencode.jsonc").write_text("not valid json {{{{", encoding="utf-8")
         result = detect_domains("opencode", _home=tmp_path)
-        assert result == ["api.anthropic.com"]
+        assert result == ["opencode.ai"]
 
     def test_jsonc_with_comments_parsed(self, tmp_path):
         config_dir = tmp_path / ".config" / "opencode"
@@ -122,6 +164,10 @@ class TestDetectClaudeDomains:
     def test_missing_config_returns_default(self, tmp_path):
         assert detect_domains("claude", _home=tmp_path) == ["api.anthropic.com"]
 
+    def test_environment_base_url_is_included(self, tmp_path):
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://env.example.com"}, clear=False):
+            assert detect_domains("claude", _home=tmp_path) == ["env.example.com"]
+
 
 # ---------------------------------------------------------------------------
 # codex domain detection (task 3.2)
@@ -137,6 +183,20 @@ class TestDetectCodexDomains:
         toml = '[shell_environment_policy.set]\nOPENAI_BASE_URL = "https://gw.example.com"\n'
         self._write_codex_config(tmp_path, toml)
         assert detect_domains("codex", _home=tmp_path) == ["gw.example.com"]
+
+    def test_model_provider_base_url(self, tmp_path):
+        toml = '''
+model_provider = "portkey"
+
+[model_providers.portkey]
+base_url = "https://portkey.example.com/v1"
+'''
+        self._write_codex_config(tmp_path, toml)
+        assert detect_domains("codex", _home=tmp_path) == ["portkey.example.com"]
+
+    def test_openai_base_url_override(self, tmp_path):
+        self._write_codex_config(tmp_path, 'openai_base_url = "https://us.api.openai.com/v1"\n')
+        assert detect_domains("codex", _home=tmp_path) == ["us.api.openai.com"]
 
     def test_no_base_url_returns_default(self, tmp_path):
         toml = '[shell_environment_policy.set]\nANTHROPIC_MODEL = "opus"\n'
@@ -166,7 +226,8 @@ class TestUnknownAgent:
 class TestDetectDefaultPaths:
     def test_opencode_paths(self):
         paths = detect_default_paths("opencode")
-        assert "/v1/messages" in paths
+        # OpenCode built-in provider (opencode.ai) uses /zen/v1 paths
+        assert "/zen/v1/chat/completions" in paths
 
     def test_claude_paths(self):
         assert detect_default_paths("claude") == ["/v1/messages"]

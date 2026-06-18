@@ -7,6 +7,8 @@ so users don't need to run `ccwhat setup` before recording.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -78,54 +80,183 @@ def _host_from_url(url: str) -> str | None:
         return None
 
 
+def _add_host(hosts: list[str], url: str | None) -> None:
+    host = _host_from_url(url or "")
+    if host and host not in hosts:
+        hosts.append(host)
+
+
+def _json_objects_from_text(text: str) -> list[dict]:
+    """Extract top-level JSON objects from mixed CLI output."""
+    objects: list[dict] = []
+    start: int | None = None
+    depth = 0
+    in_string = False
+    escape = False
+
+    for i, char in enumerate(text):
+        if start is None:
+            if char == "{":
+                start = i
+                depth = 1
+                in_string = False
+                escape = False
+            continue
+
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(parsed, dict):
+                        objects.append(parsed)
+                start = None
+
+    return objects
+
+
+def _opencode_hosts_from_models_output(text: str) -> list[str]:
+    hosts: list[str] = []
+    for obj in _json_objects_from_text(text):
+        api = obj.get("api")
+        if not isinstance(api, dict):
+            continue
+        url = api.get("url")
+        if isinstance(url, str) and "://" in url:
+            _add_host(hosts, url)
+    return hosts
+
+
+def _detect_opencode_catalog_domains() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["opencode", "models", "--verbose"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if result.returncode != 0:
+        return []
+    return _opencode_hosts_from_models_output(result.stdout)
+
+
 # ---------------------------------------------------------------------------
 # Per-agent detectors
 # ---------------------------------------------------------------------------
 
 def _detect_opencode_domains(home: Path | None = None) -> list[str]:
     config_path = (home or Path.home()) / ".config" / "opencode" / "opencode.jsonc"
+    hosts: list[str] = []
     try:
         raw = config_path.read_text(encoding="utf-8")
         data = json.loads(_strip_jsonc_comments(raw))
         providers = data.get("provider", {})
-        hosts: list[str] = []
-        for provider_cfg in providers.values():
-            base_url = provider_cfg.get("options", {}).get("baseURL", "")
-            host = _host_from_url(base_url)
-            if host and host not in hosts:
-                hosts.append(host)
-        return hosts if hosts else ["api.anthropic.com"]
+        if isinstance(providers, dict):
+            for provider_cfg in providers.values():
+                if not isinstance(provider_cfg, dict):
+                    continue
+                options = provider_cfg.get("options", {})
+                if isinstance(options, dict):
+                    _add_host(hosts, options.get("baseURL"))
+                    _add_host(hosts, options.get("baseUrl"))
+                    _add_host(hosts, options.get("base_url"))
     except Exception:
-        return ["api.anthropic.com"]
+        pass
+
+    # OpenCode built-in providers are not stored in opencode.jsonc. The CLI
+    # exposes their model catalog, including provider API URLs.
+    if home is None:
+        for host in _detect_opencode_catalog_domains():
+            if host not in hosts:
+                hosts.append(host)
+
+    return hosts if hosts else ["opencode.ai"]
 
 
 def _detect_claude_domains(home: Path | None = None) -> list[str]:
     config_path = (home or Path.home()) / ".claude" / "settings.json"
+    hosts: list[str] = []
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        base_url = data.get("env", {}).get("ANTHROPIC_BASE_URL", "")
-        host = _host_from_url(base_url)
-        return [host] if host else ["api.anthropic.com"]
+        env = data.get("env", {})
+        if isinstance(env, dict):
+            for key in (
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_VERTEX_BASE_URL",
+                "ANTHROPIC_BEDROCK_BASE_URL",
+                "ANTHROPIC_AWS_BASE_URL",
+            ):
+                value = env.get(key)
+                if isinstance(value, str):
+                    _add_host(hosts, value)
     except Exception:
-        return ["api.anthropic.com"]
+        pass
+
+    for key in (
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_VERTEX_BASE_URL",
+        "ANTHROPIC_BEDROCK_BASE_URL",
+        "ANTHROPIC_AWS_BASE_URL",
+    ):
+        _add_host(hosts, os.environ.get(key))
+
+    return hosts if hosts else ["api.anthropic.com"]
 
 
 def _detect_codex_domains(home: Path | None = None) -> list[str]:
     if tomllib is None:
         return ["api.openai.com"]
     config_path = (home or Path.home()) / ".codex" / "config.toml"
+    hosts: list[str] = []
     try:
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        _add_host(hosts, data.get("openai_base_url"))
+        _add_host(hosts, data.get("chatgpt_base_url"))
+
+        providers = data.get("model_providers", {})
+        if isinstance(providers, dict):
+            for provider_cfg in providers.values():
+                if isinstance(provider_cfg, dict):
+                    _add_host(hosts, provider_cfg.get("base_url"))
+                    _add_host(hosts, provider_cfg.get("baseURL"))
+                    _add_host(hosts, provider_cfg.get("baseUrl"))
+
         env_set = data.get("shell_environment_policy", {}).get("set", {})
-        hosts: list[str] = []
-        for key, value in env_set.items():
-            if key.endswith("_BASE_URL") and isinstance(value, str):
-                host = _host_from_url(value)
-                if host and host not in hosts:
-                    hosts.append(host)
-        return hosts if hosts else ["api.openai.com"]
+        if isinstance(env_set, dict):
+            for key, value in env_set.items():
+                if (
+                    isinstance(key, str)
+                    and (key.endswith("_BASE_URL") or key.endswith("_API_BASE"))
+                    and isinstance(value, str)
+                ):
+                    _add_host(hosts, value)
     except Exception:
-        return ["api.openai.com"]
+        pass
+
+    _add_host(hosts, os.environ.get("OPENAI_BASE_URL"))
+    _add_host(hosts, os.environ.get("CHATGPT_BASE_URL"))
+
+    return hosts if hosts else ["api.openai.com"]
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +268,42 @@ _AGENT_DEFAULT_PATHS: dict[str, list[str]] = {
     "claude": ["/v1/messages"],
     "codex": ["/v1/responses"],
 }
+
+
+def _detect_opencode_paths(home: Path | None = None) -> list[str]:
+    """Detect API path prefixes from opencode config's baseURL."""
+    config_path = (home or Path.home()) / ".config" / "opencode" / "opencode.jsonc"
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        data = json.loads(_strip_jsonc_comments(raw))
+        providers = data.get("provider", {})
+        if not isinstance(providers, dict):
+            return []
+        paths: list[str] = []
+        for provider_cfg in providers.values():
+            if not isinstance(provider_cfg, dict):
+                continue
+            options = provider_cfg.get("options", {})
+            if not isinstance(options, dict):
+                continue
+            for key in ("baseURL", "baseUrl", "base_url"):
+                base_url = options.get(key)
+                if isinstance(base_url, str) and base_url:
+                    break
+            else:
+                continue
+            if "://" not in base_url:
+                base_url = "https://" + base_url
+            parsed = urlparse(base_url)
+            path_prefix = parsed.path.rstrip("/")
+            if path_prefix in ("", "/v1"):
+                continue
+            api_path = path_prefix + "/chat/completions"
+            if api_path not in paths:
+                paths.append(api_path)
+        return paths
+    except Exception:
+        return []
 
 _AGENT_DETECTORS = {
     "opencode": _detect_opencode_domains,
@@ -171,4 +338,13 @@ def detect_domains(agent_name: str, _home: Path | None = None) -> list[str]:
 
 def detect_default_paths(agent_name: str) -> list[str]:
     """Return default path filters for a known agent, empty list otherwise."""
+    if agent_name.lower() == "opencode":
+        detected = _detect_opencode_paths()
+        # OpenCode built-in providers (e.g., opencode.ai) use /zen/v1 paths
+        if "opencode.ai" in detect_domains("opencode"):
+            zen_path = "/zen/v1/chat/completions"
+            if zen_path not in detected:
+                detected.append(zen_path)
+        if detected:
+            return detected
     return list(_AGENT_DEFAULT_PATHS.get(agent_name.lower(), []))

@@ -474,6 +474,97 @@ body {
     padding: 8px; overflow: auto; max-height: 240px; white-space: pre-wrap; word-break: break-all;
     margin-top: 4px;
   }
+
+  /* ── Collapsible Section (new design) ───────────────────────────────── */
+  .detail-collapsible {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    overflow: hidden;
+    background: var(--bg-elevated);
+  }
+  .detail-collapsible summary {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px;
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+    background: var(--bg-surface);
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-collapsible summary:hover {
+    background: var(--bg-base);
+  }
+  .detail-collapsible summary::-webkit-details-marker {
+    display: none;
+  }
+  .detail-collapsible summary::after {
+    content: '收起';
+    font-size: 11px; font-weight: 400; color: var(--accent);
+  }
+  .detail-collapsible[open] summary::after {
+    content: '收起';
+  }
+  .detail-collapsible:not([open]) summary::after {
+    content: '展开';
+  }
+  .detail-collapsible-body {
+    padding: 12px;
+    background: var(--bg-elevated);
+  }
+  .detail-collapsible-body .meta-row {
+    display: flex; align-items: baseline;
+    margin-bottom: 6px; font-size: 12px;
+  }
+  .detail-collapsible-body .meta-key {
+    width: 140px; flex-shrink: 0;
+    color: var(--text-secondary); font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .detail-collapsible-body .meta-value {
+    color: var(--text-primary); word-break: break-all;
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .detail-content-block {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 400px; overflow-y: auto;
+  }
+  .detail-content-block.markdown-content h1,
+  .detail-content-block.markdown-content h2,
+  .detail-content-block.markdown-content h3 {
+    margin: 12px 0 8px; font-weight: 600;
+  }
+  .detail-content-block.markdown-content code {
+    font-family: var(--font-mono); font-size: 12px;
+    background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 3px;
+  }
+  .detail-content-block.markdown-content pre {
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px;
+    overflow-x: auto; font-size: 12px;
+    margin: 8px 0;
+  }
+  .detail-content-block.markdown-content pre code {
+    background: transparent; padding: 0;
+  }
+  .detail-content-block.markdown-content ul,
+  .detail-content-block.markdown-content ol {
+    margin: 8px 0; padding-left: 20px;
+  }
+  .detail-content-block.markdown-content li {
+    margin: 4px 0;
+  }
+  .detail-content-block.markdown-content blockquote {
+    border-left: 3px solid var(--border-strong);
+    margin: 8px 0; padding-left: 12px;
+    color: var(--text-secondary);
+  }
   /* ── Turn Diff display ──────────────────────────────────────────────── */
   .turn-diff-block { margin-bottom: 15px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
   .turn-diff-block-hdr {
@@ -4494,6 +4585,46 @@ function buildTurnEvidenceModel(turn, entry) {
   };
 }
 
+// Simple Markdown renderer for detail content
+function renderMarkdown(text) {
+  if (!text) return '';
+  let html = esc(text);
+
+  // Code blocks ```language\ncode\n```
+  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+    return `<pre><code>${esc(code.trim())}</code></pre>`;
+  });
+
+  // Inline code `code`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Headers
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+  // Bold **text**
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  // Italic *text*
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Lists
+  html = html.replace(/^\s*[-*] (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+
+  // Blockquotes
+  html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+  // Links [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
+
 function renderEvidencePre(value, maxHeight = 260) {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
   return `<pre style="font-size:10px;font-family:var(--font-mono);background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;overflow:auto;max-height:${maxHeight}px;white-space:pre-wrap;word-break:break-word;margin:0;">${esc(text || '—')}</pre>`;
@@ -4568,37 +4699,269 @@ function renderTurnEvidenceSections(model) {
   }
 }
 
+// Render dynamic content section based on turn kind
+function renderDynamicContent(turn, entry, block) {
+  switch (turn.kind) {
+    case 'user_message': {
+      const text = turn.text || extractFullText(entry) || fullBlockText(block);
+      return `
+        <div class="detail-collapsible" open>
+          <summary>消息内容</summary>
+          <div class="detail-collapsible-body">
+            <div class="detail-content-block markdown-content">${renderMarkdown(text)}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'assistant_text': {
+      // Get thinking from entry content blocks
+      let thinking = '';
+      const content = entry?.message?.content ?? entry?.content;
+      if (Array.isArray(content)) {
+        const thinkingBlock = content.find(b => b.type === 'thinking' || b.thinking);
+        if (thinkingBlock) {
+          thinking = thinkingBlock.thinking || thinkingBlock.text || '';
+        }
+      }
+      const text = turn.text || fullBlockText(block);
+
+      let html = '';
+      if (thinking) {
+        html += `
+          <div class="detail-collapsible" open>
+            <summary>Thinking</summary>
+            <div class="detail-collapsible-body">
+              <div class="detail-content-block">${esc(thinking)}</div>
+            </div>
+          </div>`;
+      }
+      html += `
+        <div class="detail-collapsible" open>
+          <summary>回复内容</summary>
+          <div class="detail-collapsible-body">
+            <div class="detail-content-block markdown-content">${renderMarkdown(text)}</div>
+          </div>
+        </div>`;
+      return html;
+    }
+
+    case 'thinking': {
+      const text = turn.text || fullBlockText(block);
+      return `
+        <div class="detail-collapsible" open>
+          <summary>Thinking / Reasoning</summary>
+          <div class="detail-collapsible-body">
+            <div class="detail-content-block">${esc(text)}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'tool_use': {
+      const toolName = block?.name || turn.toolName || '?';
+      const toolId = block?.id || turn.toolUseId || '';
+      const input = block?.input ?? {};
+      return `
+        <div class="detail-collapsible" open>
+          <summary>Tool Call</summary>
+          <div class="detail-collapsible-body">
+            <div class="meta-row">
+              <span class="meta-key">tool</span>
+              <span class="meta-value">${esc(toolName)}</span>
+            </div>
+            ${toolId ? `
+            <div class="meta-row">
+              <span class="meta-key">id</span>
+              <span class="meta-value">${esc(toolId)}</span>
+            </div>` : ''}
+            <div style="margin-top:8px;font-size:11px;color:var(--text-tertiary);">input:</div>
+            <pre style="font-size:11px;font-family:var(--font-mono);background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;overflow:auto;max-height:300px;margin-top:4px;">${esc(JSON.stringify(input, null, 2))}</pre>
+          </div>
+        </div>`;
+    }
+
+    case 'tool_result': {
+      const resultStr = fullBlockText(block) || turn.resultSummary || '';
+      const toolUseId = turn.toolUseId || block?.tool_use_id || '';
+      const isError = turn.isError || block?.is_error || false;
+      return `
+        <div class="detail-collapsible" open>
+          <summary>Tool Result</summary>
+          <div class="detail-collapsible-body">
+            ${toolUseId ? `
+            <div class="meta-row">
+              <span class="meta-key">tool_use_id</span>
+              <span class="meta-value">${esc(toolUseId)}</span>
+            </div>` : ''}
+            <div class="meta-row">
+              <span class="meta-key">is_error</span>
+              <span class="meta-value" style="color:${isError ? 'var(--danger)' : 'var(--success)'};">${esc(String(isError))}</span>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-tertiary);">content:</div>
+            <div class="detail-content-block" style="margin-top:4px;font-family:var(--font-mono);font-size:12px;">${esc(resultStr)}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'context':
+    case 'system':
+    case 'unknown':
+    default: {
+      const text = turn.text || extractFullText(entry) || fullBlockText(block);
+      const displayText = text || JSON.stringify(entry, null, 2);
+      return `
+        <div class="detail-collapsible" open>
+          <summary>内部事件 / ${esc(turn.kind)}</summary>
+          <div class="detail-collapsible-body">
+            <div class="meta-row">
+              <span class="meta-key">type</span>
+              <span class="meta-value">${esc(entry?.type || turn.kind)}</span>
+            </div>
+            ${entry?.subtype ? `
+            <div class="meta-row">
+              <span class="meta-key">subtype</span>
+              <span class="meta-value">${esc(entry.subtype)}</span>
+            </div>` : ''}
+            <div class="detail-content-block" style="margin-top:8px;">${esc(displayText)}</div>
+          </div>
+        </div>`;
+    }
+  }
+}
+
+// Build log metadata section (collapsible, open by default)
+function buildLogMetadataSection(entry) {
+  const usage = entry?.message?.usage || entry?.usage || {};
+  const hasTokens = usage.input_tokens != null || usage.output_tokens != null;
+
+  let tokenHtml = '';
+  if (hasTokens) {
+    tokenHtml = `
+      <div class="meta-row">
+        <span class="meta-key">input_tokens</span>
+        <span class="meta-value">${esc(String(usage.input_tokens || 0))}</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-key">output_tokens</span>
+        <span class="meta-value">${esc(String(usage.output_tokens || 0))}</span>
+      </div>
+      ${usage.cache_creation_input_tokens != null ? `
+      <div class="meta-row">
+        <span class="meta-key">cache_creation_input</span>
+        <span class="meta-value">${esc(String(usage.cache_creation_input_tokens))}</span>
+      </div>` : ''}
+      ${usage.cache_read_input_tokens != null ? `
+      <div class="meta-row">
+        <span class="meta-key">cache_read_input</span>
+        <span class="meta-value">${esc(String(usage.cache_read_input_tokens))}</span>
+      </div>` : ''}`;
+  }
+
+  return `
+    <details class="detail-collapsible" open>
+      <summary>日志元数据</summary>
+      <div class="detail-collapsible-body">
+        <div class="meta-row">
+          <span class="meta-key">uuid</span>
+          <span class="meta-value">${esc(entry?.uuid || '—')}</span>
+        </div>
+        ${entry?.parentUuid ? `
+        <div class="meta-row">
+          <span class="meta-key">parentUuid</span>
+          <span class="meta-value">${esc(entry.parentUuid)}</span>
+        </div>` : ''}
+        ${entry?.promptId ? `
+        <div class="meta-row">
+          <span class="meta-key">promptId</span>
+          <span class="meta-value">${esc(entry.promptId)}</span>
+        </div>` : ''}
+        ${entry?.message?.id ? `
+        <div class="meta-row">
+          <span class="meta-key">message.id</span>
+          <span class="meta-value">${esc(entry.message.id)}</span>
+        </div>` : ''}
+        ${entry?.sessionId ? `
+        <div class="meta-row">
+          <span class="meta-key">sessionId</span>
+          <span class="meta-value">${esc(entry.sessionId)}</span>
+        </div>` : ''}
+        ${entry?.permissionMode ? `
+        <div class="meta-row">
+          <span class="meta-key">permissionMode</span>
+          <span class="meta-value">${esc(entry.permissionMode)}</span>
+        </div>` : ''}
+        ${entry?.cwd ? `
+        <div class="meta-row">
+          <span class="meta-key">cwd</span>
+          <span class="meta-value">${esc(entry.cwd)}</span>
+        </div>` : ''}
+        ${entry?.version ? `
+        <div class="meta-row">
+          <span class="meta-key">version</span>
+          <span class="meta-value">${esc(entry.version)}</span>
+        </div>` : ''}
+        ${tokenHtml}
+      </div>
+    </details>`;
+}
+
+// Build raw JSON section (collapsible, closed by default)
+function buildRawJsonSection(entry, turn, block) {
+  // Build enriched raw data with context
+  const rawData = {
+    entry,
+    turn,
+    contentBlock: block || null,
+  };
+
+  return `
+    <details class="detail-collapsible">
+      <summary>原始 JSON</summary>
+      <div class="detail-collapsible-body">
+        <pre style="font-size:11px;font-family:var(--font-mono);background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;">${esc(JSON.stringify(rawData, null, 2))}</pre>
+      </div>
+    </details>`;
+}
+
 // Kind-specific detail for minimal Turns with complete evidence.
 function buildMinimalTurnDetailHtml(groupId, turn) {
-  // Kind detail rendering below still covers case 'tool_use': and case 'tool_result':
   const e = allEntries[turn.sourceEntryIdx];
   const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:11px;padding:2px 8px">${esc(kindLabel(turn.kind))}</span>`;
-  const model = buildTurnEvidenceModel(turn, e);
+
+  // Get block for content extraction
+  let block = null;
+  if (e && turn.contentIndex != null) {
+    const content = e.message?.content ?? e.content;
+    if (Array.isArray(content)) {
+      block = content[turn.contentIndex];
+    }
+  }
+
   let html = `<div class="turn-detail">`;
+
+  // Header
   html += `<div class="turn-detail-hdr">
     <span class="turn-detail-title">${esc(turn.label)}</span>
     ${kindBadge}
     <span class="turn-detail-group">${esc(turn.conversationKey)}</span>`;
-  if (turn.blockAnchor) html += `<span class="turn-meta-badge" style="font-family:var(--font-mono)">${esc(turn.blockAnchor)}</span>`;
+  if (turn.blockAnchor) {
+    html += `<span class="turn-meta-badge" style="font-family:var(--font-mono)">${esc(turn.blockAnchor)}</span>`;
+  }
   html += `</div>`;
 
   if (!e) {
     html += `<div class="turn-detail-section">entry not found (idx ${turn.sourceEntryIdx})</div>`;
-    html += '</div>'; return html;
+    html += '</div>';
+    return html;
   }
 
-  html += `<div class="turn-detail-section"><div class="turn-detail-label">定位信息</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <span class="turn-meta-badge">entry: ${esc(String(model.anchors.entryIndex))}</span>
-      ${model.anchors.fileLine != null ? `<span class="turn-meta-badge">line: ${esc(String(model.anchors.fileLine))}</span>` : ''}
-      ${model.anchors.eventId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">event: ${esc(model.anchors.eventId)}</span>` : ''}
-      ${model.anchors.messageId ? `<span class="turn-meta-badge" style="font-family:var(--font-mono)">message: ${esc(model.anchors.messageId)}</span>` : ''}
-      ${model.anchors.contentIndex != null ? `<span class="turn-meta-badge">content: ${esc(String(model.anchors.contentIndex))}</span>` : ''}
-    </div>
-  </div>`;
+  // Log metadata (collapsible, open by default)
+  html += buildLogMetadataSection(e);
 
-  html += renderTurnEvidenceSections(model);
-  html += renderRawEvidenceJson(model);
+  // Dynamic content based on turn kind
+  html += renderDynamicContent(turn, e, block);
+
+  // Raw JSON (collapsible, closed by default)
+  html += buildRawJsonSection(e, turn, block);
 
   html += '</div>';
   return html;
