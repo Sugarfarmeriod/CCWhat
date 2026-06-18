@@ -1059,11 +1059,7 @@ function renderList() {
         e.stopPropagation();
         const record = allRecords[i];
         const reqJson = JSON.parse(record.request?.body || '{}');
-        const msgs = reqJson.messages || [];
-        let userMsg = null;
-        for (let j = msgs.length - 1; j >= 0; j--) {
-          if (msgs[j].role === 'user') { userMsg = msgs[j]; break; }
-        }
+        const userMsg = findReplayUserMessage(reqJson.messages || []);
         openReplayModal(record, i, reqJson, userMsg);
       } else {
         selectRecord(i);
@@ -2023,9 +2019,9 @@ function closeReplayModal() {
 function renderReplayEditView(record, reqJson, userMsg) {
   const modalBody = document.getElementById('replayModalBody');
   const msgs = reqJson.messages || [];
-  const lastMsg = msgs[msgs.length - 1];
-  const editText = extractMsgText(lastMsg);
-  const msgTypeHint = lastMsg ? `[${lastMsg.role}${lastMsg.name ? ': ' + lastMsg.name : ''}]` : '';
+  const replayMsg = userMsg || findReplayUserMessage(msgs) || msgs[msgs.length - 1];
+  const editText = extractReplayUserText(replayMsg);
+  const msgTypeHint = replayMsg ? `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]` : '';
   modalBody.innerHTML = `
     <div class="replay-edit-section">
       <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">编辑消息内容 ${esc(msgTypeHint)}</div>
@@ -2043,11 +2039,12 @@ function renderReplayDiffView(statusData) {
   const modalBody = document.getElementById('replayModalBody');
   const originalReqJson = currentModalRecord?.request?.body ? JSON.parse(currentModalRecord.request.body) : {};
   const originalMsgs = originalReqJson.messages || [];
-  const originalLastMsg = originalMsgs[originalMsgs.length - 1];
-  const originalPrompt = extractMsgText(originalLastMsg);
+  const originalReplayMsg = findReplayUserMessage(originalMsgs) || originalMsgs[originalMsgs.length - 1];
+  const originalPrompt = extractReplayUserText(originalReplayMsg) || extractMsgText(originalReplayMsg);
   const editedPrompt = statusData.editedText || statusData.originalText || originalPrompt;
   const originalParsed = currentModalRecord?._sse_parsed;
-  const originalResult = originalParsed ? convertSseParsedToResult(originalParsed) : null;
+  const parsedFromEvents = currentModalRecord?.sse_events?.length ? parseSseEvents(currentModalRecord.sse_events) : null;
+  const originalResult = convertOriginalResponseToResult(currentModalRecord, originalParsed || parsedFromEvents);
   const replayResult = statusData.result;
   modalBody.innerHTML = `
     <div class="replay-diff-section">
@@ -2080,11 +2077,14 @@ function renderReplayDiffView(statusData) {
 function extractMsgText(msg) {
   if (!msg) return '';
   const content = msg.content;
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return stripLeadingSystemText(content);
   if (Array.isArray(content)) {
     const parts = [];
     for (const block of content) {
-      if (block.type === 'text' && block.text) parts.push(block.text);
+      if (block.type === 'text' && block.text) {
+        const text = stripLeadingSystemText(block.text);
+        if (text) parts.push(text);
+      }
       else if (block.type === 'thinking' && block.thinking) parts.push(`[Thinking] ${block.thinking}`);
       else if (block.type === 'tool_result' && block.content) {
         if (typeof block.content === 'string') parts.push(`[Tool Result] ${block.content}`);
@@ -2103,6 +2103,42 @@ function extractMsgText(msg) {
   return '';
 }
 
+function stripLeadingSystemText(text) {
+  let value = String(text || '').trim();
+  let previous = null;
+  while (value && value !== previous) {
+    previous = value;
+    value = value
+      .replace(/^<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>\s*/i, '')
+      .replace(/^<local-command\b[^>]*>[\s\S]*?<\/local-command>\s*/i, '')
+      .trim();
+  }
+  return value;
+}
+
+function extractReplayUserText(msg) {
+  if (!msg || msg.role !== 'user') return '';
+  const content = msg.content;
+  if (typeof content === 'string') return stripLeadingSystemText(content);
+  if (!Array.isArray(content)) return '';
+  const parts = [];
+  for (const block of content) {
+    if (block?.type !== 'text' || !block.text) continue;
+    const text = stripLeadingSystemText(block.text);
+    if (text) parts.push(text);
+  }
+  return parts.join('\n\n').trim();
+}
+
+function findReplayUserMessage(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== 'user') continue;
+    if (extractReplayUserText(msg)) return msg;
+  }
+  return null;
+}
+
 function convertSseParsedToResult(sseParsed) {
   if (!sseParsed || !sseParsed.contents) return null;
   const content = [];
@@ -2112,6 +2148,17 @@ function convertSseParsedToResult(sseParsed) {
     else if (item.type === 'tool_result') content.push({ type: 'tool_result', content: item.content });
   });
   return { content };
+}
+
+function convertOriginalResponseToResult(record, sseParsed) {
+  if (sseParsed?.contents?.length) return convertSseParsedToResult(sseParsed);
+  const body = record?.response?.body || '';
+  if (!body) return null;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return { content: [{ type: 'text', text: body }] };
+  }
 }
 
 function renderResponseMarkdown(responseJson) {
@@ -2176,16 +2223,16 @@ async function switchToEditView() {
     try {
       const body = JSON.parse(currentModalRecord.request?.body || '{}');
       const msgs = body.messages || [];
-      const lastMsg = msgs[msgs.length - 1];
-      if (lastMsg) editText = extractMsgText(lastMsg);
+      const replayMsg = findReplayUserMessage(msgs) || msgs[msgs.length - 1];
+      if (replayMsg) editText = extractReplayUserText(replayMsg);
     } catch {}
   }
   let msgTypeHint = '';
   try {
     const body = JSON.parse(currentModalRecord.request?.body || '{}');
     const msgs = body.messages || [];
-    const lastMsg = msgs[msgs.length - 1];
-    if (lastMsg) msgTypeHint = `[${lastMsg.role}${lastMsg.name ? ': ' + lastMsg.name : ''}]`;
+    const replayMsg = findReplayUserMessage(msgs) || msgs[msgs.length - 1];
+    if (replayMsg) msgTypeHint = `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]`;
   } catch {}
   const modalBody = document.getElementById('replayModalBody');
   modalBody.innerHTML = `
@@ -2211,17 +2258,9 @@ async function sendReplayFromModal(useOriginal) {
   try {
     const record = currentModalRecord;
     const reqJson = JSON.parse(record.request?.body || '{}');
-    let userMsg = null;
-    let originalText = '';
     const msgs = reqJson.messages || [];
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === 'user') {
-        userMsg = msgs[i];
-        const content = userMsg.content || '';
-        originalText = typeof content === 'string' ? content : (content.find(b => b.type === 'text')?.text || '');
-        break;
-      }
-    }
+    const userMsg = findReplayUserMessage(msgs);
+    const originalText = extractReplayUserText(userMsg);
     const createResp = await fetch(`${apiBase()}/api/replay/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -9,7 +9,7 @@
 
 ## 2. 修改 run.py 接入自动检测
 
-- [x] 2.1 在 `run.py` 中，当 `effective_domains` 为空时（config.toml 无配置），调用 `agent_config.detect_domains(agent_name)` 填充 domain 列表
+- [x] 2.1 在 `run.py` 中，每次正常启动都调用 `agent_config.detect_domains(agent_name)`，并与 config.toml 的有效 domain 去重合并
 - [x] 2.2 自动检测到 domain 时，打印提示行（如 `Auto-detected domains: aigc.sankuai.com`）告知用户当前录制目标
 - [x] 2.3 自动检测结果同样传入 `effective_paths`：opencode/claude 默认补充 `/v1/messages`，codex 补充 `/v1/responses`（仅在 path 列表为空时）
 
@@ -24,4 +24,4 @@
 
 - [ ] 4.1 删除（或备份）`~/.ccwhat/config.toml`，执行 `ccwhat -- opencode`，确认控制台打印自动检测的 domain 且不触发 setup wizard
 - [ ] 4.2 与 opencode 对话后，确认 `~/.ccwhat/raw-req-resp/` 下有 JSONL 文件落盘
-- [ ] 4.3 恢复 `config.toml`，确认手动配置仍优先生效（自动检测不覆盖用户配置）
+- [ ] 4.3 恢复 `config.toml`，确认手动配置与自动检测 domain 会同时进入录制列表

@@ -5,7 +5,7 @@
 ## What Changes
 
 - **新增** `ccwhat/agent_config.py` 模块，负责按 agent 名读取其配置文件，提取所有 provider 的 baseURL 并返回 domain 列表
-- **修改** `ccwhat/commands/run.py`：当 `~/.ccwhat/config.toml` 未配置 domain 时，自动调用上述模块填充录制 domain，跳过 setup wizard
+- **修改** `ccwhat/commands/run.py`：启动时读取 `~/.ccwhat/config.toml` 和目标 agent 配置文件，将两边的 domain 去重合并后作为录制 domain，跳过 setup wizard
 - 支持三个 agent 的配置读取：
   - **opencode**：`~/.config/opencode/opencode.jsonc`，提取 `provider.*.options.baseURL` 全量 domain
   - **claude**：`~/.claude/settings.json`，提取 `env.ANTHROPIC_BASE_URL`，无则回退 `api.anthropic.com`
@@ -20,7 +20,7 @@
 
 ### Modified Capabilities
 
-- `proxy-interceptor`：录制 domain 的来源从「用户在 config.toml 手动配置」扩展为「优先读 config.toml，其次自动从 agent 配置文件提取」
+- `proxy-interceptor`：录制 domain 的来源从「用户在 config.toml 手动配置」扩展为「合并 config.toml 与目标 agent 配置文件中提取的 domain」
 
 ## Impact
 

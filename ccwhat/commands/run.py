@@ -349,34 +349,6 @@ def run(
     agent_name = infer_agent_from_target(target_args)
     cfg = load_config(config_path)
 
-    # Auto-detect domains from agent config when no manual config exists
-    _auto_domains: list[str] = []
-    _auto_paths: list[str] = []
-    if not no_setup and (cfg is None or not cfg.is_valid_for_recording()):
-        from ccwhat import agent_config as _agent_config
-        _auto_domains = _agent_config.detect_domains(agent_name)
-        if _auto_domains:
-            _auto_paths = _agent_config.detect_default_paths(agent_name)
-        else:
-            is_interactive = sys.stdin.isatty()
-            if is_interactive:
-                click.echo(
-                    "No recording configuration found.\n"
-                    "Starting first-run setup wizard...\n"
-                )
-                from ccwhat.commands.setup import _run_setup_wizard
-                cfg = _run_setup_wizard(config_path)
-            else:
-                click.echo(
-                    "Error: no recording domains configured. Set up recording with:\n"
-                    "  ccwhat setup --preset claude --yes\n"
-                    "  ccwhat setup --preset codex --yes\n"
-                    "  ccwhat discover\n"
-                    "Or pass --no-setup to launch without payload recording.",
-                    err=True,
-                )
-                sys.exit(1)
-
     from ccwhat.config import DEFAULT_MAX_BODY_BYTES, DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_PATTERNS
     if no_setup:
         effective_domains: list[str] = []
@@ -385,25 +357,38 @@ def run(
         redact_headers = list(DEFAULT_REDACT_HEADERS)
         redact_patterns = list(DEFAULT_REDACT_PATTERNS)
         click.echo("Note: payload recording disabled (--no-setup). Traffic is proxied for discovery only.")
-    elif _auto_domains:
-        effective_domains = _auto_domains
-        effective_paths = _auto_paths
-        max_body_bytes = DEFAULT_MAX_BODY_BYTES
-        redact_headers = list(DEFAULT_REDACT_HEADERS)
-        redact_patterns = list(DEFAULT_REDACT_PATTERNS)
-        click.echo(f"Auto-detected domains : {', '.join(effective_domains)} (from {agent_name} config)")
-    elif cfg is not None and cfg.is_valid_for_recording():
-        effective_domains = cfg.effective_domains()
-        effective_paths = cfg.effective_paths()
-        max_body_bytes = cfg.max_body_bytes
-        redact_headers = cfg.redact_headers
-        redact_patterns = cfg.redact_header_patterns
     else:
-        effective_domains = []
-        effective_paths = []
-        max_body_bytes = DEFAULT_MAX_BODY_BYTES
-        redact_headers = list(DEFAULT_REDACT_HEADERS)
-        redact_patterns = list(DEFAULT_REDACT_PATTERNS)
+        from ccwhat import agent_config as _agent_config
+
+        configured_domains = cfg.effective_domains() if cfg is not None else []
+        detected_domains = _agent_config.detect_domains(agent_name)
+        effective_domains = list(dict.fromkeys(configured_domains + detected_domains))
+
+        configured_paths = cfg.effective_paths() if cfg is not None else []
+        detected_paths = (
+            _agent_config.detect_default_paths(agent_name)
+            if detected_domains
+            else []
+        )
+        effective_paths = list(dict.fromkeys(configured_paths + detected_paths))
+
+        max_body_bytes = cfg.max_body_bytes if cfg is not None else DEFAULT_MAX_BODY_BYTES
+        redact_headers = cfg.redact_headers if cfg is not None else list(DEFAULT_REDACT_HEADERS)
+        redact_patterns = (
+            cfg.redact_header_patterns
+            if cfg is not None
+            else list(DEFAULT_REDACT_PATTERNS)
+        )
+        if detected_domains:
+            click.echo(
+                f"Auto-detected domains : {', '.join(detected_domains)} "
+                f"(from {agent_name} config/defaults)"
+            )
+        if not effective_domains:
+            click.echo(
+                f"No recording domains auto-detected for {agent_name}; "
+                "starting proxy without payload recording."
+            )
 
     local_session_id = generate_local_session_id()
     proxy_proc: subprocess.Popen | None = None

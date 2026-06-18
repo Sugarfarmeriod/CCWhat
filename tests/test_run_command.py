@@ -157,6 +157,157 @@ class RunCommandTests(unittest.TestCase):
 
         self.assertIn("payload recording disabled", result.output.lower() + result.output)
 
+    def test_run_auto_detects_domains_when_config_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            started: dict[str, list[str]] = {}
+
+            def fake_start_proxy(port, output, domains, paths, *args):
+                started["domains"] = domains
+                started["paths"] = paths
+                return mock.MagicMock()
+
+            def fake_popen(args, env=None, **kwargs):
+                m = mock.MagicMock()
+                m.wait.return_value = 0
+                return m
+
+            with mock.patch("ccwhat.commands.run.load_config", return_value=None), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy", side_effect=fake_start_proxy), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen), \
+                 mock.patch("ccwhat.agent_config.detect_domains", return_value=["gw.example.com"]) as detect_domains, \
+                 mock.patch("ccwhat.agent_config.detect_default_paths", return_value=["/v1/messages"]):
+                result = self.runner.invoke(run, [
+                    "--output", tmp, "--", "opencode",
+                ])
+
+        self.assertEqual(result.exit_code, 0)
+        detect_domains.assert_called_once_with("opencode")
+        self.assertEqual(started["domains"], ["gw.example.com"])
+        self.assertEqual(started["paths"], ["/v1/messages"])
+        self.assertIn("Auto-detected domains", result.output)
+
+    def test_run_auto_detects_when_config_has_preset_but_no_domains(self) -> None:
+        cfg = RecordingConfig(preset="claude", onboarding_complete=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            started: dict[str, list[str]] = {}
+
+            def fake_start_proxy(port, output, domains, paths, *args):
+                started["domains"] = domains
+                started["paths"] = paths
+                return mock.MagicMock()
+
+            def fake_popen(args, env=None, **kwargs):
+                m = mock.MagicMock()
+                m.wait.return_value = 0
+                return m
+
+            with mock.patch("ccwhat.commands.run.load_config", return_value=cfg), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy", side_effect=fake_start_proxy), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen), \
+                 mock.patch("ccwhat.agent_config.detect_domains", return_value=["mcli.sankuai.com"]) as detect_domains, \
+                 mock.patch("ccwhat.agent_config.detect_default_paths", return_value=["/v1/messages"]):
+                result = self.runner.invoke(run, [
+                    "--output", tmp, "--", "claude",
+                ])
+
+        self.assertEqual(result.exit_code, 0)
+        detect_domains.assert_called_once_with("claude")
+        self.assertEqual(started["domains"], ["api.anthropic.com", "mcli.sankuai.com"])
+
+    def test_run_merges_manual_domains_with_auto_detection(self) -> None:
+        cfg = RecordingConfig(domains=["manual.example.com"], onboarding_complete=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            started: dict[str, list[str]] = {}
+
+            def fake_start_proxy(port, output, domains, paths, *args):
+                started["domains"] = domains
+                started["paths"] = paths
+                return mock.MagicMock()
+
+            def fake_popen(args, env=None, **kwargs):
+                m = mock.MagicMock()
+                m.wait.return_value = 0
+                return m
+
+            with mock.patch("ccwhat.commands.run.load_config", return_value=cfg), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy", side_effect=fake_start_proxy), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen), \
+                 mock.patch("ccwhat.agent_config.detect_domains", return_value=["gw.example.com"]) as detect_domains, \
+                 mock.patch("ccwhat.agent_config.detect_default_paths", return_value=["/v1/messages"]):
+                result = self.runner.invoke(run, [
+                    "--output", tmp, "--", "opencode",
+                ])
+
+        self.assertEqual(result.exit_code, 0)
+        detect_domains.assert_called_once_with("opencode")
+        self.assertEqual(started["domains"], ["manual.example.com", "gw.example.com"])
+
+    def test_run_merges_config_paths_with_auto_detected_default_paths(self) -> None:
+        cfg = RecordingConfig(paths=["/custom"], onboarding_complete=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            started: dict[str, list[str]] = {}
+
+            def fake_start_proxy(port, output, domains, paths, *args):
+                started["domains"] = domains
+                started["paths"] = paths
+                return mock.MagicMock()
+
+            def fake_popen(args, env=None, **kwargs):
+                m = mock.MagicMock()
+                m.wait.return_value = 0
+                return m
+
+            with mock.patch("ccwhat.commands.run.load_config", return_value=cfg), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy", side_effect=fake_start_proxy), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen), \
+                 mock.patch("ccwhat.agent_config.detect_domains", return_value=["gw.example.com"]), \
+                 mock.patch("ccwhat.agent_config.detect_default_paths", return_value=["/v1/messages"]) as default_paths:
+                result = self.runner.invoke(run, [
+                    "--output", tmp, "--", "opencode",
+                ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(started["domains"], ["gw.example.com"])
+        self.assertEqual(started["paths"], ["/custom", "/v1/messages"])
+        default_paths.assert_called_once_with("opencode")
+
+    def test_run_starts_transparent_proxy_when_auto_detection_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            started: dict[str, list[str]] = {}
+
+            def fake_start_proxy(port, output, domains, paths, *args):
+                started["domains"] = domains
+                started["paths"] = paths
+                return mock.MagicMock()
+
+            def fake_popen(args, env=None, **kwargs):
+                m = mock.MagicMock()
+                m.wait.return_value = 0
+                return m
+
+            with mock.patch("ccwhat.commands.run.load_config", return_value=None), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy", side_effect=fake_start_proxy), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen), \
+                 mock.patch("ccwhat.agent_config.detect_domains", return_value=[]):
+                result = self.runner.invoke(run, [
+                    "--output", tmp, "--", "unknown-agent",
+                ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(started["domains"], [])
+        self.assertEqual(started["paths"], [])
+        self.assertIn("starting proxy without payload recording", result.output)
+
     def test_deprecated_start_mc_prints_migration_hint(self) -> None:
         from ccwhat.commands.start_mc import start_mc
         result = self.runner.invoke(start_mc, [])
