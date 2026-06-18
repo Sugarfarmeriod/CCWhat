@@ -1,16 +1,18 @@
 ## MODIFIED Requirements
 
 ### Requirement: Domain filtering
-录制 domain 列表的来源 SHALL 遵循以下优先级顺序：
-1. `~/.ccwhat/config.toml` 中 `[recording] domains` 字段（用户手动配置，最高优先级）
-2. `agent_config.detect_domains(agent_name)` 自动从目标 agent 配置文件提取（无需 setup）
-3. 若以上均为空，则 domain 列表为空，`run` 命令打印提示但仍启动代理（仅透明转发，不录制）
+录制 domain 列表 SHALL 合并以下来源并去重：
+1. `~/.ccwhat/config.toml` 中已有的有效 domain（包括 `[recording] domains` 和 preset 展开的默认 domain）
+2. `agent_config.detect_domains(agent_name)` 自动从目标 agent 配置文件提取的 domain（无需 setup）
+
+若合并后仍为空，则 domain 列表为空，`run` 命令打印提示但仍启动代理（仅透明转发，不录制）。
 
 仅匹配 domain 列表中的请求被录制，不在列表中的流量被代理但不记录。
 
-#### Scenario: config.toml 已配置 domain，优先使用
+#### Scenario: config.toml 已配置 domain，同时合并 agent 配置 domain
 - **WHEN** `~/.ccwhat/config.toml` 含 `domains = ["mcli.sankuai.com"]`，用户执行 `ccwhat -- opencode`
-- **THEN** 仅录制 `mcli.sankuai.com` 的流量，不触发 agent 配置自动检测
+- **AND** `~/.config/opencode/opencode.jsonc` 含 provider baseURL `https://aigc.sankuai.com/v1/openai/native`
+- **THEN** ccwhat 同时录制 `mcli.sankuai.com` 和 `aigc.sankuai.com` 的流量
 
 #### Scenario: config.toml 无 domain，自动从 opencode 配置读取
 - **WHEN** `~/.ccwhat/config.toml` 不存在或 `domains` 为空，`~/.config/opencode/opencode.jsonc` 含 provider baseURL `https://aigc.sankuai.com/v1/openai/native`
