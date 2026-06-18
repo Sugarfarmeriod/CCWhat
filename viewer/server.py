@@ -357,14 +357,15 @@ def _make_handler(
                 return
 
             session = replay_store[session_id]
-            if edited_text is not None:
+            should_edit_request = edited_text is not None
+            if should_edit_request:
                 session["editedText"] = edited_text
 
             session["isLoading"] = True
             req_body = json.loads(json.dumps(session["reqJson"]))
             msgs = req_body.get("messages", [])
 
-            if msgs:
+            if should_edit_request and msgs:
                 last_msg = msgs[-1]
                 content = last_msg.get("content", "")
                 if isinstance(content, str):
@@ -374,7 +375,26 @@ def _make_handler(
                         if block.get("type") == "text":
                             block["text"] = session["editedText"]
                             break
-                    if not any(b.get("type") == "text" for b in content):
+                    else:
+                        for block in content:
+                            if block.get("type") != "tool_result":
+                                continue
+                            tool_content = block.get("content")
+                            if isinstance(tool_content, str):
+                                block["content"] = session["editedText"]
+                            elif isinstance(tool_content, list):
+                                for item in tool_content:
+                                    if item.get("type") == "text":
+                                        item["text"] = session["editedText"]
+                                        break
+                                else:
+                                    block["content"] = session["editedText"]
+                            else:
+                                block["content"] = session["editedText"]
+                            break
+                        else:
+                            last_msg["content"] = session["editedText"]
+                    if not any(b.get("type") in {"text", "tool_result"} for b in content):
                         last_msg["content"] = session["editedText"]
 
             api_url = os.environ.get("CLAUDE_API_URL", "https://mcli.sankuai.com/v1/messages")

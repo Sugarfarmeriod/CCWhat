@@ -1059,7 +1059,7 @@ function renderList() {
         e.stopPropagation();
         const record = allRecords[i];
         const reqJson = JSON.parse(record.request?.body || '{}');
-        const userMsg = findReplayUserMessage(reqJson.messages || []);
+        const userMsg = findReplayTargetMessage(reqJson.messages || []);
         openReplayModal(record, i, reqJson, userMsg);
       } else {
         selectRecord(i);
@@ -2019,8 +2019,8 @@ function closeReplayModal() {
 function renderReplayEditView(record, reqJson, userMsg) {
   const modalBody = document.getElementById('replayModalBody');
   const msgs = reqJson.messages || [];
-  const replayMsg = userMsg || findReplayUserMessage(msgs) || msgs[msgs.length - 1];
-  const editText = extractReplayUserText(replayMsg);
+  const replayMsg = userMsg || findReplayTargetMessage(msgs);
+  const editText = extractReplayTargetText(replayMsg);
   const msgTypeHint = replayMsg ? `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]` : '';
   modalBody.innerHTML = `
     <div class="replay-edit-section">
@@ -2039,8 +2039,8 @@ function renderReplayDiffView(statusData) {
   const modalBody = document.getElementById('replayModalBody');
   const originalReqJson = currentModalRecord?.request?.body ? JSON.parse(currentModalRecord.request.body) : {};
   const originalMsgs = originalReqJson.messages || [];
-  const originalReplayMsg = findReplayUserMessage(originalMsgs) || originalMsgs[originalMsgs.length - 1];
-  const originalPrompt = extractReplayUserText(originalReplayMsg) || extractMsgText(originalReplayMsg);
+  const originalReplayMsg = findReplayTargetMessage(originalMsgs);
+  const originalPrompt = extractReplayTargetText(originalReplayMsg);
   const editedPrompt = statusData.editedText || statusData.originalText || originalPrompt;
   const originalParsed = currentModalRecord?._sse_parsed;
   const parsedFromEvents = currentModalRecord?.sse_events?.length ? parseSseEvents(currentModalRecord.sse_events) : null;
@@ -2103,6 +2103,11 @@ function extractMsgText(msg) {
   return '';
 }
 
+function hasToolResultContent(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && content.some(block => block?.type === 'tool_result');
+}
+
 function stripLeadingSystemText(text) {
   let value = String(text || '').trim();
   let previous = null;
@@ -2116,8 +2121,25 @@ function stripLeadingSystemText(text) {
   return value;
 }
 
+function extractRawReplayText(msg) {
+  if (!msg) return '';
+  const content = msg.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return msg.text || msg.thinking || '';
+  const parts = [];
+  for (const block of content) {
+    if (!block) continue;
+    if (block.type === 'text' && block.text) parts.push(block.text);
+    else if (block.type === 'tool_result') parts.push(JSON.stringify(block, null, 2));
+    else if (block.type === 'tool_use') parts.push(JSON.stringify(block, null, 2));
+    else parts.push(JSON.stringify(block, null, 2));
+  }
+  return parts.join('\n\n').trim();
+}
+
 function extractReplayUserText(msg) {
   if (!msg || msg.role !== 'user') return '';
+  if (hasToolResultContent(msg)) return '';
   const content = msg.content;
   if (typeof content === 'string') return stripLeadingSystemText(content);
   if (!Array.isArray(content)) return '';
@@ -2128,6 +2150,19 @@ function extractReplayUserText(msg) {
     if (text) parts.push(text);
   }
   return parts.join('\n\n').trim();
+}
+
+function extractReplayTargetText(msg) {
+  if (!msg) return '';
+  if (msg.role === 'user' && !hasToolResultContent(msg)) {
+    return extractReplayUserText(msg);
+  }
+  return extractRawReplayText(msg);
+}
+
+function findReplayTargetMessage(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  return messages[messages.length - 1] || null;
 }
 
 function findReplayUserMessage(messages) {
@@ -2223,15 +2258,15 @@ async function switchToEditView() {
     try {
       const body = JSON.parse(currentModalRecord.request?.body || '{}');
       const msgs = body.messages || [];
-      const replayMsg = findReplayUserMessage(msgs) || msgs[msgs.length - 1];
-      if (replayMsg) editText = extractReplayUserText(replayMsg);
+      const replayMsg = findReplayTargetMessage(msgs);
+      if (replayMsg) editText = extractReplayTargetText(replayMsg);
     } catch {}
   }
   let msgTypeHint = '';
   try {
     const body = JSON.parse(currentModalRecord.request?.body || '{}');
     const msgs = body.messages || [];
-    const replayMsg = findReplayUserMessage(msgs) || msgs[msgs.length - 1];
+    const replayMsg = findReplayTargetMessage(msgs);
     if (replayMsg) msgTypeHint = `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]`;
   } catch {}
   const modalBody = document.getElementById('replayModalBody');
@@ -2259,8 +2294,8 @@ async function sendReplayFromModal(useOriginal) {
     const record = currentModalRecord;
     const reqJson = JSON.parse(record.request?.body || '{}');
     const msgs = reqJson.messages || [];
-    const userMsg = findReplayUserMessage(msgs);
-    const originalText = extractReplayUserText(userMsg);
+    const userMsg = findReplayTargetMessage(msgs);
+    const originalText = extractReplayTargetText(userMsg);
     const createResp = await fetch(`${apiBase()}/api/replay/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

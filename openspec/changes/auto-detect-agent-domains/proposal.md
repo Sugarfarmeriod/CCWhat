@@ -4,19 +4,19 @@
 
 ## What Changes
 
-- **新增** `ccwhat/agent_config.py` 模块，负责按 agent 名读取其配置文件，提取所有 provider 的 baseURL 并返回 domain 列表
+- **新增** `ccwhat/agent_config.py` 模块，负责按 agent 名读取其配置文件、运行时 provider catalog 或环境变量，提取所有 provider 的 baseURL 并返回 domain 列表
 - **修改** `ccwhat/commands/run.py`：启动时读取 `~/.ccwhat/config.toml` 和目标 agent 配置文件，将两边的 domain 去重合并后作为录制 domain，跳过 setup wizard
 - 支持三个 agent 的配置读取：
-  - **opencode**：`~/.config/opencode/opencode.jsonc`，提取 `provider.*.options.baseURL` 全量 domain
-  - **claude**：`~/.claude/settings.json`，提取 `env.ANTHROPIC_BASE_URL`，无则回退 `api.anthropic.com`
-  - **codex**：`~/.codex/config.toml`，提取 `shell_environment_policy.set` 中 `*_BASE_URL` 字段，无则回退 `api.openai.com`
+  - **opencode**：`~/.config/opencode/opencode.jsonc` 提取自定义 `provider.*.options.baseURL`，并通过 `opencode models --verbose` 提取内置 provider catalog 中的 `api.url`
+  - **claude**：`~/.claude/settings.json` 和当前环境变量中提取 `ANTHROPIC_*_BASE_URL`，无则回退 `api.anthropic.com`
+  - **codex**：`~/.codex/config.toml` 提取 `openai_base_url`、`chatgpt_base_url`、`model_providers.*.base_url` 和 `shell_environment_policy.set` 中的 `*_BASE_URL` 字段，无则回退 `api.openai.com`
 - `ccwhat setup` 命令保留，作为高级用户手动覆盖配置的入口
 
 ## Capabilities
 
 ### New Capabilities
 
-- `agent-config-reader`：从各 coding agent 的配置文件路径自动解析 API baseURL，返回录制所需的 domain 列表
+- `agent-config-reader`：从各 coding agent 的配置文件、运行时 provider catalog 和环境变量自动解析 API baseURL，返回录制所需的 domain 列表
 
 ### Modified Capabilities
 
