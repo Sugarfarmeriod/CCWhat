@@ -2,9 +2,13 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v2.2.0` · [更新日志](CHANGELOG.md)
+当前版本：`v2.2.1` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
+
+### v2.2.1 — 零配置自动录制
+
+- **零配置自动录制**：启动 `ccwhat` 时自动读取目标 agent 配置文件提取 API domain，与手动配置去重合并，无需先执行 `ccwhat setup`。支持 opencode / claude / codex 三种 agent。
 
 ### v2.2.0 — 请求回放
 
