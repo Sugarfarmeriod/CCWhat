@@ -130,6 +130,7 @@ body {
     background: var(--bg-elevated); border-bottom: 1px solid var(--border);
     padding: 6px 10px; display: flex; align-items: center;
     gap: 4px 6px; flex-shrink: 0; flex-wrap: wrap;
+    position: relative; z-index: 200;
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   }
   .topbar h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.01em; }
@@ -1486,6 +1487,83 @@ body {
     margin: 6px 0;
     line-height: 1.5;
   }
+  .top-search-wrap { position: relative; display: flex; align-items: center; gap: 6px; flex: 0 1 390px; min-width: 240px; }
+  .top-search-wrap #searchBox { flex: 1 1 170px; min-width: 130px; width: auto; }
+  .top-search-wrap #globalSearchScope { flex: 0 0 130px; min-width: 120px; }
+  .top-search-toggle { display: none; }
+  .top-search-toggle.visible { display: inline-flex; }
+  .top-search-wrap.folded #searchBox,
+  .top-search-wrap.folded #globalSearchScope,
+  .top-search-wrap.folded #globalSearchBtn { display: none; }
+  .top-search-popover {
+    position: fixed; top: 36px; left: 50%; transform: translateX(-50%); width: min(920px, calc(100vw - 24px));
+    max-height: min(520px, calc(100vh - 90px)); overflow: hidden; z-index: 220;
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); padding: 10px; display: none;
+  }
+  .top-search-popover.open { display: block; }
+  .global-search-statusbar { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .global-search-statusline { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+  .global-search-statusline .spinner { flex-shrink: 0; }
+  .global-search-statusbar #globalSearchStatus { min-width: 0; margin: 0; }
+  .global-search-actions { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .global-search-fold-btn, .global-search-clear-btn { display: none; flex-shrink: 0; align-self: center; }
+  .global-search-fold-btn.visible { display: inline-flex; }
+  .global-search-clear-btn.visible { display: inline-flex; }
+  .global-search-layout { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(210px, 1fr) minmax(260px, 1.25fr); gap: 8px; }
+  .global-search-layout.scope-current-project { grid-template-columns: minmax(220px, .9fr) minmax(300px, 1.4fr); }
+  .global-search-layout.scope-current-session { grid-template-columns: minmax(320px, 1fr); }
+  .global-search-layout.scope-current-project .global-search-project-column,
+  .global-search-layout.scope-current-session .global-search-project-column,
+  .global-search-layout.scope-current-session .global-search-session-column { display: none; }
+  .global-search-column { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-base); overflow: hidden; }
+  .global-search-col-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); padding: 7px 8px; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+  .global-search-col-body { max-height: 390px; overflow-y: auto; overflow-x: hidden; padding: 6px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  .global-search-group {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 8px; cursor: pointer; min-width: 0; background: var(--bg-elevated);
+    flex: 0 0 auto; max-height: 104px; overflow: hidden; box-sizing: border-box;
+  }
+  .global-search-group:hover, .global-search-group.selected { border-color: var(--accent); }
+  .global-search-group-title { font-size: 12px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .global-search-group-meta { font-size: 11px; color: var(--text-secondary); margin-top: 3px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .global-search-results { display: flex; flex-direction: column; gap: 6px; }
+  .global-search-filterbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--bg-surface);
+  }
+  .global-search-filterbar label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); }
+  .global-search-filterbar input { margin: 0; }
+  .global-search-result {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg-elevated); padding: 9px 10px; cursor: pointer;
+    max-width: 100%; min-width: 0; overflow: hidden; flex: 0 0 auto; box-sizing: border-box; max-height: 112px;
+  }
+  .global-search-result:hover { border-color: var(--accent); }
+  .global-search-head { display: grid; grid-template-columns: auto 1fr; gap: 4px 6px; align-items: start; margin-bottom: 6px; min-width: 0; }
+  .global-search-type {
+    font-size: 10px; text-transform: uppercase; color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    border-radius: var(--radius-sm); padding: 1px 5px; grid-column: 1;
+  }
+  .global-search-title {
+    font-size: 13px; font-weight: 600; color: var(--text-primary); grid-column: 2;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .global-search-meta {
+    font-size: 11px; color: var(--text-secondary); grid-column: 1 / -1;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .global-search-source {
+    font-size: 11px; color: var(--text-primary); background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 6px;
+    grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .global-search-snippet {
+    font-size: 12px; color: var(--text-primary); line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word; overflow-wrap: anywhere;
+    max-height: 4.4em;
+  }
   .trace-conversation-card.editing {
     outline: 1px dashed var(--accent);
     outline-offset: -3px;
@@ -1644,7 +1722,48 @@ body {
   <select class="field" id="sessionSel" onchange="loadSession()" title="Session" style="flex:0 1 200px;min-width:120px;max-width:280px">
     <option value="">— session —</option>
   </select>
-  <input class="field" id="searchBox" placeholder="搜索 tasks / turns / events …" oninput="onSearchInput()" style="width:160px;flex:0 1 auto">
+  <div class="top-search-wrap" id="globalSearchWrap">
+    <input class="field" id="searchBox" placeholder="Search tasks / turns / events" oninput="onSearchInput()" onkeydown="onTopSearchKeydown(event)">
+    <select class="field" id="globalSearchScope" onchange="renderGlobalSearchState()">
+      <option value="current_session">Current session</option>
+      <option value="current_project">Current project</option>
+      <option value="all_projects">All projects</option>
+    </select>
+    <button class="btn" id="globalSearchBtn" onclick="runGlobalSearch()" title="Search selected scope">Search</button>
+    <button class="btn top-search-toggle" id="globalSearchToggleBtn" onclick="toggleGlobalSearchPopover()" title="Show search results">Unfold result</button>
+    <div class="top-search-popover" id="globalSearchPopover">
+      <div class="global-search-statusbar">
+        <div class="global-search-statusline">
+          <span class="spinner" id="globalSearchSpinner" style="display:none"></span>
+          <div id="globalSearchStatus" class="placeholder">Enter a query to search the current session.</div>
+        </div>
+        <div class="global-search-actions">
+          <button class="btn global-search-fold-btn" id="globalSearchFoldBtn" onclick="collapseGlobalSearchPopover()" title="Hide search results">Fold result</button>
+          <button class="btn global-search-clear-btn" id="globalSearchClearBtn" onclick="clearOrStopGlobalSearch()" title="Clear results or stop the active search">清空/停止</button>
+        </div>
+      </div>
+      <div class="global-search-layout" id="globalSearchLayout" style="display:none">
+        <div class="global-search-column global-search-project-column">
+          <div class="global-search-col-title">Projects</div>
+          <div class="global-search-col-body" id="globalSearchProjects"></div>
+        </div>
+        <div class="global-search-column global-search-session-column">
+          <div class="global-search-col-title">Sessions</div>
+          <div class="global-search-col-body" id="globalSearchSessions"></div>
+        </div>
+        <div class="global-search-column global-search-result-column">
+          <div class="global-search-col-title">Results</div>
+          <div class="global-search-filterbar" id="globalSearchTypeFilters">
+            <label><input type="checkbox" value="task" checked onchange="onGlobalSearchTypeFilterChange()">Task</label>
+            <label><input type="checkbox" value="turn" checked onchange="onGlobalSearchTypeFilterChange()">Turn</label>
+            <label><input type="checkbox" value="event" checked onchange="onGlobalSearchTypeFilterChange()">Event</label>
+            <label><input type="checkbox" value="session" onchange="onGlobalSearchTypeFilterChange()">Session</label>
+          </div>
+          <div class="global-search-col-body global-search-results" id="globalSearchResults"></div>
+        </div>
+      </div>
+    </div>
+  </div>
   <button class="btn" onclick="init()" title="刷新项目列表" style="flex-shrink:0">⟳</button>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题" style="margin-left:auto">☾</button>
   <button id="exportBtn" style="display:none"></button>
@@ -6031,6 +6150,12 @@ function onSearchInput() {
   if (active === 'overview') renderOverviewPage();
 }
 
+function onTopSearchKeydown(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  runGlobalSearch();
+}
+
 function escRaw(s) {
   return String(s)
     .replace(/&/g,'&amp;')
@@ -6285,6 +6410,24 @@ const datasetSaveState = {
   error: '',
 };
 window.datasetSaveState = datasetSaveState;
+const globalSearchState = {
+  inFlight: false,
+  query: '',
+  scope: 'current_session',
+  results: [],
+  warnings: [],
+  truncated: false,
+  error: '',
+  renderId: '',
+  selectedProject: '',
+  selectedSession: '',
+  scroll: { projects: 0, sessions: 0, results: 0 },
+  seenKeys: new Set(),
+  progress: null,
+  userCollapsed: false,
+  typeFilters: new Set(['task', 'turn', 'event']),
+};
+window.globalSearchState = globalSearchState;
 
 let taskTraceEditMode = false;
 let selectedEditableTaskId = null;
@@ -7942,6 +8085,732 @@ function navigateToEventId(eventId) {
 }
 
 // ── Init: load projects ──────────────────────────────────────────────────
+function currentProjectForSession(sessionId) {
+  for (const project of allProjects || []) {
+    for (const session of project.sessions || []) {
+      const sid = typeof session === 'object' ? session.id : session;
+      if (sid === sessionId) return project.projectDir;
+    }
+  }
+  return document.getElementById('projectSel')?.value || '';
+}
+
+function sessionInfoForSearchResult(result) {
+  const sessionId = result?.sessionId || '';
+  for (const project of allProjects || []) {
+    for (const session of project.sessions || []) {
+      const sid = typeof session === 'object' ? session.id : session;
+      if (sid === sessionId) return { projectDir: project.projectDir, session };
+    }
+  }
+  return { projectDir: result?.projectDir || '', session: null };
+}
+
+function globalSearchResultTitle(result) {
+  if (result.type === 'task') return result.title || result.taskId || 'Untitled task';
+  const info = sessionInfoForSearchResult(result).session;
+  const displayName = result.displayName || result.title || (typeof info === 'object' ? (info.displayName || info.title) : '');
+  const shortId = String(result.sessionId || '').slice(0, 8);
+  if (displayName && displayName !== result.sessionId && displayName !== shortId) return displayName;
+  if (result.type === 'turn') return 'Matched turn';
+  if (result.type === 'event') return 'Matched event';
+  return 'Untitled session';
+}
+
+function globalSearchResultSource(result) {
+  const info = sessionInfoForSearchResult(result);
+  const project = result.projectDir || info.projectDir || 'unknown project';
+  const sessionId = result.sessionId ? String(result.sessionId).slice(0, 8) : '';
+  return sessionId ? `${project} · ${sessionId}` : project;
+}
+
+function globalSearchResultKey(result) {
+  if (result.type === 'task') return ['task', result.sessionId || '', result.taskId || ''].join('|');
+  if (result.type === 'session') return ['session', result.sessionId || ''].join('|');
+  const snippet = String(result.snippet || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 100);
+  return [result.type || '', result.sessionId || '', snippet].join('|');
+}
+
+function compactSearchText(value, maxLen) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + '…';
+}
+
+function globalSearchSessionCandidates(scope, currentProject) {
+  const candidates = [];
+  for (const project of allProjects || []) {
+    if (scope === 'current_project' && project.projectDir !== currentProject) continue;
+    for (const session of project.sessions || []) {
+      const sessionId = typeof session === 'object' ? session.id : session;
+      if (sessionId) candidates.push({ projectDir: project.projectDir, sessionId });
+    }
+  }
+  return candidates;
+}
+
+function globalSearchScopeLabel(scope) {
+  return {
+    current_session: 'Current session',
+    current_project: 'Current project',
+    all_projects: 'All projects',
+  }[scope] || scope;
+}
+
+function clientTaskSearchResults(query, scope) {
+  const q = String(query || '').toLowerCase();
+  if (q.length < 2) return [];
+  const currentSession = document.getElementById('sessionSel')?.value || '';
+  const currentProject = document.getElementById('projectSel')?.value || '';
+  const allowed = new Set();
+  if (scope === 'current_session' && currentSession) allowed.add(currentSession);
+  if (scope === 'current_project') {
+    const project = allProjects.find(p => p.projectDir === currentProject);
+    for (const session of project?.sessions || []) allowed.add(typeof session === 'object' ? session.id : session);
+  }
+  if (scope === 'all_projects') {
+    for (const project of allProjects) {
+      for (const session of project.sessions || []) allowed.add(typeof session === 'object' ? session.id : session);
+    }
+  }
+  return clientTaskSearchResultsForSessions(query, allowed);
+}
+
+function clientTaskSearchResultsForSessions(query, allowed) {
+  const q = String(query || '').toLowerCase();
+  if (q.length < 2) return [];
+  const results = [];
+  for (const sid of allowed) {
+    const source = activeTaskTraceData(sid) || taskSegmentReports[sid];
+    for (const task of source?.tasks || []) {
+      const fields = {
+        taskId: task.taskId,
+        title: task.title,
+        userIntent: task.userIntent,
+        displayName: task.displayName,
+        description: task.description,
+        summary: task.summary,
+        taskType: task.taskType,
+        startEventId: task.startEventId,
+        endEventId: task.endEventId,
+        finalClaim: task.finalClaim,
+        evidence: JSON.stringify(task.evidence || {}),
+        boundaryReasons: (task.boundaryReasons || []).join(' '),
+      };
+      const matchedFields = Object.entries(fields)
+        .filter(([, value]) => String(value || '').toLowerCase().includes(q))
+        .map(([name]) => name);
+      if (!matchedFields.length) continue;
+      const snippetSource = matchedFields.map(name => fields[name]).filter(Boolean).join(' ');
+      results.push({
+        type: 'task',
+        sessionId: sid,
+        projectDir: currentProjectForSession(sid),
+        taskId: task.taskId,
+        title: task.title || task.taskId,
+        taskType: task.taskType || '',
+        eventId: task.startEventId || '',
+        matchedFields,
+        snippet: trunc(snippetSource, 180),
+        source: 'viewer-cache',
+      });
+    }
+  }
+  return results;
+}
+
+async function runGlobalSearch() {
+  const input = document.getElementById('searchBox');
+  const scopeEl = document.getElementById('globalSearchScope');
+  globalSearchState.userCollapsed = false;
+  setGlobalSearchPopoverOpen(true);
+  const query = (input?.value || '').trim();
+  const scope = scopeEl?.value || 'current_session';
+  globalSearchState.query = query;
+  globalSearchState.scope = scope;
+  globalSearchState.error = '';
+  globalSearchState.results = [];
+  globalSearchState.warnings = [];
+  globalSearchState.truncated = false;
+  globalSearchState.seenKeys = new Set();
+  globalSearchState.selectedProject = '';
+  globalSearchState.selectedSession = '';
+  globalSearchState.scroll = { projects: 0, sessions: 0, results: 0 };
+  globalSearchState.progress = null;
+  globalSearchState.renderId = `${Date.now()}-${Math.random()}`;
+  if (query.length < 2) {
+    globalSearchState.error = 'Query must be at least 2 characters.';
+    renderGlobalSearchState();
+    return;
+  }
+  const sessionId = document.getElementById('sessionSel')?.value || '';
+  const projectDir = document.getElementById('projectSel')?.value || currentProjectForSession(sessionId);
+  if (scope !== 'current_session') {
+    await runGlobalSearchAcrossSessions(query, scope, projectDir);
+    return;
+  }
+  const params = new URLSearchParams({ q: query, scope, limit: '50' });
+  if (sessionId) params.set('session', sessionId);
+  if (projectDir) params.set('project', projectDir);
+
+  globalSearchState.inFlight = true;
+  const searchId = globalSearchState.renderId;
+  renderGlobalSearchState();
+  try {
+    const url = `${apiBase()}/api/search?${params.toString()}`;
+    const resp = await fetch(url);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.ok === false) throw new Error(data.error || `HTTP ${resp.status}`);
+    if (globalSearchState.renderId !== searchId) return;
+    const cachedTaskResults = clientTaskSearchResults(query, scope);
+    const seen = new Set();
+    globalSearchState.results = [...(data.results || []), ...cachedTaskResults].filter(result => {
+      const key = globalSearchResultKey(result);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    globalSearchState.warnings = data.warnings || [];
+    globalSearchState.truncated = !!data.truncated;
+  } catch (err) {
+    if (globalSearchState.renderId === searchId) globalSearchState.error = err.message || String(err);
+  } finally {
+    if (globalSearchState.renderId === searchId) {
+      globalSearchState.inFlight = false;
+      renderGlobalSearchState();
+    }
+  }
+}
+
+async function runGlobalSearchAcrossSessions(query, scope, projectDir) {
+  setGlobalSearchPopoverOpen(true);
+
+  const candidates = globalSearchSessionCandidates(scope, projectDir);
+  if (!candidates.length) {
+    globalSearchState.inFlight = false;
+    globalSearchState.progress = { scanned: 0, total: 0, found: 0 };
+    renderGlobalSearchState();
+    return;
+  }
+
+  const renderId = `${Date.now()}-${Math.random()}`;
+  globalSearchState.renderId = renderId;
+  globalSearchState.inFlight = true;
+  globalSearchState.progress = { scanned: 0, total: candidates.length, found: 0 };
+  let scanned = 0;
+  let next = 0;
+  let active = 0;
+  let found = 0;
+  const warnings = [];
+
+  function updateStatus() {
+    globalSearchState.progress = { scanned, total: candidates.length, found };
+    renderGlobalSearchState();
+  }
+  updateStatus();
+
+  await new Promise(resolve => {
+    function pump() {
+      if (globalSearchState.renderId !== renderId) {
+        resolve();
+        return;
+      }
+      while (active < 4 && next < candidates.length) {
+        const candidate = candidates[next++];
+        active++;
+        const params = new URLSearchParams({
+          q: query,
+          scope: 'current_session',
+          project: candidate.projectDir,
+          session: candidate.sessionId,
+          limit: '50',
+        });
+        fetch(`${apiBase()}/api/search?${params.toString()}`)
+          .then(resp => resp.json().then(data => ({ ok: resp.ok && data.ok !== false, data, status: resp.status })))
+          .then(({ ok, data, status: httpStatus }) => {
+            if (!ok) {
+              warnings.push({ ...candidate, message: data.error || `HTTP ${httpStatus}` });
+              return;
+            }
+            found += appendGlobalSearchResults(null, [
+              ...(data.results || []),
+              ...clientTaskSearchResultsForSessions(query, new Set([candidate.sessionId])),
+            ]);
+            warnings.push(...(data.warnings || []));
+          })
+          .catch(err => {
+            warnings.push({ ...candidate, message: err.message || String(err) });
+          })
+          .finally(() => {
+            active--;
+            scanned++;
+            updateStatus();
+            if (next >= candidates.length && active === 0) {
+              globalSearchState.inFlight = false;
+              globalSearchState.warnings = warnings;
+              globalSearchState.progress = { scanned, total: candidates.length, found };
+              renderGlobalSearchState();
+              resolve();
+              return;
+            }
+            pump();
+          });
+      }
+    }
+    pump();
+  });
+}
+
+function globalSearchColumnElements() {
+  return {
+    projects: document.getElementById('globalSearchProjects'),
+    sessions: document.getElementById('globalSearchSessions'),
+    results: document.getElementById('globalSearchResults'),
+  };
+}
+
+function saveGlobalSearchScrollPositions() {
+  const cols = globalSearchColumnElements();
+  globalSearchState.scroll = {
+    projects: cols.projects?.scrollTop || 0,
+    sessions: cols.sessions?.scrollTop || 0,
+    results: cols.results?.scrollTop || 0,
+  };
+}
+
+function restoreGlobalSearchScrollPositions() {
+  const cols = globalSearchColumnElements();
+  const scroll = globalSearchState.scroll || {};
+  requestAnimationFrame(() => {
+    if (cols.projects) cols.projects.scrollTop = scroll.projects || 0;
+    if (cols.sessions) cols.sessions.scrollTop = scroll.sessions || 0;
+    if (cols.results) cols.results.scrollTop = scroll.results || 0;
+  });
+}
+
+function updateGlobalSearchToggle() {
+  const btn = document.getElementById('globalSearchToggleBtn');
+  const foldBtn = document.getElementById('globalSearchFoldBtn');
+  const clearBtn = document.getElementById('globalSearchClearBtn');
+  const popover = document.getElementById('globalSearchPopover');
+  const wrap = document.getElementById('globalSearchWrap');
+  if (!btn) return;
+  const visible = !!(globalSearchState.query || globalSearchState.results.length || globalSearchState.error || globalSearchState.inFlight);
+  const open = !!popover?.classList.contains('open');
+  btn.classList.toggle('visible', visible && !open);
+  btn.textContent = globalSearchState.results.length ? `Unfold result (${globalSearchState.results.length})` : 'Unfold result';
+  if (foldBtn) foldBtn.classList.toggle('visible', visible && open);
+  if (clearBtn) clearBtn.classList.toggle('visible', !!globalSearchState.inFlight);
+  if (wrap) {
+    wrap.classList.toggle('folded', visible && !open);
+  }
+}
+
+function setGlobalSearchPopoverOpen(open) {
+  const popover = document.getElementById('globalSearchPopover');
+  if (!popover) return;
+  if (open) {
+    globalSearchState.userCollapsed = false;
+    const wrap = document.getElementById('globalSearchWrap');
+    if (wrap) wrap.classList.remove('folded');
+    popover.classList.add('open');
+    updateGlobalSearchToggle();
+    restoreGlobalSearchScrollPositions();
+    return;
+  }
+  globalSearchState.userCollapsed = true;
+  saveGlobalSearchScrollPositions();
+  popover.classList.remove('open');
+  updateGlobalSearchToggle();
+}
+
+function toggleGlobalSearchPopover() {
+  const popover = document.getElementById('globalSearchPopover');
+  setGlobalSearchPopoverOpen(!popover?.classList.contains('open'));
+}
+
+function clearOrStopGlobalSearch() {
+  globalSearchState.renderId = `${Date.now()}-${Math.random()}`;
+  globalSearchState.inFlight = false;
+  globalSearchState.query = '';
+  globalSearchState.results = [];
+  globalSearchState.warnings = [];
+  globalSearchState.truncated = false;
+  globalSearchState.error = '';
+  globalSearchState.selectedProject = '';
+  globalSearchState.selectedSession = '';
+  globalSearchState.progress = null;
+  globalSearchState.seenKeys = new Set();
+  globalSearchState.userCollapsed = false;
+  const input = document.getElementById('searchBox');
+  if (input) input.value = '';
+  const popover = document.getElementById('globalSearchPopover');
+  if (popover) popover.classList.remove('open');
+  renderGlobalSearchState();
+  updateGlobalSearchToggle();
+}
+
+function collapseGlobalSearchPopover() {
+  setGlobalSearchPopoverOpen(false);
+}
+
+document.addEventListener('click', event => {
+  const wrap = document.getElementById('globalSearchWrap');
+  const popover = document.getElementById('globalSearchPopover');
+  if (!wrap || !popover?.classList.contains('open')) return;
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  if (!wrap.contains(event.target) && !path.includes(wrap)) collapseGlobalSearchPopover();
+});
+
+function globalSearchSessionLabel(sessionId, sampleResult) {
+  const info = sessionInfoForSearchResult(sampleResult || { sessionId });
+  const session = info.session;
+  const displayName = sampleResult?.displayName || sampleResult?.title || (typeof session === 'object' ? (session.displayName || session.title) : '');
+  if (displayName && displayName !== sessionId) return compactSearchText(displayName, 96);
+  return sessionId ? `Session ${String(sessionId).slice(0, 8)}` : 'Unknown session';
+}
+
+function globalSearchProjectLabel(projectDir) {
+  const value = String(projectDir || 'unknown project');
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts.slice(-1)[0] || value;
+}
+
+function buildGlobalSearchGroups() {
+  const projects = new Map();
+  for (const result of globalSearchState.results || []) {
+    if (!globalSearchTypeAllowed(result)) continue;
+    const projectDir = result.projectDir || sessionInfoForSearchResult(result).projectDir || 'unknown project';
+    const sessionId = result.sessionId || '';
+    if (!projects.has(projectDir)) {
+      projects.set(projectDir, { projectDir, label: globalSearchProjectLabel(projectDir), resultCount: 0, sessions: new Map() });
+    }
+    const project = projects.get(projectDir);
+    project.resultCount++;
+    if (!project.sessions.has(sessionId)) {
+      project.sessions.set(sessionId, {
+        sessionId,
+        label: globalSearchSessionLabel(sessionId, result),
+        resultCount: 0,
+        results: [],
+      });
+    }
+    const session = project.sessions.get(sessionId);
+    session.resultCount++;
+    session.results.push(result);
+    if (!session.label || /^Session /.test(session.label)) session.label = globalSearchSessionLabel(sessionId, result);
+  }
+  return Array.from(projects.values())
+    .map(project => ({ ...project, sessions: Array.from(project.sessions.values()) }))
+    .sort((a, b) => b.resultCount - a.resultCount || a.label.localeCompare(b.label));
+}
+
+function ensureGlobalSearchSelection(projects) {
+  if (!projects.length) {
+    globalSearchState.selectedProject = '';
+    globalSearchState.selectedSession = '';
+    return;
+  }
+  const selectedProject = projects.find(p => p.projectDir === globalSearchState.selectedProject);
+  if (!selectedProject) {
+    if (globalSearchState.scope === 'all_projects' && projects.length > 1) {
+      globalSearchState.selectedProject = '';
+      globalSearchState.selectedSession = '';
+      return;
+    }
+    globalSearchState.selectedProject = projects[0].projectDir;
+    globalSearchState.selectedSession = '';
+  }
+  const project = projects.find(p => p.projectDir === globalSearchState.selectedProject);
+  if (!project) return;
+  if (!project.sessions.some(s => s.sessionId === globalSearchState.selectedSession)) {
+    globalSearchState.selectedSession = globalSearchState.scope === 'current_session' && project.sessions.length ? project.sessions[0].sessionId : '';
+  }
+}
+
+function globalSearchLayoutScopeClass(scope) {
+  return {
+    current_session: 'scope-current-session',
+    current_project: 'scope-current-project',
+    all_projects: 'scope-all-projects',
+  }[scope] || 'scope-current-session';
+}
+
+function selectGlobalSearchProject(projectDir) {
+  saveGlobalSearchScrollPositions();
+  globalSearchState.selectedProject = projectDir;
+  globalSearchState.selectedSession = '';
+  globalSearchState.scroll.sessions = 0;
+  globalSearchState.scroll.results = 0;
+  syncGlobalSearchTopSelectors(projectDir, '');
+  renderGlobalSearchState();
+}
+
+function selectGlobalSearchSession(sessionId) {
+  saveGlobalSearchScrollPositions();
+  const wasSelected = globalSearchState.selectedSession === sessionId;
+  globalSearchState.selectedSession = wasSelected ? '' : sessionId;
+  globalSearchState.scroll.results = 0;
+  syncGlobalSearchTopSelectors(globalSearchState.selectedProject, wasSelected ? '' : sessionId);
+  renderGlobalSearchState();
+  if (!wasSelected && sessionId && currentLoadedSessionId !== sessionId) {
+    loadSession().catch(err => showTaskTraceToast(err.message || String(err), 'warning'));
+  }
+}
+
+function syncGlobalSearchTopSelectors(projectDir, sessionId) {
+  const projectSel = document.getElementById('projectSel');
+  const sessionSel = document.getElementById('sessionSel');
+  if (projectSel && projectDir) projectSel.value = projectDir;
+  if (!sessionSel) return;
+  const project = allProjects.find(p => p.projectDir === projectDir);
+  if (project) {
+    const selected = sessionSel.value;
+    sessionSel.innerHTML = '<option value="">— session —</option>';
+    for (const session of project.sessions || []) {
+      const id = typeof session === 'string' ? session : session.id;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = fmtSessionLabel(session);
+      opt.title = id;
+      sessionSel.appendChild(opt);
+    }
+    sessionSel.value = sessionId || (project.sessions?.some(session => (typeof session === 'string' ? session : session.id) === selected) ? selected : '');
+  } else if (sessionId) {
+    sessionSel.value = sessionId;
+  }
+}
+
+function renderEmptyGlobalSearchColumn(column, text) {
+  column.innerHTML = `<div class="placeholder">${esc(text)}</div>`;
+}
+
+function selectedGlobalSearchTypes() {
+  const boxes = document.querySelectorAll('#globalSearchTypeFilters input[type="checkbox"]');
+  const selected = new Set(Array.from(boxes).filter(box => box.checked).map(box => box.value));
+  return selected.size ? selected : new Set(['task', 'turn', 'event']);
+}
+
+function onGlobalSearchTypeFilterChange() {
+  globalSearchState.typeFilters = selectedGlobalSearchTypes();
+  renderGlobalSearchState();
+}
+
+function globalSearchTypeAllowed(result) {
+  const filters = globalSearchState.typeFilters || new Set(['task', 'turn', 'event']);
+  return filters.has(result?.type || 'result');
+}
+
+function renderGlobalSearchState() {
+  const scopeEl = document.getElementById('globalSearchScope');
+  if (scopeEl) globalSearchState.scope = scopeEl.value || 'current_session';
+  const popover = document.getElementById('globalSearchPopover');
+  const status = document.getElementById('globalSearchStatus');
+  const spinner = document.getElementById('globalSearchSpinner');
+  const layout = document.getElementById('globalSearchLayout');
+  const cols = globalSearchColumnElements();
+  if (!status || !layout || !cols.projects || !cols.sessions || !cols.results) return;
+  saveGlobalSearchScrollPositions();
+  if (popover && !globalSearchState.userCollapsed && (globalSearchState.inFlight || globalSearchState.query || globalSearchState.error)) {
+    popover.classList.add('open');
+  }
+  updateGlobalSearchToggle();
+  if (globalSearchState.error) {
+    if (spinner) spinner.style.display = 'none';
+    status.textContent = globalSearchState.error;
+    layout.style.display = 'none';
+    return;
+  }
+  const count = globalSearchState.results.length;
+  if (!globalSearchState.query) {
+    if (spinner) spinner.style.display = 'none';
+    status.textContent = `Enter a query to search the ${globalSearchScopeLabel(globalSearchState.scope).toLowerCase()}.`;
+    layout.style.display = 'none';
+    layout.className = 'global-search-layout';
+    return;
+  }
+  if (spinner) spinner.style.display = globalSearchState.inFlight ? 'inline-block' : 'none';
+  const progress = globalSearchState.progress;
+  if (globalSearchState.inFlight && progress?.total) {
+    status.textContent = `Scanning ${progress.scanned}/${progress.total} session(s) in ${globalSearchScopeLabel(globalSearchState.scope)}${count ? ` - ${count} result(s)` : ''}`;
+  } else if (globalSearchState.inFlight) {
+    status.textContent = `Searching ${globalSearchScopeLabel(globalSearchState.scope)}...`;
+  } else {
+    status.textContent = count
+      ? `${count} result(s) in ${globalSearchScopeLabel(globalSearchState.scope)}${globalSearchState.truncated ? ' (truncated)' : ''}`
+      : `No results in ${globalSearchScopeLabel(globalSearchState.scope)}.`;
+  }
+  layout.style.display = 'grid';
+  layout.className = `global-search-layout ${globalSearchLayoutScopeClass(globalSearchState.scope)}`;
+  renderGlobalSearchHierarchy();
+  restoreGlobalSearchScrollPositions();
+}
+
+function renderGlobalSearchHierarchy() {
+  const cols = globalSearchColumnElements();
+  const projects = buildGlobalSearchGroups();
+  ensureGlobalSearchSelection(projects);
+
+  cols.projects.innerHTML = '';
+  cols.sessions.innerHTML = '';
+  cols.results.innerHTML = '';
+
+  if (!projects.length) {
+    renderEmptyGlobalSearchColumn(cols.projects, globalSearchState.inFlight ? 'Waiting for matches...' : 'No matching projects.');
+    renderEmptyGlobalSearchColumn(cols.sessions, 'Select a project.');
+    renderEmptyGlobalSearchColumn(cols.results, globalSearchState.inFlight ? 'Waiting for matches...' : 'No matching results.');
+    appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
+    return;
+  }
+
+  for (const project of projects) {
+    const sessionNames = project.sessions.slice(0, 3).map(s => s.label).join(', ');
+    const extra = project.sessions.length > 3 ? `, +${project.sessions.length - 3} more` : '';
+    const node = document.createElement('div');
+    node.className = `global-search-group${project.projectDir === globalSearchState.selectedProject ? ' selected' : ''}`;
+    node.tabIndex = 0;
+    node.innerHTML = `
+      <div class="global-search-group-title" title="${esc(project.projectDir)}">${esc(project.label)}</div>
+      <div class="global-search-group-meta">${project.sessions.length} session(s) - ${project.resultCount} result(s)</div>
+      <div class="global-search-group-meta" title="${esc(sessionNames + extra)}">${esc(compactSearchText(sessionNames + extra, 130))}</div>`;
+    node.onclick = event => { event.stopPropagation(); selectGlobalSearchProject(project.projectDir); };
+    node.onkeydown = event => { if (event.key === 'Enter') { event.stopPropagation(); selectGlobalSearchProject(project.projectDir); } };
+    cols.projects.appendChild(node);
+  }
+
+  const project = projects.find(p => p.projectDir === globalSearchState.selectedProject);
+  if (!project) {
+    renderEmptyGlobalSearchColumn(cols.sessions, 'Select a project to view sessions.');
+    renderEmptyGlobalSearchColumn(cols.results, 'Select a session to view results.');
+    appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
+    return;
+  }
+
+  const sessions = project.sessions.sort((a, b) => b.resultCount - a.resultCount || a.label.localeCompare(b.label));
+  for (const session of sessions) {
+    const node = document.createElement('div');
+    node.className = `global-search-group${session.sessionId === globalSearchState.selectedSession ? ' selected' : ''}`;
+    node.tabIndex = 0;
+    node.innerHTML = `
+      <div class="global-search-group-title" title="${esc(session.label)}">${esc(compactSearchText(session.label, 96))}</div>
+      <div class="global-search-group-meta">${session.resultCount} result(s)</div>`;
+    node.onclick = event => { event.stopPropagation(); selectGlobalSearchSession(session.sessionId); };
+    node.onkeydown = event => { if (event.key === 'Enter') { event.stopPropagation(); selectGlobalSearchSession(session.sessionId); } };
+    cols.sessions.appendChild(node);
+  }
+
+  const session = sessions.find(s => s.sessionId === globalSearchState.selectedSession);
+  const resultSessions = session ? [session] : sessions;
+  if (!resultSessions.length) {
+    renderEmptyGlobalSearchColumn(cols.results, 'No matching results.');
+    appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
+    return;
+  }
+
+  for (const resultSession of resultSessions) {
+    for (const result of resultSession.results) {
+      cols.results.appendChild(makeGlobalSearchResultRow(result));
+    }
+  }
+  appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
+}
+
+function makeGlobalSearchResultRow(result) {
+  const row = document.createElement('div');
+  row.className = 'global-search-result';
+  row.tabIndex = 0;
+  row.dataset.sessionId = result.sessionId || '';
+  row.dataset.resultType = result.type || '';
+  const title = compactSearchText(globalSearchResultTitle(result), 72);
+  const source = compactSearchText(globalSearchResultSource(result), 96);
+  const fields = compactSearchText((result.matchedFields || []).join(', '), 80);
+  const snippet = compactSearchText(result.snippet || '', 180);
+  row.innerHTML = `
+    <div class="global-search-head">
+      <span class="global-search-type">${esc(result.type || 'result')}</span>
+      <span class="global-search-title" title="${esc(globalSearchResultTitle(result))}">${esc(title)}</span>
+      <span class="global-search-source" title="${esc(globalSearchResultSource(result))}">${esc(source)}</span>
+      <span class="global-search-meta">${esc(fields)}</span>
+    </div>
+    <div class="global-search-snippet">${esc(snippet)}</div>`;
+  row.onclick = () => navigateToGlobalSearchResult(result);
+  row.onkeydown = event => { if (event.key === 'Enter') navigateToGlobalSearchResult(result); };
+  return row;
+}
+
+function appendGlobalSearchResults(list, results) {
+  if (!globalSearchState.seenKeys) globalSearchState.seenKeys = new Set();
+  const fresh = [];
+  for (const result of results || []) {
+    const key = globalSearchResultKey(result);
+    if (globalSearchState.seenKeys.has(key)) continue;
+    globalSearchState.seenKeys.add(key);
+    fresh.push(result);
+  }
+  if (!fresh.length) return 0;
+  globalSearchState.results.push(...fresh);
+  renderGlobalSearchState();
+  return fresh.length;
+}
+
+function appendGlobalSearchWarnings(list, warnings) {
+  if (!warnings?.length) return;
+  const details = document.createElement('details');
+  details.className = 'placeholder';
+  const summary = document.createElement('summary');
+  summary.textContent = `${warnings.length} session(s) could not be read`;
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.style.cssText = 'margin-top:6px;text-align:left;font-size:11px;color:var(--text-secondary);line-height:1.45';
+  body.innerHTML = warnings.slice(0, 12).map(w =>
+    `<div>${esc(w.projectDir || 'unknown project')} · ${esc(String(w.sessionId || '').slice(0, 8) || 'unknown')} — ${esc(w.message || 'read failed')}</div>`
+  ).join('');
+  if (warnings.length > 12) body.innerHTML += `<div>... ${warnings.length - 12} more</div>`;
+  details.appendChild(body);
+  list.appendChild(details);
+}
+
+async function navigateToGlobalSearchResult(result) {
+  const sessionId = result?.sessionId || '';
+  if (!sessionId) return;
+  const projectDir = result.projectDir || currentProjectForSession(sessionId);
+  syncGlobalSearchTopSelectors(projectDir, sessionId);
+  collapseGlobalSearchPopover();
+  if (projectDir) {
+    const projectSel = document.getElementById('projectSel');
+    if (projectSel && projectSel.value !== projectDir) {
+      projectSel.value = projectDir;
+      onProjectChange(sessionId);
+    }
+  }
+  const sessionSel = document.getElementById('sessionSel');
+  if (sessionSel) sessionSel.value = sessionId;
+  if (currentLoadedSessionId !== sessionId) await loadSession();
+  if (currentLoadedSessionId !== sessionId) return;
+
+  if (result.type === 'task') {
+    navigateToPage('tasks');
+    const taskData = activeTaskTraceData(sessionId) || taskSegmentReports[sessionId];
+    if (taskData?.tasks?.some(t => t.taskId === result.taskId)) {
+      selectTaskSegment(result.taskId, sessionId);
+    } else {
+      const panel = document.getElementById('taskSegContent');
+      if (panel) panel.innerHTML = '<div class="task-seg-empty">Task source is not loaded for this session. Run task segmentation or load a saved overlay first.</div>';
+    }
+    return;
+  }
+  if ((result.type === 'turn' || result.type === 'event') && result.eventId) {
+    const foundTurn = lookupTurnByEventId(result.eventId);
+    if (foundTurn?.turn?.turnKey) {
+      navigateToTurn(foundTurn.groupId, foundTurn.turn.turnKey);
+    } else {
+      navigateToEventId(result.eventId);
+    }
+    return;
+  }
+  navigateToPage('sessions');
+}
+
 async function init() {
   try {
     const url = `${apiBase()}/api/projects`;
