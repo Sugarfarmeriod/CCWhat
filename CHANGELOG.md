@@ -2,6 +2,23 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.3 - 2026-06-19
+
+### 全局 Session / Task 搜索
+
+### 新增
+
+- **全局搜索 API**：新增 `/api/search`，支持当前 session、当前 project、所有 projects 三种范围，返回 session / turn / event / task 命中结果。
+- **Viewer 搜索入口**：顶部搜索框新增范围选择、结果分组、加载状态和折叠/展开能力，结果可跳转到对应 session、task 或 turn。
+- **Task 搜索来源**：搜索已有 task segmentation / overlay / Dataset task source，不为未切分 session 伪造 task。
+- **测试覆盖**：新增后端 API 测试和前端 DOM/JS 静态测试，覆盖 scope、截断、部分读取失败、task source 和导航钩子。
+
+### 贡献者
+
+本版本全局搜索能力由 [@Sugarfarmeriod](https://github.com/Sugarfarmeriod) 贡献，详见 [PR #3](https://github.com/PacemakerG/CCWhat/pull/3)。
+
+---
+
 ## v2.2.2 - 2026-06-19
 
 ### 前端展示优化
