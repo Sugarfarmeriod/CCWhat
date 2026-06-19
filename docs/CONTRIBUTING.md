@@ -230,9 +230,8 @@ v0.1.x
 
 版本更新时建议同步修改：
 
-- `README.md`
-- `README.zh.md`
-- `README.en.md`
+- `README.md`（中文）
+- `README.en.md`（English）
 - `CHANGELOG.md`
 - `pyproject.toml`
 - `uv.lock`
@@ -260,4 +259,3 @@ Add OpenCode log adapter docs
 - 为什么改
 - 如何测试
 - 哪些需要手动验收
-
