@@ -476,6 +476,131 @@ body {
     margin-top: 4px;
   }
 
+  /* ── Four Panel Detail View ─────────────────────────────────────────── */
+  .four-panel-detail { padding: 0; }
+  .four-panel-detail .panel-hdr {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+    border-bottom: 1px solid var(--border); background: var(--bg-surface);
+  }
+  .four-panel-detail .panel-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+  }
+  .four-panel-detail .panel-kind-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    background: var(--bg-base); border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .four-panel-detail .panel-group {
+    font-size: 11px; color: var(--text-tertiary); margin-left: auto;
+  }
+
+  /* Collapsible panels */
+  .detail-panel-section {
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-panel-section summary {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    cursor: pointer; user-select: none; font-size: 13px; font-weight: 500;
+    color: var(--text-primary); background: var(--bg-base);
+    transition: background .15s;
+    list-style: none;
+  }
+  .detail-panel-section summary:hover { background: var(--bg-surface); }
+  .detail-panel-section summary::-webkit-details-marker { display: none; }
+  .detail-panel-section summary::before {
+    content: '▶'; font-size: 10px; color: var(--text-tertiary);
+    transition: transform .15s; width: 14px; text-align: center;
+  }
+  .detail-panel-section[open] summary::before { transform: rotate(90deg); }
+  .detail-panel-section .panel-section-count {
+    font-size: 10px; color: var(--text-tertiary); margin-left: auto;
+    background: var(--bg-surface); padding: 1px 6px; border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .detail-panel-section .panel-section-body {
+    padding: 12px 14px; background: var(--bg-base);
+    border-top: 1px solid var(--border);
+  }
+
+  /* System Prompt section */
+  .system-prompt-block {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px;
+    font-size: 12px; line-height: 1.6; white-space: pre-wrap;
+    font-family: var(--font-mono); color: var(--text-primary);
+    max-height: 400px; overflow: auto;
+  }
+
+  /* Message section */
+  .user-message-block {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px;
+    font-size: 13px; line-height: 1.7; color: var(--text-primary);
+  }
+  .user-message-block.markdown-content { white-space: normal; }
+  .user-message-block.markdown-content pre {
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px; overflow: auto;
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .user-message-block.markdown-content code {
+    background: var(--bg-base); border: 1px solid var(--border);
+    padding: 2px 4px; border-radius: 3px; font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* System Reminder sub-section */
+  .system-reminder-section {
+    margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px;
+  }
+  .system-reminder-section summary {
+    font-size: 11px; color: var(--text-secondary); padding: 4px 0;
+    cursor: pointer; user-select: none; list-style: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .system-reminder-section summary::-webkit-details-marker { display: none; }
+  .system-reminder-section summary::before {
+    content: '▶'; font-size: 9px; color: var(--text-tertiary);
+    transition: transform .15s;
+  }
+  .system-reminder-section[open] summary::before { transform: rotate(90deg); }
+  .system-reminder-content {
+    background: rgba(175,82,222,0.05); border: 1px solid rgba(175,82,222,0.15);
+    border-radius: var(--radius-sm); padding: 10px; margin-top: 8px;
+    font-size: 11px; font-family: var(--font-mono); line-height: 1.6;
+    color: var(--text-secondary); max-height: 300px; overflow: auto;
+  }
+
+  /* Tools section */
+  .tools-list { display: flex; flex-direction: column; gap: 8px; }
+  .tool-item {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+  }
+  .tool-item-header {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  }
+  .tool-item-name {
+    font-size: 12px; font-weight: 600; color: var(--accent);
+  }
+  .tool-item-id {
+    font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono);
+  }
+  .tool-item-type {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: auto;
+    background: var(--bg-base); border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .tool-item-type.call { background: rgba(0,113,227,0.1); color: var(--type-asst-fg); }
+  .tool-item-type.result { background: rgba(48,209,88,0.1); color: var(--type-user-fg); }
+  .tool-item-type.error { background: rgba(255,59,48,0.1); color: var(--danger); }
+  .tool-item-body {
+    padding: 10px 12px; font-size: 11px; font-family: var(--font-mono);
+    background: var(--bg-base); max-height: 200px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+
   /* ── Collapsible Section (new design) ───────────────────────────────── */
   .detail-collapsible {
     border: 1px solid var(--border);
@@ -5127,45 +5252,232 @@ function buildRawJsonSection(entry, turn, block) {
     </details>`;
 }
 
+// Extract system prompt from entry (if any)
+function extractSystemPrompt(entry) {
+  if (!entry) return null;
+  // Check for system prompt in various locations
+  const sysMsg = entry.system || entry.systemPrompt;
+  if (sysMsg) return sysMsg;
+  // Check in message content blocks
+  const content = entry.message?.content ?? entry.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block?.type === 'system' || block?.type === 'system_prompt') {
+        return block.text || block.content || JSON.stringify(block);
+      }
+    }
+  }
+  return null;
+}
+
+// Extract user text from entry (excluding system reminders)
+function extractUserText(entry) {
+  if (!entry) return '';
+  const content = entry.message?.content ?? entry.content;
+  if (Array.isArray(content)) {
+    // Find text blocks that are not system reminders
+    const texts = [];
+    for (const block of content) {
+      if (block?.type === 'text' && block.text) {
+        texts.push(block.text);
+      }
+    }
+    return texts.join('\n');
+  }
+  if (typeof content === 'string') return content;
+  return entry.text || '';
+}
+
+// Extract system reminder from entry
+function extractSystemReminder(entry) {
+  if (!entry) return null;
+  const content = entry.message?.content ?? entry.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block?.type === 'system_reminder' || block?.type === 'systemReminder') {
+        return block.text || block.content || JSON.stringify(block);
+      }
+    }
+  }
+  // Also check for system field that might be a reminder
+  if (entry.system && typeof entry.system === 'string') {
+    return entry.system;
+  }
+  return null;
+}
+
+// Extract tools from entry (both tool_use and tool_result)
+function extractTools(entry) {
+  if (!entry) return [];
+  const tools = [];
+  const content = entry.message?.content ?? entry.content;
+  if (!Array.isArray(content)) return tools;
+
+  for (let i = 0; i < content.length; i++) {
+    const block = content[i];
+    if (block?.type === 'tool_use') {
+      tools.push({
+        type: 'call',
+        name: block.name || 'unknown',
+        id: block.id || '',
+        input: block.input || {},
+        index: i
+      });
+    } else if (block?.type === 'tool_result') {
+      const resultContent = Array.isArray(block.content)
+        ? block.content.map(c => c.text || '').join('\n')
+        : String(block.content || '');
+      tools.push({
+        type: 'result',
+        tool_use_id: block.tool_use_id || '',
+        content: resultContent,
+        is_error: block.is_error || false,
+        index: i
+      });
+    }
+  }
+  return tools;
+}
+
+// Build System Prompt section HTML
+function buildSystemPromptSection(entry) {
+  const systemPrompt = extractSystemPrompt(entry);
+  if (!systemPrompt) {
+    return `<details class="detail-panel-section">
+      <summary>系统提示词 <span class="panel-section-count">无</span></summary>
+      <div class="panel-section-body">
+        <div class="turn-detail-empty">当前 Turn 无系统提示词</div>
+      </div>
+    </details>`;
+  }
+  return `<details class="detail-panel-section" open>
+    <summary>系统提示词</summary>
+    <div class="panel-section-body">
+      <div class="system-prompt-block">${esc(systemPrompt)}</div>
+    </div>
+  </details>`;
+}
+
+// Build Message section HTML (user text + system reminder)
+function buildMessageSection(entry) {
+  const userText = extractUserText(entry);
+  const systemReminder = extractSystemReminder(entry);
+
+  let html = `<details class="detail-panel-section" open>
+    <summary>消息 <span class="panel-section-count">${systemReminder ? '2' : '1'}</span></summary>
+    <div class="panel-section-body">`;
+
+  // User text (always shown)
+  if (userText) {
+    html += `<div class="user-message-block markdown-content">${renderMarkdown(userText)}</div>`;
+  } else {
+    html += `<div class="turn-detail-empty">无用户文本</div>`;
+  }
+
+  // System Reminder (collapsible, collapsed by default)
+  if (systemReminder) {
+    html += `<details class="system-reminder-section">
+      <summary>System Reminder</summary>
+      <div class="system-reminder-content">${esc(systemReminder)}</div>
+    </details>`;
+  }
+
+  html += `</div></details>`;
+  return html;
+}
+
+// Build Tools section HTML
+function buildToolsSection(entry) {
+  const tools = extractTools(entry);
+
+  let html = `<details class="detail-panel-section" ${tools.length > 0 ? 'open' : ''}>
+    <summary>工具 <span class="panel-section-count">${tools.length}</span></summary>
+    <div class="panel-section-body">`;
+
+  if (tools.length === 0) {
+    html += `<div class="turn-detail-empty">当前 Turn 无工具调用</div>`;
+  } else {
+    html += `<div class="tools-list">`;
+    for (const tool of tools) {
+      if (tool.type === 'call') {
+        html += `<div class="tool-item">
+          <div class="tool-item-header">
+            <span class="tool-item-name">${esc(tool.name)}</span>
+            <span class="tool-item-id">${esc(tool.id)}</span>
+            <span class="tool-item-type call">调用</span>
+          </div>
+          <div class="tool-item-body">${esc(JSON.stringify(tool.input, null, 2))}</div>
+        </div>`;
+      } else {
+        const typeClass = tool.is_error ? 'error' : 'result';
+        const typeLabel = tool.is_error ? '错误' : '结果';
+        html += `<div class="tool-item">
+          <div class="tool-item-header">
+            <span class="tool-item-name">Tool Result</span>
+            <span class="tool-item-id">${esc(tool.tool_use_id)}</span>
+            <span class="tool-item-type ${typeClass}">${typeLabel}</span>
+          </div>
+          <div class="tool-item-body">${esc(tool.content)}</div>
+        </div>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  html += `</div></details>`;
+  return html;
+}
+
+// Build Raw JSON section HTML
+function buildRawJsonSectionNew(entry, turn) {
+  const rawData = { entry, turn };
+  return `<details class="detail-panel-section">
+    <summary>完整 JSON</summary>
+    <div class="panel-section-body">
+      <pre style="font-size:11px;font-family:var(--font-mono);background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-all;">${esc(JSON.stringify(rawData, null, 2))}</pre>
+    </div>
+  </details>`;
+}
+
+// Build Step Overview section for header
+function buildStepOverviewHeader(turn) {
+  const projectionNode = findProjectionNodeForTurn(turn.turnKey);
+  const conv = lookupConversationInfoByKey(turn.conversationKey)?.conversation;
+  const positionLabel = `${conv?.label || 'Conversation ?'} · ${projectionNode?.label || turn.label || '?'}`;
+  const status = turnOverviewStatus(turn);
+  const statusColor = status === 'error' ? 'var(--danger)' : 'var(--success)';
+
+  return `<div class="panel-hdr">
+    <span class="panel-title">${esc(turn.label)}</span>
+    <span class="panel-kind-badge kind-${esc(turn.kind)}">${esc(kindLabel(turn.kind))}</span>
+    <span class="panel-group">${esc(positionLabel)} · 状态: <span style="color:${statusColor}">${esc(status)}</span></span>
+  </div>`;
+}
+
 // Kind-specific detail for minimal Turns with complete evidence.
 function buildMinimalTurnDetailHtml(groupId, turn) {
   const e = allEntries[turn.sourceEntryIdx];
-  const kindBadge = `<span class="turn-kind-badge kind-${esc(turn.kind)}" style="font-size:11px;padding:2px 8px">${esc(kindLabel(turn.kind))}</span>`;
-
-  // Get block for content extraction
-  let block = null;
-  if (e && turn.contentIndex != null) {
-    const content = e.message?.content ?? e.content;
-    if (Array.isArray(content)) {
-      block = content[turn.contentIndex];
-    }
-  }
-
-  let html = `<div class="turn-detail">`;
-
-  // Header
-  html += `<div class="turn-detail-hdr">
-    <span class="turn-detail-title">${esc(turn.label)}</span>
-    ${kindBadge}
-    <span class="turn-detail-group">${esc(turn.conversationKey)}</span>`;
-  if (turn.blockAnchor) {
-    html += `<span class="turn-meta-badge" style="font-family:var(--font-mono)">${esc(turn.blockAnchor)}</span>`;
-  }
-  html += `</div>`;
 
   if (!e) {
-    html += `<div class="turn-detail-section">entry not found (idx ${turn.sourceEntryIdx})</div>`;
-    html += '</div>';
-    return html;
+    return `<div class="four-panel-detail">
+      <div class="panel-hdr">
+        <span class="panel-title">${esc(turn.label)}</span>
+        <span class="panel-kind-badge">${esc(kindLabel(turn.kind))}</span>
+      </div>
+      <div style="padding:14px;color:var(--text-secondary)">entry not found (idx ${turn.sourceEntryIdx})</div>
+    </div>`;
   }
 
-  html += buildStepOverviewSection(e, turn, block);
+  let html = `<div class="four-panel-detail">`;
 
-  // Dynamic content based on turn kind
-  html += renderDynamicContent(turn, e, block);
+  // Header with Step Overview
+  html += buildStepOverviewHeader(turn);
 
-  // Raw JSON (collapsible, closed by default)
-  html += buildRawJsonSection(e, turn, block);
+  // Four panels
+  html += buildSystemPromptSection(e);
+  html += buildMessageSection(e);
+  html += buildToolsSection(e);
+  html += buildRawJsonSectionNew(e, turn);
 
   html += '</div>';
   return html;
