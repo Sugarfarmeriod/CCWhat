@@ -9,8 +9,8 @@
 
 ## 当前状态
 
-- 阶段：waiting_human_manual_test
-- 当前 change：save-and-export-task-dataset-from-viewer
+- 阶段：waiting_human_next_change
+- 当前 change：none
 - 当前活跃角色：orchestrator
 - 是否等待人工：true
 - heartbeat id：ccwhat-agent-loop-heartbeat
@@ -29,5 +29,6 @@
 
 ## 当前待办
 
-- Reviewer 已通过 `save-and-export-task-dataset-from-viewer` 复审。
-- 等待用户手测；通过后主控应派 Executor 归档、commit、push，不通过则派 Reviewer 根据反馈更新 spec/tasks。
+- `rename-codex-opencode-sessions` 已完成实现、评审和人工验收。
+- Change 已归档至 `openspec/changes/archive/2026-06-16-rename-codex-opencode-sessions/`，归档 commit 为 `29af668`。
+- 当前无活跃 OpenSpec Change，等待用户决定下一项工作。
