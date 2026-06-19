@@ -2,6 +2,18 @@
 
 这里记录 codelenagent / ccwhat 的重要版本变化。版本号以 `pyproject.toml` 和 `ccwhat.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.2 - 2026-06-19
+
+### 前端展示优化
+
+### 改进
+
+- **Step / Turn 概览**：Viewer 详情面板首卡从低价值日志元数据升级为概览信息，展示类型、位置、Task、状态和内容长度。
+- **Thinking 完整展示**：normalized reasoning 事件优先使用完整 content，避免 Detail 面板展示被 summary 截断的 thinking；Thinking 区块默认展开，并保留折叠能力。
+- **Session 树交互优化**：Session 页新增全部展开/全部折叠，统计文案改为 `Steps / Total Turns / Entries`，Markdown 代码块支持行号和复制。
+
+---
+
 ## v2.2.1 - 2026-06-18
 
 ### 零配置自动录制 + OpenAI 格式 SSE 解析

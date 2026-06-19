@@ -920,7 +920,7 @@ class TestStrictTurnRootDetection(unittest.TestCase):
 
     def test_is_user_turn_root_duplicate_detection_has_no_asst(self):
         fn_start = _HTML.index("function isUserTurnRoot")
-        snippet = _HTML[fn_start:fn_start + 1200]
+        snippet = _HTML[fn_start:fn_start + 1500]
         self.assertIn("previousTurn", snippet)
         self.assertIn("hasAsstBetween", snippet)
 
@@ -1124,7 +1124,7 @@ class TestConversationMinimalTurnDataLayer(unittest.TestCase):
 
     def test_minimal_turn_detail_has_tool_use_section(self):
         fn = _HTML.index("function buildMinimalTurnDetailHtml")
-        snippet = _HTML[fn:fn + 5200]
+        snippet = _HTML[fn:fn + 9200]
         self.assertIn("case 'tool_use':", snippet)
         self.assertIn("case 'tool_result':", snippet)
 
@@ -1311,3 +1311,66 @@ class TestTurnDetailCompleteEvidence(unittest.TestCase):
         self.assertIn("contentBlock", snippet)
         self.assertIn("entry", snippet)
         self.assertIn("anchors", snippet)
+
+    def test_normalized_reasoning_prefers_full_content_over_summary(self):
+        fn_start = _HTML.index("function eventsToEntries")
+        fn_end = _HTML.index("// ── Load session entries", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("kind === 'reasoning'", snippet)
+        self.assertIn("formatEventContent(ev.content) || ev.summary", snippet)
+        self.assertNotIn("ev.summary || ev.content", snippet)
+
+    def test_thinking_detail_is_collapsible_and_default_open(self):
+        fn_start = _HTML.index("function renderDynamicContent")
+        snippet = _HTML[fn_start:fn_start + 2400]
+        self.assertIn("case 'thinking':", snippet)
+        self.assertIn('<div class="detail-collapsible" open>', snippet)
+        self.assertIn("<summary>Thinking / Reasoning</summary>", snippet)
+
+    def test_minimal_detail_uses_step_overview_instead_of_log_metadata(self):
+        self.assertIn("function buildStepOverviewSection", _HTML)
+        fn_start = _HTML.index("function buildMinimalTurnDetailHtml")
+        fn_end = _HTML.index("function buildTurnDiffSectionHtml", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        self.assertIn("buildStepOverviewSection(e, turn, block)", snippet)
+        self.assertNotIn("buildLogMetadataSection", snippet)
+
+    def test_step_overview_has_only_decided_fields(self):
+        fn_start = _HTML.index("function buildStepOverviewSection")
+        fn_end = _HTML.index("// Build raw JSON section", fn_start)
+        snippet = _HTML[fn_start:fn_end]
+        for label in ["类型", "位置", "Task", "状态", "内容长度"]:
+            self.assertIn(label, snippet)
+        for omitted in ["uuid", "sessionId", "Entry", "contentIndex", "内容来源", "关联对象"]:
+            self.assertNotIn(omitted, snippet)
+        self.assertIn("traceViewMode === 'debug' ? 'Turn 概览' : 'Step 概览'", snippet)
+
+
+class TestFrontendP1Optimizations(unittest.TestCase):
+    """Frontend optimization checklist P1 contracts."""
+
+    def test_session_count_badge_uses_unambiguous_labels(self):
+        self.assertIn("function updateSessionCountBadge", _HTML)
+        fn_start = _HTML.index("function updateSessionCountBadge")
+        snippet = _HTML[fn_start:fn_start + 900]
+        self.assertIn("Steps ${visibleStepCountForCurrentProjection()}", snippet)
+        self.assertIn("Total Turns ${totalTurns}", snippet)
+        self.assertIn("Entries ${allEntries.length}", snippet)
+
+    def test_turn_diff_extracts_thinking_from_entry_content(self):
+        self.assertIn("function extractThinkingText", _HTML)
+        fn_start = _HTML.index("function normalizeTurnFields")
+        snippet = _HTML[fn_start:fn_start + 900]
+        self.assertIn("slots.thinking = extractThinkingText(entry, turn)", snippet)
+
+    def test_trace_tree_has_expand_collapse_all_controls(self):
+        self.assertIn("function expandAllTraceTree", _HTML)
+        self.assertIn("function collapseAllTraceTree", _HTML)
+        self.assertIn('onclick="expandAllTraceTree()"', _HTML)
+        self.assertIn('onclick="collapseAllTraceTree()"', _HTML)
+
+    def test_markdown_code_blocks_have_line_numbers_and_copy(self):
+        self.assertIn("function renderCodeBlock", _HTML)
+        self.assertIn("function copyCodeBlock", _HTML)
+        self.assertIn("code-line-no", _HTML)
+        self.assertIn("code-copy-btn", _HTML)

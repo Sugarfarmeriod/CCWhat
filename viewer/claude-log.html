@@ -822,6 +822,44 @@ body {
     content: attr(data-lang); display: block; color: var(--text-tertiary); font-size: 10px;
     text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0;
   }
+  .code-block {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    margin: 10px 0;
+    overflow: hidden;
+  }
+  .code-block-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--border);
+    background: var(--bg-base);
+  }
+  .code-block-lang {
+    color: var(--text-tertiary); font-size: 10px; text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+  .code-copy-btn {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg-elevated); color: var(--text-secondary);
+    font-size: 10px; padding: 2px 6px; cursor: pointer;
+  }
+  .code-copy-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+  .md-view .code-block pre {
+    margin: 0; border: none; border-radius: 0; background: transparent;
+    padding: 8px 0; overflow-x: auto;
+  }
+  .code-lines { counter-reset: code-line; display: block; }
+  .code-line {
+    display: grid; grid-template-columns: 36px minmax(0, 1fr);
+    counter-increment: code-line;
+    min-height: 18px;
+  }
+  .code-line-no::before { content: counter(code-line); }
+  .code-line-no {
+    color: var(--text-tertiary); text-align: right; padding: 0 8px;
+    user-select: none; border-right: 1px solid var(--border);
+  }
+  .code-line-text { padding: 0 10px; white-space: pre; }
   .md-view ul,.md-view ol { padding-left:22px; margin:7px 0; }
   .md-view li { margin:3px 0; }
   .md-view strong { color: var(--text-primary); font-weight: 600; }
@@ -1756,6 +1794,8 @@ body {
               <button class="trace-view-btn active" data-trace-view="default">默认视图</button>
               <button class="trace-view-btn" data-trace-view="debug">调试视图</button>
             </div>
+            <button class="btn" onclick="expandAllTraceTree()" title="展开左侧树的所有任务和会话">全部展开</button>
+            <button class="btn" onclick="collapseAllTraceTree()" title="折叠左侧树的所有任务和会话">全部折叠</button>
 	            <div class="type-filters" id="typeFilters" style="margin-left:8px">
 	              <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
 	              <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
@@ -2455,6 +2495,25 @@ function formatToolResultBlock(block, fallbackTurn) {
   ].filter(Boolean).join('\n');
 }
 
+function extractThinkingText(entry, turn) {
+  const content = entry?.message?.content ?? entry?.content;
+  const blocks = Array.isArray(content) ? content : [];
+  const parts = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue;
+    if (block.type === 'thinking' || block.thinking || block.reasoning) {
+      const text = block.thinking || block.reasoning || block.text || fullBlockText(block);
+      if (text) parts.push(text);
+    }
+  }
+  if (!parts.length && turn?.kind === 'thinking') {
+    const block = entry ? getTurnContentBlock(entry, turn) : null;
+    const text = fullBlockText(block) || turn.text || '';
+    if (text) parts.push(text);
+  }
+  return parts.join('\n\n');
+}
+
 /**
  * Normalize a Turn into the four fixed slots used by the front-end Turn Diff.
  * Does NOT mutate the source Turn or entry, and intentionally excludes
@@ -2470,9 +2529,9 @@ function normalizeTurnFields(turn, entry) {
     toolResult: '',
   };
 
-  if (turn.kind === 'thinking') {
-    slots.thinking = fullText;
-  } else if (turn.kind === 'user_message' || turn.kind === 'assistant_text') {
+  slots.thinking = extractThinkingText(entry, turn);
+
+  if (turn.kind === 'user_message' || turn.kind === 'assistant_text') {
     slots.text = fullText;
   } else if (turn.kind === 'tool_use') {
     slots.toolCall = formatToolCallBlock(block, turn);
@@ -2807,6 +2866,31 @@ function renderTimelinePage() {
     </div>`;
   }
   el.innerHTML = html + '</div>';
+}
+
+function visibleStepCountForCurrentProjection() {
+  if (!allGroupConversations.length) return 0;
+  const projection = buildTurnViewProjection(traceViewMode, getProjectionSource());
+  let count = 0;
+  for (const group of (projection.groups || [])) {
+    for (const conv of (group.conversations || [])) {
+      count += (conv.nodes || []).filter(nodeMatchesDebugFilter).length;
+    }
+  }
+  for (const task of (projection.tasks || [])) {
+    for (const conv of (task.conversations || [])) {
+      count += (conv.nodes || []).filter(nodeMatchesDebugFilter).length;
+    }
+  }
+  return count;
+}
+
+function updateSessionCountBadge() {
+  const badge = document.getElementById('countBadge');
+  if (!badge) return;
+  const totalTurns = allGroupConversations.reduce((sum, group) =>
+    sum + group.conversations.reduce((n, conv) => n + (conv.turns?.length || 0), 0), 0);
+  badge.textContent = `Steps ${visibleStepCountForCurrentProjection()} / Total Turns ${totalTurns} / Entries ${allEntries.length}`;
 }
 
 function renderSessionPage() {
@@ -4093,6 +4177,7 @@ function renderTraceTree() {
 
   // Update controls
   updateTraceViewModeControls();
+  updateSessionCountBadge();
   const manualBar = renderManualTaskSegmentationBar();
   if (manualBar) list.appendChild(manualBar);
 
@@ -4714,15 +4799,7 @@ function renderDynamicContent(turn, entry, block) {
     }
 
     case 'assistant_text': {
-      // Get thinking from entry content blocks
-      let thinking = '';
-      const content = entry?.message?.content ?? entry?.content;
-      if (Array.isArray(content)) {
-        const thinkingBlock = content.find(b => b.type === 'thinking' || b.thinking);
-        if (thinkingBlock) {
-          thinking = thinkingBlock.thinking || thinkingBlock.text || '';
-        }
-      }
+      const thinking = extractThinkingText(entry, turn);
       const text = turn.text || fullBlockText(block);
 
       let html = '';
@@ -4828,78 +4905,87 @@ function renderDynamicContent(turn, entry, block) {
   }
 }
 
-// Build log metadata section (collapsible, open by default)
-function buildLogMetadataSection(entry) {
-  const usage = entry?.message?.usage || entry?.usage || {};
-  const hasTokens = usage.input_tokens != null || usage.output_tokens != null;
-
-  let tokenHtml = '';
-  if (hasTokens) {
-    tokenHtml = `
-      <div class="meta-row">
-        <span class="meta-key">input_tokens</span>
-        <span class="meta-value">${esc(String(usage.input_tokens || 0))}</span>
-      </div>
-      <div class="meta-row">
-        <span class="meta-key">output_tokens</span>
-        <span class="meta-value">${esc(String(usage.output_tokens || 0))}</span>
-      </div>
-      ${usage.cache_creation_input_tokens != null ? `
-      <div class="meta-row">
-        <span class="meta-key">cache_creation_input</span>
-        <span class="meta-value">${esc(String(usage.cache_creation_input_tokens))}</span>
-      </div>` : ''}
-      ${usage.cache_read_input_tokens != null ? `
-      <div class="meta-row">
-        <span class="meta-key">cache_read_input</span>
-        <span class="meta-value">${esc(String(usage.cache_read_input_tokens))}</span>
-      </div>` : ''}`;
+function findProjectionNodeForTurn(turnKey) {
+  if (!turnKey || !allGroupConversations.length) return null;
+  const projection = buildTurnViewProjection(traceViewMode, getProjectionSource());
+  for (const group of (projection.groups || [])) {
+    for (const conv of (group.conversations || [])) {
+      const node = (conv.nodes || []).find(n => n.underlyingTurnKey === turnKey);
+      if (node) return node;
+    }
   }
+  for (const task of (projection.tasks || [])) {
+    for (const conv of (task.conversations || [])) {
+      const node = (conv.nodes || []).find(n => n.underlyingTurnKey === turnKey);
+      if (node) return node;
+    }
+  }
+  return null;
+}
+
+function taskOverviewText(turn) {
+  const ids = turn?.taskIds || [];
+  if (!ids.length) return '未归属';
+  const sid = document.getElementById('sessionSel')?.value;
+  const taskData = sid ? (activeTaskTraceData(sid) || taskSegmentReports[sid]) : null;
+  return ids.map(id => {
+    const idx = taskData?.tasks?.findIndex(t => t.taskId === id) ?? -1;
+    const task = idx >= 0 ? taskData.tasks[idx] : null;
+    const label = idx >= 0 ? `Task ${idx + 1}` : id;
+    return task?.title ? `${label} · ${task.title}` : label;
+  }).join(' / ');
+}
+
+function turnPrimaryContentText(turn, entry, block) {
+  if (!turn) return '';
+  if (turn.kind === 'tool_use') return JSON.stringify(block?.input ?? {}, null, 2);
+  if (turn.kind === 'tool_result') return fullBlockText(block) || turn.resultSummary || turn.text || '';
+  if (turn.kind === 'assistant_text') return turn.text || fullBlockText(block) || '';
+  if (turn.kind === 'thinking') return turn.text || fullBlockText(block) || '';
+  if (turn.kind === 'user_message') return turn.text || extractFullText(entry) || fullBlockText(block) || '';
+  return turn.text || extractFullText(entry) || fullBlockText(block) || '';
+}
+
+function turnOverviewStatus(turn) {
+  if (turn?.kind === 'tool_result' && turn.isError) return 'error';
+  const projectionNode = findProjectionNodeForTurn(turn?.turnKey);
+  if (projectionNode?.displayKind === 'error_signal') return 'error';
+  return 'normal';
+}
+
+function buildStepOverviewSection(entry, turn, block) {
+  const title = traceViewMode === 'debug' ? 'Turn 概览' : 'Step 概览';
+  const projectionNode = findProjectionNodeForTurn(turn.turnKey);
+  const conv = lookupConversationInfoByKey(turn.conversationKey)?.conversation;
+  const positionLabel = `${conv?.label || 'Conversation ?'} · ${projectionNode?.label || turn.label || '?'}`;
+  const contentText = turnPrimaryContentText(turn, entry, block);
+  const status = turnOverviewStatus(turn);
+  const statusColor = status === 'error' ? 'var(--danger)' : 'var(--success)';
 
   return `
     <details class="detail-collapsible" open>
-      <summary>日志元数据</summary>
+      <summary>${title}</summary>
       <div class="detail-collapsible-body">
         <div class="meta-row">
-          <span class="meta-key">uuid</span>
-          <span class="meta-value">${esc(entry?.uuid || '—')}</span>
+          <span class="meta-key">类型</span>
+          <span class="meta-value">${esc(kindLabel(turn.kind))}</span>
         </div>
-        ${entry?.parentUuid ? `
         <div class="meta-row">
-          <span class="meta-key">parentUuid</span>
-          <span class="meta-value">${esc(entry.parentUuid)}</span>
-        </div>` : ''}
-        ${entry?.promptId ? `
+          <span class="meta-key">位置</span>
+          <span class="meta-value">${esc(positionLabel)}</span>
+        </div>
         <div class="meta-row">
-          <span class="meta-key">promptId</span>
-          <span class="meta-value">${esc(entry.promptId)}</span>
-        </div>` : ''}
-        ${entry?.message?.id ? `
+          <span class="meta-key">Task</span>
+          <span class="meta-value">${esc(taskOverviewText(turn))}</span>
+        </div>
         <div class="meta-row">
-          <span class="meta-key">message.id</span>
-          <span class="meta-value">${esc(entry.message.id)}</span>
-        </div>` : ''}
-        ${entry?.sessionId ? `
+          <span class="meta-key">状态</span>
+          <span class="meta-value" style="color:${statusColor}">${esc(status)}</span>
+        </div>
         <div class="meta-row">
-          <span class="meta-key">sessionId</span>
-          <span class="meta-value">${esc(entry.sessionId)}</span>
-        </div>` : ''}
-        ${entry?.permissionMode ? `
-        <div class="meta-row">
-          <span class="meta-key">permissionMode</span>
-          <span class="meta-value">${esc(entry.permissionMode)}</span>
-        </div>` : ''}
-        ${entry?.cwd ? `
-        <div class="meta-row">
-          <span class="meta-key">cwd</span>
-          <span class="meta-value">${esc(entry.cwd)}</span>
-        </div>` : ''}
-        ${entry?.version ? `
-        <div class="meta-row">
-          <span class="meta-key">version</span>
-          <span class="meta-value">${esc(entry.version)}</span>
-        </div>` : ''}
-        ${tokenHtml}
+          <span class="meta-key">内容长度</span>
+          <span class="meta-value">${contentText.length.toLocaleString()} chars</span>
+        </div>
       </div>
     </details>`;
 }
@@ -4954,8 +5040,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
     return html;
   }
 
-  // Log metadata (collapsible, open by default)
-  html += buildLogMetadataSection(e);
+  html += buildStepOverviewSection(e, turn, block);
 
   // Dynamic content based on turn kind
   html += renderDynamicContent(turn, e, block);
@@ -6067,6 +6152,34 @@ function isMarkdownTableSeparator(line) {
   return cells.length > 1 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
 }
 
+function renderCodeBlock(code, lang = '') {
+  const lines = String(code ?? '').replace(/\n$/, '').split('\n');
+  const langLabel = lang || 'text';
+  const body = lines.map(line =>
+    `<span class="code-line"><span class="code-line-no"></span><span class="code-line-text">${escRaw(line)}</span></span>`
+  ).join('');
+  return `<div class="code-block" data-lang="${escRaw(langLabel)}">
+    <div class="code-block-toolbar">
+      <span class="code-block-lang">${escRaw(langLabel)}</span>
+      <button class="code-copy-btn" onclick="copyCodeBlock(this)">复制</button>
+    </div>
+    <pre><code class="code-lines">${body}</code></pre>
+  </div>`;
+}
+
+function copyCodeBlock(btn) {
+  const block = btn.closest('.code-block');
+  if (!block) return;
+  const text = Array.from(block.querySelectorAll('.code-line-text'))
+    .map(el => el.textContent)
+    .join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  });
+}
+
 function renderMarkdown(text) {
   const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
   const html = [];
@@ -6094,8 +6207,7 @@ function renderMarkdown(text) {
         html.push(`<div class="md-mermaid-wrap"><div class="md-mermaid">${escRaw(code.join('\n'))}</div></div>`);
         continue;
       }
-      const langAttr = lang ? ` data-lang="${escRaw(lang)}"` : '';
-      html.push(`<pre class="md-code-block"${langAttr}><code>${escRaw(code.join('\n'))}</code></pre>`);
+      html.push(renderCodeBlock(code.join('\n'), lang));
       continue;
     }
 
@@ -7136,6 +7248,27 @@ function toggleTask(taskKey) {
   } else {
     expandedTaskKeys.add(taskKey);
   }
+  renderTraceTree();
+}
+
+function expandAllTraceTree() {
+  const nodes = buildTraceNodes();
+  for (const node of nodes) {
+    if (node.nodeType === 'task') {
+      expandedTaskKeys.add(node.key);
+      for (const conv of (node.conversations || [])) {
+        expandedConversationKeys.add(conv.key);
+      }
+    } else if (node.nodeType === 'conversation') {
+      expandedConversationKeys.add(node.key);
+    }
+  }
+  renderTraceTree();
+}
+
+function collapseAllTraceTree() {
+  expandedTaskKeys.clear();
+  expandedConversationKeys.clear();
   renderTraceTree();
 }
 
@@ -8234,7 +8367,7 @@ function eventsToEntries(events) {
         sessionId: ev.sessionId,
         _fileLine: 0,
         _eventId,
-        message: { content: [{ type: 'thinking', thinking: ev.summary || ev.content || '(reasoning)' }] },
+        message: { content: [{ type: 'thinking', thinking: formatEventContent(ev.content) || ev.summary || '(reasoning)' }] },
       });
       pushed = true;
     } else if (kind === 'metadata' || kind === 'step' || kind === 'unknown') {

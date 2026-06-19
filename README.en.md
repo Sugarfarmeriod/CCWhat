@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-Current version: `v1.1.0` · [Changelog](CHANGELOG.md)
+Current version: `v2.2.2` · [Changelog](CHANGELOG.md)
 
 ## Current Status
 
