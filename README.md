@@ -1,4 +1,4 @@
-# 🔬 AgentLens
+# 🔬 Agent Lens
 
 **AI Coding Agent Observability & Diagnosis Platform**
 
@@ -20,7 +20,7 @@
 
 ### v2.2.1 — 零配置自动录制
 
-- **零配置自动录制**：启动 `agentlens` 时自动读取目标 agent 配置文件提取 API domain，与手动配置去重合并，无需先执行 `agentlens setup`。支持 opencode / claude / codex 三种 agent。
+- **零配置自动录制**：启动 `ccwhat` 时自动读取目标 agent 配置文件提取 API domain，与手动配置去重合并，无需先执行 `ccwhat setup`。支持 opencode / claude / codex 三种 agent。
 
 ### v2.2.0 — 请求回放
 
@@ -40,7 +40,7 @@
 ### v2.0.0 — Task Dataset Builder
 
 - 从 Session 中切分出的 Task 清洗为标准 Dataset 格式：`manifest.json` + `dataset.jsonl` + `traces/*.json` + `scores.jsonl`。
-- 支持保存到 `~/.agentlens/datasets/` 本地 Registry 并导出 `dataset-*.tar.gz`，格式由 validator 自动校验。
+- 支持保存到 `~/.ccwhat/datasets/` 本地 Registry 并导出 `dataset-*.tar.gz`，格式由 validator 自动校验。
 
 ---
 
@@ -51,13 +51,13 @@
 - 你追问："你真看了吗？"它理直气壮："看了。"  
 - 你翻遍终端日志，也抓不到它"偷懒"的实锤，一肚子火  
 
-**别再被 AI 当傻子糊弄了。AgentLens 帮你看清一切。**  
+**别再被 AI 当傻子糊弄了。Agent Lens 帮你看清一切。**
 
 ---
 
-## ❓ AgentLens 是什么
+## ❓ Agent Lens 是什么
 
-AgentLens 只做一件事：
+Agent Lens 只做一件事：
 
 > **把你 AI 干活时的所有"小动作"录下来，放到网页里让你实时围观。**
 
@@ -75,22 +75,22 @@ AgentLens 只做一件事：
 安装或更新：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash
 ```
 
 运行（注意空格，空格是灵魂）：
 
 ```bash
-agentlens -- claude
-agentlens -- codex
+ccwhat -- claude
+ccwhat -- codex
 # 或者你自己的命令
-agentlens -- xx
+ccwhat -- xx
 ```
 
 卸载：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash -s -- uninstall
 ```
 
 *第一次运行会让你选要观察的 AI 环境，跟着提示走就行。*
@@ -101,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.s
 
 直接复制下面的话给 Claude Code / Codex CLI / 任何 OpenClaw 套壳工具：
 
-> "按照readme的指示，帮我装好 AgentLens，链接是https://github.com/PacemakerG/AgentLens"
+> "按照readme的指示，帮我装好 Agent Lens，链接是https://github.com/PacemakerG/CCWhat"
 
 ---
 
@@ -112,7 +112,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.s
 不小心关了？重新打开：
 
 ```bash
-agentlens web
+ccwhat web
 ```
 或者直接访问 `http://127.0.0.1:7789/claude-log.html`
 
@@ -131,21 +131,21 @@ agentlens web
 ## 🛠️ 常用命令
 
 ```bash
-agentlens setup                   # 修改录制配置
-agentlens web                     # 再次打开"显微镜"
-agentlens discover -- claude      # 探路模式：只记录动作，不偷看数据
-agentlens discover -- codex       # Codex 也可以探路
-agentlens run --no-web -- claude  # 低调运行，不自动弹网页
-agentlens export --list           # 看看都录了哪些"刑侦卷宗"
-agentlens export <session>        # 导出某个 session
-agentlens import <archive> --open # 还原别人的 session，一起破案
+ccwhat setup                   # 修改录制配置
+ccwhat web                     # 再次打开"显微镜"
+ccwhat discover -- claude      # 探路模式：只记录动作，不偷看数据
+ccwhat discover -- codex       # Codex 也可以探路
+ccwhat run --no-web -- claude  # 低调运行，不自动弹网页
+ccwhat export --list           # 看看都录了哪些"刑侦卷宗"
+ccwhat export <session>        # 导出某个 session
+ccwhat import <archive> --open # 还原别人的 session，一起破案
 ```
 
 ---
 
 ## 🤝 开发协作文档
 
-想一起开发 AgentLens，可以先读这几份文档：
+想一起开发 Agent Lens，可以先读这几份文档：
 
 - [架构总览](docs/ARCHITECTURE.md)
 - [多 Agent Log Adapter](docs/ADAPTERS.md)
