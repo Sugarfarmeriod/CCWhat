@@ -5252,101 +5252,101 @@ function buildRawJsonSection(entry, turn, block) {
     </details>`;
 }
 
-// Extract system prompt from entry (if any)
-function extractSystemPrompt(entry) {
-  if (!entry) return null;
-  // Check for system prompt in various locations
-  const sysMsg = entry.system || entry.systemPrompt;
-  if (sysMsg) return sysMsg;
-  // Check in message content blocks
-  const content = entry.message?.content ?? entry.content;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (block?.type === 'system' || block?.type === 'system_prompt') {
-        return block.text || block.content || JSON.stringify(block);
+// Extract system prompt from session (global level)
+function extractSystemPrompt() {
+  // Look for system prompt in allEntries (session level)
+  // System prompt is usually in the first few entries or in a specific entry type
+  for (const entry of allEntries) {
+    // Check for system_prompt type or system field
+    if (entry.type === 'system' || entry.type === 'system_prompt') {
+      return entry.content || entry.text || entry.systemPrompt || JSON.stringify(entry);
+    }
+    // Check in message content
+    const content = entry.message?.content ?? entry.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block?.type === 'system' || block?.type === 'system_prompt') {
+          return block.text || block.content || JSON.stringify(block);
+        }
       }
+    }
+    // Check for systemPrompt field directly
+    if (entry.systemPrompt) return entry.systemPrompt;
+    if (entry.system && typeof entry.system === 'string') {
+      // Only return if it looks like a system prompt (not a reminder)
+      if (entry.system.length > 100) return entry.system;
     }
   }
   return null;
 }
 
-// Extract user text from entry (excluding system reminders)
-function extractUserText(entry) {
-  if (!entry) return '';
+// Extract user content blocks from entry (text and tool_results)
+function extractUserContent(entry) {
+  if (!entry) return { texts: [], toolResults: [], systemReminder: null };
   const content = entry.message?.content ?? entry.content;
+  const texts = [];
+  const toolResults = [];
+  let systemReminder = null;
+
   if (Array.isArray(content)) {
-    // Find text blocks that are not system reminders
-    const texts = [];
     for (const block of content) {
-      if (block?.type === 'text' && block.text) {
+      if (!block) continue;
+      if (block.type === 'text' && block.text) {
         texts.push(block.text);
+      } else if (block.type === 'tool_result') {
+        const resultContent = Array.isArray(block.content)
+          ? block.content.map(c => c.text || '').join('\n')
+          : String(block.content || '');
+        toolResults.push({
+          tool_use_id: block.tool_use_id || '',
+          content: resultContent,
+          is_error: block.is_error || false
+        });
+      } else if (block.type === 'system_reminder' || block.type === 'systemReminder') {
+        systemReminder = block.text || block.content || JSON.stringify(block);
       }
     }
-    return texts.join('\n');
+  } else if (typeof content === 'string') {
+    texts.push(content);
   }
-  if (typeof content === 'string') return content;
-  return entry.text || '';
+
+  // Also check entry level system field for reminder
+  if (!systemReminder && entry.system && typeof entry.system === 'string' && entry.system.length < 500) {
+    systemReminder = entry.system;
+  }
+
+  return { texts, toolResults, systemReminder };
 }
 
-// Extract system reminder from entry
-function extractSystemReminder(entry) {
-  if (!entry) return null;
-  const content = entry.message?.content ?? entry.content;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (block?.type === 'system_reminder' || block?.type === 'systemReminder') {
-        return block.text || block.content || JSON.stringify(block);
-      }
-    }
-  }
-  // Also check for system field that might be a reminder
-  if (entry.system && typeof entry.system === 'string') {
-    return entry.system;
-  }
-  return null;
-}
-
-// Extract tools from entry (both tool_use and tool_result)
-function extractTools(entry) {
+// Extract tool uses (calls only) from entry
+function extractToolUses(entry) {
   if (!entry) return [];
-  const tools = [];
+  const toolUses = [];
   const content = entry.message?.content ?? entry.content;
-  if (!Array.isArray(content)) return tools;
+  if (!Array.isArray(content)) return toolUses;
 
   for (let i = 0; i < content.length; i++) {
     const block = content[i];
     if (block?.type === 'tool_use') {
-      tools.push({
-        type: 'call',
+      toolUses.push({
         name: block.name || 'unknown',
         id: block.id || '',
         input: block.input || {},
         index: i
       });
-    } else if (block?.type === 'tool_result') {
-      const resultContent = Array.isArray(block.content)
-        ? block.content.map(c => c.text || '').join('\n')
-        : String(block.content || '');
-      tools.push({
-        type: 'result',
-        tool_use_id: block.tool_use_id || '',
-        content: resultContent,
-        is_error: block.is_error || false,
-        index: i
-      });
     }
   }
-  return tools;
+  return toolUses;
 }
 
 // Build System Prompt section HTML
-function buildSystemPromptSection(entry) {
-  const systemPrompt = extractSystemPrompt(entry);
+function buildSystemPromptSection() {
+  const systemPrompt = extractSystemPrompt();
   if (!systemPrompt) {
     return `<details class="detail-panel-section">
       <summary>系统提示词 <span class="panel-section-count">无</span></summary>
       <div class="panel-section-body">
-        <div class="turn-detail-empty">当前 Turn 无系统提示词</div>
+        <div class="turn-detail-empty">当前 Session 无系统提示词</div>
       </div>
     </details>`;
   }
@@ -5358,20 +5358,35 @@ function buildSystemPromptSection(entry) {
   </details>`;
 }
 
-// Build Message section HTML (user text + system reminder)
+// Build Message section HTML (user text + tool results + system reminder)
 function buildMessageSection(entry) {
-  const userText = extractUserText(entry);
-  const systemReminder = extractSystemReminder(entry);
+  const { texts, toolResults, systemReminder } = extractUserContent(entry);
+  const hasUserText = texts.length > 0;
+  const hasToolResults = toolResults.length > 0;
+  const itemCount = (hasUserText ? 1 : 0) + toolResults.length + (systemReminder ? 1 : 0);
 
   let html = `<details class="detail-panel-section" open>
-    <summary>消息 <span class="panel-section-count">${systemReminder ? '2' : '1'}</span></summary>
+    <summary>消息 <span class="panel-section-count">${itemCount}</span></summary>
     <div class="panel-section-body">`;
 
-  // User text (always shown)
-  if (userText) {
-    html += `<div class="user-message-block markdown-content">${renderMarkdown(userText)}</div>`;
-  } else {
-    html += `<div class="turn-detail-empty">无用户文本</div>`;
+  // User text
+  if (hasUserText) {
+    html += `<div class="user-message-block markdown-content">${renderMarkdown(texts.join('\n'))}</div>`;
+  }
+
+  // Tool Results (shown as user message items)
+  for (const result of toolResults) {
+    const typeLabel = result.is_error ? 'Tool Result (Error)' : 'Tool Result';
+    const typeClass = result.is_error ? 'error' : 'result';
+    html += `<div class="user-message-block" style="margin-top:8px;border-left:3px solid ${result.is_error ? 'var(--danger)' : 'var(--success)'};">
+      <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:6px;">${typeLabel} · ${esc(result.tool_use_id)}</div>
+      <div style="font-family:var(--font-mono);font-size:12px;white-space:pre-wrap;word-break:break-all;">${esc(result.content)}</div>
+    </div>`;
+  }
+
+  // Empty state if nothing
+  if (!hasUserText && !hasToolResults) {
+    html += `<div class="turn-detail-empty">无用户消息</div>`;
   }
 
   // System Reminder (collapsible, collapsed by default)
@@ -5386,40 +5401,27 @@ function buildMessageSection(entry) {
   return html;
 }
 
-// Build Tools section HTML
+// Build Tools section HTML (tool uses only)
 function buildToolsSection(entry) {
-  const tools = extractTools(entry);
+  const toolUses = extractToolUses(entry);
 
-  let html = `<details class="detail-panel-section" ${tools.length > 0 ? 'open' : ''}>
-    <summary>工具 <span class="panel-section-count">${tools.length}</span></summary>
+  let html = `<details class="detail-panel-section" ${toolUses.length > 0 ? 'open' : ''}>
+    <summary>工具调用 <span class="panel-section-count">${toolUses.length}</span></summary>
     <div class="panel-section-body">`;
 
-  if (tools.length === 0) {
+  if (toolUses.length === 0) {
     html += `<div class="turn-detail-empty">当前 Turn 无工具调用</div>`;
   } else {
     html += `<div class="tools-list">`;
-    for (const tool of tools) {
-      if (tool.type === 'call') {
-        html += `<div class="tool-item">
-          <div class="tool-item-header">
-            <span class="tool-item-name">${esc(tool.name)}</span>
-            <span class="tool-item-id">${esc(tool.id)}</span>
-            <span class="tool-item-type call">调用</span>
-          </div>
-          <div class="tool-item-body">${esc(JSON.stringify(tool.input, null, 2))}</div>
-        </div>`;
-      } else {
-        const typeClass = tool.is_error ? 'error' : 'result';
-        const typeLabel = tool.is_error ? '错误' : '结果';
-        html += `<div class="tool-item">
-          <div class="tool-item-header">
-            <span class="tool-item-name">Tool Result</span>
-            <span class="tool-item-id">${esc(tool.tool_use_id)}</span>
-            <span class="tool-item-type ${typeClass}">${typeLabel}</span>
-          </div>
-          <div class="tool-item-body">${esc(tool.content)}</div>
-        </div>`;
-      }
+    for (const tool of toolUses) {
+      html += `<div class="tool-item">
+        <div class="tool-item-header">
+          <span class="tool-item-name">${esc(tool.name)}</span>
+          <span class="tool-item-id">${esc(tool.id)}</span>
+          <span class="tool-item-type call">调用</span>
+        </div>
+        <div class="tool-item-body">${esc(JSON.stringify(tool.input, null, 2))}</div>
+      </div>`;
     }
     html += `</div>`;
   }
@@ -5474,7 +5476,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
   html += buildStepOverviewHeader(turn);
 
   // Four panels
-  html += buildSystemPromptSection(e);
+  html += buildSystemPromptSection();
   html += buildMessageSection(e);
   html += buildToolsSection(e);
   html += buildRawJsonSectionNew(e, turn);
