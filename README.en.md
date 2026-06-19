@@ -1,4 +1,6 @@
-# 🔬 codelenagent（see see what）
+# 🔬 AgentLens
+
+**AI Coding Agent Observability & Diagnosis Platform**
 
 [中文](README.md) | English
 
@@ -29,13 +31,13 @@ Building on v1.0.0 auto-segmentation:
 - You dig through terminal logs, can't find any proof, and just feel gaslit
 
 **Stop letting AI play you.**  
-codelenagent is built for exactly this — **a scalpel + a microscope** that puts every move your agent makes right in front of your eyes.
+AgentLens is built for exactly this — **a scalpel + a microscope** that puts every move your agent makes right in front of your eyes.
 
 ---
 
-## ❓ What is codelenagent
+## ❓ What is AgentLens
 
-codelenagent (pronounced "see see what")  
+AgentLens (pronounced "AgentLens")  
 It does one thing:
 
 > **Records everything your AI does while working, then plays it back in a browser so you can watch in real time.**
@@ -54,22 +56,22 @@ It does one thing:
 Install or update:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash
 ```
 
 Run (the space matters — it's the soul of the command):
 
 ```bash
-ccwhat -- claude
-ccwhat -- codex
+agentlens -- claude
+agentlens -- codex
 # or whatever CLI you use
-ccwhat -- xx
+agentlens -- xx
 ```
 
 Uninstall:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash -s -- uninstall
 ```
 
 *First run walks you through picking what to record. Just follow the prompts.*
@@ -80,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 Paste the install command into your Claude Code / Codex CLI / any AI shell, and say:
 
-> "Install codelenagent for me"
+> "Install AgentLens for me"
 
 It'll handle everything. You don't have to lift a finger.  
 (Think of it as putting an honesty bracelet on your AI.)
@@ -94,7 +96,7 @@ After launch, a viewer tab opens automatically. Every agent action shows up in r
 Closed the tab by accident? Reopen it:
 
 ```bash
-ccwhat web
+agentlens web
 ```
 
 Or go directly to `http://127.0.0.1:7789/claude-log.html`
@@ -114,14 +116,14 @@ Or go directly to `http://127.0.0.1:7789/claude-log.html`
 ## 🛠️ Useful commands
 
 ```bash
-ccwhat setup                   # change recording config
-ccwhat web                     # reopen the viewer
-ccwhat discover -- claude      # scout mode: log actions, skip payloads
-ccwhat discover -- codex       # scout Codex traffic too
-ccwhat run --no-web -- claude  # run quietly, no auto browser
-ccwhat export --list           # list recorded sessions
-ccwhat export <session>        # export a session
-ccwhat import <archive> --open # load someone else's session, investigate together
+agentlens setup                   # change recording config
+agentlens web                     # reopen the viewer
+agentlens discover -- claude      # scout mode: log actions, skip payloads
+agentlens discover -- codex       # scout Codex traffic too
+agentlens run --no-web -- claude  # run quietly, no auto browser
+agentlens export --list           # list recorded sessions
+agentlens export <session>        # export a session
+agentlens import <archive> --open # load someone else's session, investigate together
 ```
 
 ---

@@ -1168,13 +1168,20 @@ function mkTextWithMdToggle(text) {
   const rightLabel = sw.querySelector('.md-switch-right');
   const leftLabel = sw.querySelector('.md-switch-label');
 
+  // Content container with fixed height for both views
+  const contentWrap = document.createElement('div');
+  contentWrap.style.cssText = 'max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);';
+
   const mdDiv = document.createElement('div');
   mdDiv.className = 'md-view';
+  mdDiv.style.padding = '8px';
   mdDiv.innerHTML = renderMarkdown(text);
 
   const rawDiv = document.createElement('div');
   rawDiv.className = 'raw-block';
   rawDiv.style.display = 'none';
+  rawDiv.style.maxHeight = 'none'; // Remove individual scroll since container handles it
+  rawDiv.style.border = 'none';    // Remove border since container has it
   rawDiv.textContent = text;
 
   sw.onclick = () => {
@@ -1188,8 +1195,9 @@ function mkTextWithMdToggle(text) {
 
   bar.appendChild(sw);
   wrap.appendChild(bar);
-  wrap.appendChild(mdDiv);
-  wrap.appendChild(rawDiv);
+  contentWrap.appendChild(mdDiv);
+  contentWrap.appendChild(rawDiv);
+  wrap.appendChild(contentWrap);
   return wrap;
 }
 

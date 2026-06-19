@@ -25,7 +25,7 @@ git commit -m "chore: 从 git 跟踪中移除旧版 deep_ai_analysis 包"
 
 同时修改以下两处，保持一致：
 - `pyproject.toml` 中的 `version = "x.y.z"`
-- `ccwhat/__init__.py` 中的 `__version__ = "x.y.z"`
+- `agentlens/__init__.py` 中的 `__version__ = "x.y.z"`
 
 ### 第 2 步：更新 CHANGELOG
 
@@ -57,7 +57,7 @@ python -m unittest discover -v tests/
 python -m build
 ```
 
-产物：`dist/ccwhat-<version>-py3-none-any.whl` 和 `dist/ccwhat-<version>.tar.gz`
+产物：`dist/agentlens-<version>-py3-none-any.whl` 和 `dist/agentlens-<version>.tar.gz`
 
 ### 第 6 步：检查 wheel 内容
 
@@ -66,7 +66,7 @@ python -m build
 ```bash
 python - <<'PY'
 import zipfile, glob, sys
-wheels = glob.glob("dist/ccwhat-*.whl")
+wheels = glob.glob("dist/agentlens-*.whl")
 if not wheels:
     print("ERROR: dist/ 下没有找到 wheel"); sys.exit(1)
 bad = []
@@ -83,7 +83,7 @@ PY
 ### 第 7 步：上传到 PyPI
 
 ```bash
-twine upload dist/ccwhat-<version>*
+twine upload dist/agentlens-<version>*
 ```
 
 ### 第 8 步：创建 GitHub Release
@@ -95,9 +95,9 @@ twine upload dist/ccwhat-<version>*
 ### 第 9 步：验证安装
 
 ```bash
-pip install ccwhat==<version>
-ccwhat --version
-ccwhat --help
-ccwhat setup --preset claude --yes
-ccwhat run --help
+pip install agentlens==<version>
+agentlens --version
+agentlens --help
+agentlens setup --preset claude --yes
+agentlens run --help
 ```

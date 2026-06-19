@@ -1,10 +1,12 @@
-# 🔬 codelenagent（see see what）
+# 🔬 AgentLens
+
+**AI Coding Agent Observability & Diagnosis Platform**
 
 [English](README.en.md) | 中文
 
 当前版本：`v2.2.3` · [更新日志](CHANGELOG.md)
 
-**你的 AI 又嘴硬了？see see what！看看他在做什么。**
+**你的 AI 又嘴硬了？AgentLens！看看他在做什么。**
 
 ---
 
@@ -15,13 +17,13 @@
 - 你追问：“你真看了吗？”它理直气壮：“看了。”  
 - 你翻遍终端日志，也抓不到它“偷懒”的实锤，一肚子火  
 
-**别再被 AI 当傻子糊弄了。Let me see see what！**  
+**别再被 AI 当傻子糊弄了。Let me AgentLens！**  
 
 ---
 
-## ❓ codelenagent 是什么
+## ❓ AgentLens 是什么
 
-codelenagent（读作”see see what”）  
+AgentLens（读作”AgentLens”）  
 它只做一件事：
 
 > **把你 AI 干活时的所有“小动作”录下来，放到网页里让你实时围观。**
@@ -40,22 +42,22 @@ codelenagent（读作”see see what”）
 安装或更新：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash
 ```
 
 运行（注意空格，空格是灵魂）：
 
 ```bash
-ccwhat -- claude
-ccwhat -- codex
+agentlens -- claude
+agentlens -- codex
 # 或者你自己的命令
-ccwhat -- xx
+agentlens -- xx
 ```
 
 卸载：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh | bash -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/PacemakerG/AgentLens/main/install.sh | bash -s -- uninstall
 ```
 
 *第一次运行会让你选要观察的 AI 环境，跟着提示走就行。*
@@ -66,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 
 直接把这个链接丢给你的 Claude Code / Codex CLI / 任何 OpenClaw 套壳工具，说一句：
 
-> “帮我装好 codelenagent”
+> “帮我装好 AgentLens”
 
 它自己就会装好，全程不用你动手。
 （这也算帮 AI 戴上一个”诚实手环”）
@@ -80,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/PacemakerG/CCWhat/main/install.sh |
 不小心关了？重新打开：
 
 ```bash
-ccwhat web
+agentlens web
 ```
 或者直接访问 `http://127.0.0.1:7789/claude-log.html`
 
@@ -99,14 +101,14 @@ ccwhat web
 ## 🛠️ 常用命令
 
 ```bash
-ccwhat setup                   # 修改录制配置
-ccwhat web                     # 再次打开“显微镜”
-ccwhat discover -- claude      # 探路模式：只记录动作，不偷看数据
-ccwhat discover -- codex       # Codex 也可以探路
-ccwhat run --no-web -- claude  # 低调运行，不自动弹网页
-ccwhat export --list           # 看看都录了哪些“刑侦卷宗”
-ccwhat export <session>        # 导出某个 session
-ccwhat import <archive> --open # 还原别人的 session，一起破案
+agentlens setup                   # 修改录制配置
+agentlens web                     # 再次打开“显微镜”
+agentlens discover -- claude      # 探路模式：只记录动作，不偷看数据
+agentlens discover -- codex       # Codex 也可以探路
+agentlens run --no-web -- claude  # 低调运行，不自动弹网页
+agentlens export --list           # 看看都录了哪些“刑侦卷宗”
+agentlens export <session>        # 导出某个 session
+agentlens import <archive> --open # 还原别人的 session，一起破案
 ```
 
 ---
