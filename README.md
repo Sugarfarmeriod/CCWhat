@@ -2,9 +2,13 @@
 
 中文 | [English](README.en.md)
 
-当前版本：`v2.2.2` · [更新日志](CHANGELOG.md)
+当前版本：`v2.2.3` · [更新日志](CHANGELOG.md)
 
 ## 当前版本状态
+
+### v2.2.3 — 全局 Session / Task 搜索
+
+- **全局搜索**：Viewer 顶部新增带范围选择的搜索入口，支持当前 session、当前 project、所有 projects 搜索，并可跳转到命中的 session、task、turn。_由 [@Sugarfarmeriod](https://github.com/Sugarfarmeriod) 贡献。_
 
 ### v2.2.2 — 前端展示优化
 
