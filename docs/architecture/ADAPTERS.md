@@ -1,6 +1,6 @@
 # 多 Agent Log Adapter 文档
 
-本文档说明 CCWhat 如何读取不同 Coding Agent 的本地日志，以及如何将它们清洗成统一结构。
+本文档说明 AgentLens 如何读取不同 Coding Agent 的本地日志，以及如何将它们清洗成统一结构。
 
 ## Adapter 的职责
 
@@ -24,11 +24,11 @@ Log Adapter 不负责：
 
 主要目录：
 
-- `ccwhat/adapters/base.py`
-- `ccwhat/adapters/registry.py`
-- `ccwhat/adapters/claude.py`
-- `ccwhat/adapters/opencode.py`
-- `ccwhat/adapters/codex.py`
+- `agentlens/adapters/base.py`
+- `agentlens/adapters/registry.py`
+- `agentlens/adapters/claude.py`
+- `agentlens/adapters/opencode.py`
+- `agentlens/adapters/codex.py`
 
 `base.py` 定义统一接口：
 
@@ -226,9 +226,9 @@ Adapter 的 `load_session()` 应尽量返回：
 
 ## 添加新 Agent 的步骤
 
-1. 新建 `ccwhat/adapters/<agent>.py`。
+1. 新建 `agentlens/adapters/<agent>.py`。
 2. 实现 `AgentAdapter` 接口。
-3. 在 `ccwhat/adapters/registry.py` 注册名称和别名。
+3. 在 `agentlens/adapters/registry.py` 注册名称和别名。
 4. 写真实风格 fixture 或临时 SQLite 测试。
 5. 覆盖：
    - `list_projects()`
@@ -240,8 +240,8 @@ Adapter 的 `load_session()` 应尽量返回：
 6. 手动运行：
 
 ```bash
-ccwhat web --agent <agent>
-ccwhat -- <agent>
+agentlens web --agent <agent>
+agentlens -- <agent>
 ```
 
 ## 常见坑
@@ -251,5 +251,5 @@ ccwhat -- <agent>
 - 不要伪造 0 token；没有数据时就不返回该字段。
 - 不要丢弃 raw。
 - 不要让 adapter 直接调用 analyzer。
-- 不要因为某个 agent 的内部 agent 字段叫 `build`，就把 CCWhat 的 agent 显示成 `build`。
+- 不要因为某个 agent 的内部 agent 字段叫 `build`，就把 AgentLens 的 agent 显示成 `build`。
 

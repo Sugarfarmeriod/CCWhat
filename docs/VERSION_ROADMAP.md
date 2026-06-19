@@ -1,6 +1,6 @@
-# CCWhat Version Roadmap
+# AgentLens Version Roadmap
 
-这份文档记录 CCWhat 从日志查看器到数据闭环平台的版本规划。
+这份文档记录 AgentLens 从日志查看器到数据闭环平台的版本规划。
 
 ## 当前结论
 
@@ -105,7 +105,7 @@ Score   = 做得好不好
 标准目录：
 
 ```text
-ccwhat-dataset/
+agentlens-dataset/
   manifest.json
   dataset.jsonl
   traces/
@@ -265,7 +265,7 @@ dataset item
 一句话：
 
 ```text
-CCWhat 最终沉淀真实 Coding Agent 训练数据。
+AgentLens 最终沉淀真实 Coding Agent 训练数据。
 ```
 
 ---

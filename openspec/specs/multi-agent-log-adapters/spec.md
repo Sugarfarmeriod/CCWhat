@@ -57,7 +57,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** 系统不得把 Codex 或 OpenCode 原始记录伪装成 Claude 的 `message.content` 结构，必须通过 `events` 和 `turns` 表达通用展示数据
 
 ### Requirement: Usage 字段
-系统 MUST 使用 CCWhat 通用 usage 字段表达 token 和 cache 计数，并标注字段来源和粒度。
+系统 MUST 使用 AgentLens 通用 usage 字段表达 token 和 cache 计数，并标注字段来源和粒度。
 
 #### Scenario: 本地日志 usage 映射
 - **WHEN** 本地 agent 日志或数据库提供 token/cache 计数
@@ -80,7 +80,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** 系统必须同时提供 `cacheHitRateFormula`，并将 usage 来源标注为 `derived`
 
 #### Scenario: 未定义公式时不展示 Cache 命中率
-- **WHEN** CCWhat 未定义明确的 cache 命中率计算公式
+- **WHEN** AgentLens 未定义明确的 cache 命中率计算公式
 - **THEN** 系统不得默认展示 `cacheHitRate`，应只展示 cache token 计数
 
 ### Requirement: Agent Registry
@@ -103,33 +103,33 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** registry 必须返回清晰错误，说明该 agent 不受支持
 
 ### Requirement: Web 命令 Agent 参数
-系统 MUST 让 `ccwhat web` 支持按 agent 选择 viewer 日志 adapter，并保留显式项目目录覆盖能力。
+系统 MUST 让 `agentlens web` 支持按 agent 选择 viewer 日志 adapter，并保留显式项目目录覆盖能力。
 
 #### Scenario: 使用 Claude agent 默认目录
-- **WHEN** 用户运行 `ccwhat web --agent claude` 且未传入 `--projects-dir`
+- **WHEN** 用户运行 `agentlens web --agent claude` 且未传入 `--projects-dir`
 - **THEN** 系统必须使用 Claude adapter 的默认 projects 目录启动 viewer
 
 #### Scenario: 显式 projects-dir 优先
-- **WHEN** 用户运行 `ccwhat web --agent claude --projects-dir <path>`
+- **WHEN** 用户运行 `agentlens web --agent claude --projects-dir <path>`
 - **THEN** 系统必须使用用户传入的 `<path>`，而不是 Claude adapter 的默认 projects 目录
 
 #### Scenario: Web 命令遇到未实现 agent
-- **WHEN** 用户运行 `ccwhat web --agent codex` 或 `ccwhat web --agent opencode`
+- **WHEN** 用户运行 `agentlens web --agent codex` 或 `agentlens web --agent opencode`
 - **THEN** 系统必须给出清晰错误提示，说明该 agent 的日志 adapter 尚未实现
 
 ### Requirement: Run 模式 Agent 推断
-系统 MUST 在 `ccwhat -- <target>` 启动模式下根据目标命令推断 agent 类型，并把该类型传给 viewer 后端。
+系统 MUST 在 `agentlens -- <target>` 启动模式下根据目标命令推断 agent 类型，并把该类型传给 viewer 后端。
 
 #### Scenario: 推断 Claude
-- **WHEN** 用户运行 `ccwhat -- claude` 或 `ccwhat -- claude-code`
+- **WHEN** 用户运行 `agentlens -- claude` 或 `agentlens -- claude-code`
 - **THEN** 系统必须推断 agent 为 `claude`
 
 #### Scenario: 推断 Codex
-- **WHEN** 用户运行 `ccwhat -- codex`
+- **WHEN** 用户运行 `agentlens -- codex`
 - **THEN** 系统必须推断 agent 为 `codex`
 
 #### Scenario: 推断 OpenCode
-- **WHEN** 用户运行 `ccwhat -- opencode`、`ccwhat -- open-code` 或 `ccwhat -- open_code`
+- **WHEN** 用户运行 `agentlens -- opencode`、`agentlens -- open-code` 或 `agentlens -- open_code`
 - **THEN** 系统必须推断 agent 为 `opencode`
 
 #### Scenario: 未实现 agent 不阻塞目标命令
@@ -178,7 +178,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** 测试必须验证 registry 返回正确 adapter 或明确未实现状态
 
 #### Scenario: CLI 测试覆盖参数优先级
-- **WHEN** 测试运行 `ccwhat web --agent claude` 和显式 `--projects-dir`
+- **WHEN** 测试运行 `agentlens web --agent claude` 和显式 `--projects-dir`
 - **THEN** 测试必须验证 agent 默认路径和显式路径优先级符合要求
 
 #### Scenario: 现有导出导入测试继续通过
@@ -206,7 +206,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 
 #### Scenario: Codex usage 映射
 - **WHEN** Codex 本地记录提供 `input_tokens`、`cached_input_tokens`、`output_tokens`、`reasoning_output_tokens`、`total_tokens` 或 `tokens_used`
-- **THEN** Codex adapter 必须映射到 CCWhat 通用 usage 字段，并标注 `source: "agent_log"`
+- **THEN** Codex adapter 必须映射到 AgentLens 通用 usage 字段，并标注 `source: "agent_log"`
 
 #### Scenario: Codex unknown event 降级
 - **WHEN** Codex rollout JSONL 包含 adapter 尚未识别的 event type
@@ -229,7 +229,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 
 #### Scenario: OpenCode usage 映射
 - **WHEN** OpenCode session、message 或 step-finish 提供 `tokens_input`、`tokens_output`、`tokens_reasoning`、`tokens_cache_read`、`tokens_cache_write` 或嵌套 `tokens.cache.read/write`
-- **THEN** OpenCode adapter 必须映射到 CCWhat 通用 usage 字段，并标注对应 `scope`
+- **THEN** OpenCode adapter 必须映射到 AgentLens 通用 usage 字段，并标注对应 `scope`
 
 #### Scenario: OpenCode schema 缺失
 - **WHEN** OpenCode DB 缺少必要表或字段
@@ -247,7 +247,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** registry 必须返回 OpenCode adapter，而不是未实现错误
 
 #### Scenario: Run 模式不再 fallback
-- **WHEN** 用户运行 `ccwhat -- codex` 或 `ccwhat -- opencode`
+- **WHEN** 用户运行 `agentlens -- codex` 或 `agentlens -- opencode`
 - **THEN** viewer 必须使用对应 adapter，不得因 adapter 未实现 fallback 到 Claude
 
 ### Requirement: 非 Claude Agent Log 展示
@@ -285,7 +285,7 @@ TBD - created by archiving change add-multi-agent-log-adapters. Update Purpose a
 - **THEN** 测试必须验证 registry 返回真实 adapter
 
 #### Scenario: CLI 测试更新
-- **WHEN** 测试运行 `ccwhat web --agent codex/opencode`
+- **WHEN** 测试运行 `agentlens web --agent codex/opencode`
 - **THEN** 测试必须验证 viewer 使用对应 adapter
 
 #### Scenario: Claude 回归

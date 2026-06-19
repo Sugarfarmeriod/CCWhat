@@ -18,7 +18,7 @@ pip install -e ".[dev]"
    git commit -m "chore: remove legacy deep_ai_analysis package from tracking"
    ```
 
-1. **Bump version** in `pyproject.toml` and `ccwhat/__init__.py`
+1. **Bump version** in `pyproject.toml` and `agentlens/__init__.py`
 
 2. **Update `CHANGELOG.md`** with the user-facing highlights for this version
 
@@ -39,13 +39,13 @@ pip install -e ".[dev]"
    ```bash
    python -m build
    ```
-   Produces `dist/ccwhat-<version>-py3-none-any.whl` and `dist/ccwhat-<version>.tar.gz`
+   Produces `dist/agentlens-<version>-py3-none-any.whl` and `dist/agentlens-<version>.tar.gz`
 
 6. **Inspect built wheel** (confirm no legacy packages)
    ```bash
    python - <<'PY'
    import zipfile, glob, sys
-   wheels = glob.glob("dist/ccwhat-*.whl")
+   wheels = glob.glob("dist/agentlens-*.whl")
    if not wheels:
        print("ERROR: no wheel found in dist/"); sys.exit(1)
    bad = []
@@ -61,7 +61,7 @@ pip install -e ".[dev]"
 
 7. **Upload to PyPI**
    ```bash
-   twine upload dist/ccwhat-<version>*
+   twine upload dist/agentlens-<version>*
    ```
 
 8. **Create GitHub Release**
@@ -71,6 +71,6 @@ pip install -e ".[dev]"
 
 9. **Verify install**
    ```bash
-   pip install ccwhat==<version>
-   ccwhat --version
+   pip install agentlens==<version>
+   agentlens --version
    ```

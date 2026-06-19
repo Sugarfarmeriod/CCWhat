@@ -1,6 +1,6 @@
-# CCWhat 开发贡献指南
+# AgentLens 开发贡献指南
 
-欢迎参与 CCWhat 开发。本文档说明如何设置环境、理解工作流、运行测试和提交改动。
+欢迎参与 AgentLens 开发。本文档说明如何设置环境、理解工作流、运行测试和提交改动。
 
 ## 开发环境
 
@@ -14,8 +14,8 @@
 克隆仓库：
 
 ```bash
-git clone git@github.com:PacemakerG/CCWhat.git
-cd CCWhat
+git clone git@github.com:PacemakerG/AgentLens.git
+cd AgentLens
 ```
 
 安装依赖：
@@ -27,13 +27,13 @@ uv sync
 运行 CLI：
 
 ```bash
-uv run ccwhat --help
+uv run agentlens --help
 ```
 
 启动 Web Viewer：
 
 ```bash
-uv run ccwhat web
+uv run agentlens web
 ```
 
 ## 常用开发命令
@@ -60,7 +60,7 @@ openspec validate <change-name> --strict
 
 ## 项目工作流
 
-CCWhat 使用 OpenSpec 驱动较大的功能改动。
+AgentLens 使用 OpenSpec 驱动较大的功能改动。
 
 建议流程：
 
@@ -89,14 +89,14 @@ OpenSpec 文档默认使用中文。
 错误方向：
 
 ```text
-ccwhat -- opencode
+agentlens -- opencode
 -> 把 ("opencode",) 当作 analyzer command
 ```
 
 正确方向：
 
 ```text
-ccwhat -- opencode
+agentlens -- opencode
 -> observed agent = opencode
 -> Log Adapter = OpenCodeAdapter
 -> Analyzer Adapter = opencode run --format json
@@ -127,8 +127,8 @@ Claude Code、OpenCode、Codex 的日志格式差异很大。
 参考：
 
 - `docs/ADAPTERS.md`
-- `ccwhat/adapters/base.py`
-- `ccwhat/adapters/registry.py`
+- `agentlens/adapters/base.py`
+- `agentlens/adapters/registry.py`
 
 最小要求：
 
@@ -136,16 +136,16 @@ Claude Code、OpenCode、Codex 的日志格式差异很大。
 - 注册 agent 名称和别名。
 - 保留 raw。
 - 写 list/load/normalize 测试。
-- 手动验证 `ccwhat web --agent <agent>`。
+- 手动验证 `agentlens web --agent <agent>`。
 
 ## 如何新增 Analyzer
 
 参考：
 
 - `docs/ANALYZER.md`
-- `ccwhat/analyzers/base.py`
-- `ccwhat/analyzers/registry.py`
-- `ccwhat/analyzer.py`
+- `agentlens/analyzers/base.py`
+- `agentlens/analyzers/registry.py`
+- `agentlens/analyzer.py`
 
 最小要求：
 
@@ -187,22 +187,22 @@ Claude Code、OpenCode、Codex 的日志格式差异很大。
 Claude：
 
 ```bash
-uv run ccwhat web --agent claude
-uv run ccwhat -- claude
+uv run agentlens web --agent claude
+uv run agentlens -- claude
 ```
 
 OpenCode：
 
 ```bash
-uv run ccwhat web --agent opencode
-uv run ccwhat -- opencode
+uv run agentlens web --agent opencode
+uv run agentlens -- opencode
 ```
 
 Codex：
 
 ```bash
-uv run ccwhat web --agent codex
-uv run ccwhat -- codex
+uv run agentlens web --agent codex
+uv run agentlens -- codex
 ```
 
 报告链路：

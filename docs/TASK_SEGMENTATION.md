@@ -2,14 +2,14 @@
 
 ## 概述
 
-`ccwhat/task_segments/` 模块将 AI Coding Agent 的长 session 日志切分为可复盘、可测试的任务片段（Task Segments），使用**纯规则 pipeline**，不依赖 LLM 判断边界。
+`agentlens/task_segments/` 模块将 AI Coding Agent 的长 session 日志切分为可复盘、可测试的任务片段（Task Segments），使用**纯规则 pipeline**，不依赖 LLM 判断边界。
 
 ---
 
 ## 调用方式
 
 ```python
-from ccwhat.task_segments import segment_session
+from agentlens.task_segments import segment_session
 
 result = segment_session(session_dict)  # session_dict 来自 ClaudeAdapter.load_session()
 for task in result.tasks:
@@ -30,7 +30,7 @@ Content-Type: application/json
 ## 模块结构
 
 ```
-ccwhat/task_segments/
+agentlens/task_segments/
   models.py      — 数据类：NormalizedEvent, EvidenceBundle, TaskSegment, ...
   events.py      — 将 raw JSONL 归一化为 NormalizedEvent 列表
   rules.py       — 规则加载器、意图分类、延续否决、Todo 抽取
@@ -40,7 +40,7 @@ ccwhat/task_segments/
   segmenter.py   — 核心状态机，整合上述模块
 ```
 
-规则词典路径：`ccwhat/assets/task_segment_rules.json`
+规则词典路径：`agentlens/assets/task_segment_rules.json`
 
 ---
 
@@ -69,7 +69,7 @@ ccwhat/task_segments/
 
 ## 调参旋钮
 
-所有旋钮都在 `ccwhat/assets/task_segment_rules.json`：
+所有旋钮都在 `agentlens/assets/task_segment_rules.json`：
 
 | 字段 | 作用 |
 |------|------|

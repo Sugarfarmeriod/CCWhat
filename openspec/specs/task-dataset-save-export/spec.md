@@ -65,7 +65,7 @@ Viewer server SHALL 提供 `POST /api/save-task-dataset`，将当前 session 的
 - **AND** 请求包含可用 task source payload
 - **AND** 请求包含 provenance、overlay version 或 source schema version、source trace 信息
 - **THEN** 后端 SHALL 构建 Dataset v1
-- **AND** 后端 SHALL 保存到 `~/.ccwhat/datasets/<dataset-id>/`
+- **AND** 后端 SHALL 保存到 `~/.agentlens/datasets/<dataset-id>/`
 - **AND** 后端 SHALL 返回 HTTP 200
 - **AND** 响应 SHALL 包含 `ok: true`
 - **AND** 响应 SHALL 包含 `datasetId`
@@ -173,10 +173,10 @@ Viewer server SHALL 将保存成功的 Dataset 作为文件集合写入本地 Da
 
 #### Scenario: 写入 registry 目录结构
 - **WHEN** Dataset 保存成功
-- **THEN** registry SHALL 包含 `~/.ccwhat/datasets/<dataset-id>/manifest.json`
-- **AND** registry SHALL 包含 `~/.ccwhat/datasets/<dataset-id>/dataset.jsonl`
-- **AND** registry SHALL 包含 `~/.ccwhat/datasets/<dataset-id>/traces/*.json`
-- **AND** registry SHALL 包含 `~/.ccwhat/datasets/<dataset-id>/scores.jsonl`
+- **THEN** registry SHALL 包含 `~/.agentlens/datasets/<dataset-id>/manifest.json`
+- **AND** registry SHALL 包含 `~/.agentlens/datasets/<dataset-id>/dataset.jsonl`
+- **AND** registry SHALL 包含 `~/.agentlens/datasets/<dataset-id>/traces/*.json`
+- **AND** registry SHALL 包含 `~/.agentlens/datasets/<dataset-id>/scores.jsonl`
 
 #### Scenario: 不写入 evaluator score
 - **WHEN** Dataset 保存成功
@@ -200,7 +200,7 @@ Viewer SHALL 支持将已保存 Dataset 通过浏览器下载为 `.tar.gz`。
 
 #### Scenario: 下载包结构
 - **WHEN** 用户下载 Dataset tar.gz
-- **THEN** 压缩包内部根目录 SHALL 为 `ccwhat-dataset/`
+- **THEN** 压缩包内部根目录 SHALL 为 `agentlens-dataset/`
 - **AND** 根目录下 SHALL 包含 `manifest.json`
 - **AND** 根目录下 SHALL 包含 `dataset.jsonl`
 - **AND** 根目录下 SHALL 包含 `traces/*.json`

@@ -4,7 +4,7 @@ This document records the implementation handoff for `add-task-dataset-core`.
 
 ## Dataset v1 Files
 
-`ccwhat.task_dataset` defines `ccwhat-dataset-v1` as an in-memory bundle with stable serialized paths:
+`agentlens.task_dataset` defines `agentlens-dataset-v1` as an in-memory bundle with stable serialized paths:
 
 - `manifest.json`: schema version, creation time, tool name, session metadata, and counts.
 - `dataset.jsonl`: one task row per line with `input`, `expected`, and `metadata`.

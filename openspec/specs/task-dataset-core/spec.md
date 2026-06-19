@@ -1,9 +1,9 @@
 ## Purpose
 
-定义 Task Dataset v1 的后端核心数据契约、构建器和校验器，使 CCWhat 可以从已切分的 coding task 生成稳定、可保存、可导出、可复用的数据资产。
+定义 Task Dataset v1 的后端核心数据契约、构建器和校验器，使 AgentLens 可以从已切分的 coding task 生成稳定、可保存、可导出、可复用的数据资产。
 ## Requirements
 ### Requirement: Dataset v1 文件契约
-Task Dataset Core SHALL 定义 `ccwhat-dataset-v1` 文件集合，包含 `manifest.json`、`dataset.jsonl`、`traces/*.json` 和 `scores.jsonl`。
+Task Dataset Core SHALL 定义 `agentlens-dataset-v1` 文件集合，包含 `manifest.json`、`dataset.jsonl`、`traces/*.json` 和 `scores.jsonl`。
 
 #### Scenario: 生成必需文件集合
 - **WHEN** 系统从已切分 Task 构建 Dataset
@@ -14,9 +14,9 @@ Task Dataset Core SHALL 定义 `ccwhat-dataset-v1` 文件集合，包含 `manife
 
 #### Scenario: manifest 描述数据包
 - **WHEN** Dataset 包含 N 个 task
-- **THEN** `manifest.json` SHALL 包含 `schema_version` 且值为 `ccwhat-dataset-v1`
+- **THEN** `manifest.json` SHALL 包含 `schema_version` 且值为 `agentlens-dataset-v1`
 - **AND** `manifest.json` SHALL 包含 `created_at`
-- **AND** `manifest.json` SHALL 包含 `tool` 且值为 `ccwhat`
+- **AND** `manifest.json` SHALL 包含 `tool` 且值为 `agentlens`
 - **AND** `manifest.json` SHALL 包含 session 信息
 - **AND** `manifest.json` SHALL 记录 `counts.dataset_items`
 - **AND** `manifest.json` SHALL 记录 `counts.traces`
@@ -157,7 +157,7 @@ Task Dataset Core SHALL 保持为后端核心能力，不直接引入 viewer 保
 #### Scenario: 不新增保存和下载 API
 - **WHEN** 本 change 完成
 - **THEN** 系统 SHALL NOT 新增 `POST /api/save-task-dataset`
-- **AND** 系统 SHALL NOT 写入 `~/.ccwhat/datasets/`
+- **AND** 系统 SHALL NOT 写入 `~/.agentlens/datasets/`
 - **AND** 系统 SHALL NOT 生成 `dataset-*.tar.gz`
 
 #### Scenario: 不做 evaluator
@@ -325,7 +325,7 @@ Task Dataset Core SHALL 在抽取 change evidence 后仍保持为后端核心能
 #### Scenario: 不新增保存和下载 API
 - **WHEN** 本 change 完成
 - **THEN** 系统 SHALL NOT 新增 `POST /api/save-task-dataset`
-- **AND** 系统 SHALL NOT 写入 `~/.ccwhat/datasets/`
+- **AND** 系统 SHALL NOT 写入 `~/.agentlens/datasets/`
 - **AND** 系统 SHALL NOT 生成 `dataset-*.tar.gz`
 
 #### Scenario: 不做 evaluator

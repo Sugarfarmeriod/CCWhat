@@ -1,6 +1,6 @@
 ## 1. 新建 agent_config 模块
 
-- [x] 1.1 新建 `ccwhat/agent_config.py`，定义 `detect_domains(agent_name: str) -> list[str]` 公共接口
+- [x] 1.1 新建 `agentlens/agent_config.py`，定义 `detect_domains(agent_name: str) -> list[str]` 公共接口
 - [x] 1.2 实现 JSONC 注释剥离函数 `_strip_jsonc_comments(text: str) -> str`（正则剥离 `//` 行注释和 `/* */` 块注释）
 - [x] 1.3 实现 `_detect_opencode_domains() -> list[str]`：读取 `~/.config/opencode/opencode.jsonc` 的自定义 provider baseURL，并合并 `opencode models --verbose` 暴露的内置 provider `api.url`
 - [x] 1.4 实现 `_detect_claude_domains() -> list[str]`：读取 `~/.claude/settings.json` 和当前环境中的 `ANTHROPIC_*_BASE_URL`，无此字段时返回 `["api.anthropic.com"]`
@@ -23,6 +23,6 @@
 
 ## 4. 验收验证
 
-- [ ] 4.1 删除（或备份）`~/.ccwhat/config.toml`，执行 `ccwhat -- opencode`，确认控制台打印自动检测的 domain 且不触发 setup wizard
-- [ ] 4.2 与 opencode 对话后，确认 `~/.ccwhat/raw-req-resp/` 下有 JSONL 文件落盘
+- [ ] 4.1 删除（或备份）`~/.agentlens/config.toml`，执行 `agentlens -- opencode`，确认控制台打印自动检测的 domain 且不触发 setup wizard
+- [ ] 4.2 与 opencode 对话后，确认 `~/.agentlens/raw-req-resp/` 下有 JSONL 文件落盘
 - [ ] 4.3 恢复 `config.toml`，确认手动配置与自动检测 domain 会同时进入录制列表

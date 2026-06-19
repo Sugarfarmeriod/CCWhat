@@ -1,19 +1,19 @@
 # Analyzer Adapter 文档
 
-本文档说明 CCWhat 的报告生成协议。它和 Log Adapter 是两套不同抽象。
+本文档说明 AgentLens 的报告生成协议。它和 Log Adapter 是两套不同抽象。
 
 ## 核心概念
 
 ### Observed Agent
 
-Observed Agent 是用户被 CCWhat 观察的 Coding Agent。
+Observed Agent 是用户被 AgentLens 观察的 Coding Agent。
 
 例如：
 
 ```bash
-ccwhat -- opencode
-ccwhat -- codex
-ccwhat -- claude
+agentlens -- opencode
+agentlens -- codex
+agentlens -- claude
 ```
 
 这里的 `opencode`、`codex`、`claude` 是被启动和观测的目标。
@@ -45,18 +45,18 @@ Analyzer Agent 是用来生成报告的 agent 或分析器。
 observed agent != analyzer command
 ```
 
-`ccwhat -- codex` 的 `codex` 不能直接被当成报告命令。报告生成必须走 analyzer registry 中定义的非交互协议。
+`agentlens -- codex` 的 `codex` 不能直接被当成报告命令。报告生成必须走 analyzer registry 中定义的非交互协议。
 
 ## 入口文件
 
 主要文件：
 
-- `ccwhat/analyzer.py`
-- `ccwhat/analyzers/base.py`
-- `ccwhat/analyzers/registry.py`
-- `ccwhat/analyzers/opencode.py`
-- `ccwhat/analyzers/codex.py`
-- `ccwhat/session_report/pipeline.py`
+- `agentlens/analyzer.py`
+- `agentlens/analyzers/base.py`
+- `agentlens/analyzers/registry.py`
+- `agentlens/analyzers/opencode.py`
+- `agentlens/analyzers/codex.py`
+- `agentlens/session_report/pipeline.py`
 - `viewer/server.py`
 
 ## AnalyzerSpec
@@ -164,7 +164,7 @@ parser 需要忽略工具事件、状态事件，只提取最终文本。
 temporary file -> final message -> report markdown
 ```
 
-`ccwhat/analyzers/registry.py` 中的 `prepare_candidate()` 会处理 `<tmpfile>` 替换。
+`agentlens/analyzers/registry.py` 中的 `prepare_candidate()` 会处理 `<tmpfile>` 替换。
 
 ## 配置优先级
 
@@ -235,8 +235,8 @@ Analyzer 失败时不要让页面空白。
 
 ## 添加新 Analyzer 的步骤
 
-1. 新建 parser 模块，例如 `ccwhat/analyzers/myagent.py`。
-2. 在 `ccwhat/analyzers/registry.py` 注册 `AnalyzerSpec`。
+1. 新建 parser 模块，例如 `agentlens/analyzers/myagent.py`。
+2. 在 `agentlens/analyzers/registry.py` 注册 `AnalyzerSpec`。
 3. 明确：
    - 默认命令
    - prompt 是否走 stdin

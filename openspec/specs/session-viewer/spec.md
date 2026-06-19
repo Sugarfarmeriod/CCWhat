@@ -1,5 +1,5 @@
 ## Purpose
-定义 CCWhat Web Viewer 读取、展示和分析本地 Coding Agent session 日志的核心能力，包括 session 加载、日志渲染、请求响应关联和任务切分视图。
+定义 AgentLens Web Viewer 读取、展示和分析本地 Coding Agent session 日志的核心能力，包括 session 加载、日志渲染、请求响应关联和任务切分视图。
 ## Requirements
 ### Requirement: Backend API — list projects and sessions
 `server.py` SHALL 提供 `GET /api/projects` 接口，返回 `~/.claude/projects`（或 `--projects-dir` 指定目录）下所有项目及其会话 ID 列表。

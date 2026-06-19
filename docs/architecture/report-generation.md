@@ -3,7 +3,7 @@
 ## 目录与文件职责
 
 ```
-ccwhat/
+agentlens/
 ├── session_report/          ← 报告生成核心（纯 Python，不依赖 web）
 │   ├── model.py             → 数据模型定义（ReportSession/ReportEvent/ReportTurn…）
 │   ├── normalize.py         → 原始 session → 统一 ReportSession 的适配层
@@ -49,7 +49,7 @@ viewer/
                │
                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ccwhat/session_report/normalize.py:231                     │
+│  agentlens/session_report/normalize.py:231                     │
 │  normalize_session_for_report(session_dict)                 │
 │                                                             │
 │  将原始 dict → ReportSession 数据模型（model.py 定义）       │
@@ -63,7 +63,7 @@ viewer/
                │
                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ccwhat/session_report/core.py:700                          │
+│  agentlens/session_report/core.py:700                          │
 │  build_report_data(report_session)                          │
 │                                                             │
 │  逐步骤调用内部函数：                                         │
@@ -85,7 +85,7 @@ viewer/
        │ (yuanxi)         │ (generic)
        ▼                  ▼
 ┌──────────────────┐  ┌──────────────────┐
-│ ccwhat/assets/   │  │ ccwhat/assets/   │
+│ agentlens/assets/   │  │ agentlens/assets/   │
 │ session-report/  │  │ session-report/  │
 │ diagnosis_prompt │  │ generic_prompt   │
 │ .md              │  │ .md              │
@@ -98,7 +98,7 @@ viewer/
        │                     │
        ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ccwhat/analyzer.py:216                                     │
+│  agentlens/analyzer.py:216                                     │
 │  run_mc_analysis(prompt)                                    │
 │                                                             │
 │  _resolve_analyzer_agent()  → 选 AI CLI（claude/codex/...） │
@@ -114,7 +114,7 @@ viewer/
        │         (只用 core.py 产出的阶段数据拼一份基础 Markdown)
        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  ccwhat/session_report/pipeline.py                          │
+│  agentlens/session_report/pipeline.py                          │
 │                                                             │
 │  【yuanxi】build_html_session_report():148 →                 │
 │    render_html_report(data)  ──调用──►  core.py:746         │
@@ -237,7 +237,7 @@ result = runner(resolved, input=prompt, capture_output=True, text=True, timeout=
 ```
 
 ```
-  ccwhat 进程
+  agentlens 进程
   ┌─────────────┐     stdin = prompt     ┌──────────────────┐
   │ analyzer.py │ ──────────────────────→│ claude -p -       │
   │             │                        │  (子进程)          │
