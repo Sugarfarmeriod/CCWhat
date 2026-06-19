@@ -13,7 +13,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import urllib.request
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter, SessionRenameError
@@ -244,6 +244,267 @@ def get_recording_status(logs_dir: Path, config_path: Path | None = None) -> dic
 
 
 # ---------------------------------------------------------------------------
+# Scoped search helpers
+# ---------------------------------------------------------------------------
+
+SEARCH_SCOPES = {"current_session", "current_project", "all_projects"}
+DEFAULT_SEARCH_LIMIT = 50
+MAX_SEARCH_LIMIT = 200
+
+
+def _plain_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        return " ".join(_plain_text(v) for v in value)
+    if isinstance(value, dict):
+        return " ".join(f"{k} {_plain_text(v)}" for k, v in value.items())
+    return str(value)
+
+
+def _short_snippet(text: Any, query: str, *, max_len: int = 110) -> str:
+    clean = re.sub(r"\s+", " ", _plain_text(text)).strip()
+    if len(clean) <= max_len:
+        return clean
+    pos = clean.lower().find(query.lower())
+    if pos < 0:
+        return clean[:max_len - 1] + "…"
+    start = max(0, pos - max_len // 3)
+    end = min(len(clean), start + max_len)
+    start = max(0, end - max_len)
+    prefix = "…" if start else ""
+    suffix = "…" if end < len(clean) else ""
+    return prefix + clean[start:end].strip() + suffix
+
+
+def _search_result_key(result: dict[str, Any]) -> tuple[str, str, str]:
+    typ = str(result.get("type") or "")
+    session_id = str(result.get("sessionId") or "")
+    if typ == "task":
+        return (typ, session_id, str(result.get("taskId") or ""))
+    if typ == "session":
+        return (typ, session_id, "")
+    snippet = re.sub(r"\s+", " ", str(result.get("snippet") or "")).strip().lower()
+    return (typ, session_id, snippet[:100])
+
+
+def _dedupe_search_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for result in results:
+        key = _search_result_key(result)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(result)
+    return deduped
+
+
+def _field_matches(fields: dict[str, Any], query: str) -> list[str]:
+    q = query.lower()
+    return [name for name, value in fields.items() if q in _plain_text(value).lower()]
+
+
+def _session_info_id(session_info: Any) -> str:
+    if isinstance(session_info, dict):
+        return str(session_info.get("id") or session_info.get("sessionId") or "")
+    return str(session_info or "")
+
+
+def _iter_session_candidates(
+    projects: list[dict[str, Any]],
+    *,
+    scope: str,
+    project_dir: str,
+    session_id: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    candidates: list[dict[str, Any]] = []
+    for project in projects:
+        pdir = str(project.get("projectDir") or "")
+        if scope == "current_project" and pdir != project_dir:
+            continue
+        for info in project.get("sessions", []) or []:
+            sid = _session_info_id(info)
+            if not sid:
+                continue
+            if scope == "current_session" and sid != session_id:
+                continue
+            candidates.append({
+                "sessionId": sid,
+                "projectDir": pdir,
+                "session": info if isinstance(info, dict) else {"id": sid},
+            })
+    if scope == "current_session" and session_id and not candidates:
+        return [{"sessionId": session_id, "projectDir": project_dir, "session": {"id": session_id}}], None
+    if scope == "current_project" and project_dir and not any(str(p.get("projectDir") or "") == project_dir for p in projects):
+        return [], f"project not found: {project_dir}"
+    return candidates, None
+
+
+def _search_session_metadata(candidate: dict[str, Any], query: str) -> list[dict[str, Any]]:
+    info = candidate.get("session") or {}
+    fields = {
+        "sessionId": candidate["sessionId"],
+        "projectDir": candidate["projectDir"],
+        "title": info.get("title") if isinstance(info, dict) else "",
+        "displayName": info.get("displayName") if isinstance(info, dict) else "",
+        "firstTimestamp": info.get("firstTimestamp") if isinstance(info, dict) else "",
+        "lastTimestamp": info.get("lastTimestamp") if isinstance(info, dict) else "",
+    }
+    matched = _field_matches(fields, query)
+    if not matched:
+        return []
+    return [{
+        "type": "session",
+        "sessionId": candidate["sessionId"],
+        "projectDir": candidate["projectDir"],
+        "displayName": fields.get("displayName") or "",
+        "title": fields.get("title") or "",
+        "matchedFields": matched,
+        "snippet": _short_snippet(" ".join(_plain_text(fields[name]) for name in matched), query),
+        "timestamp": fields.get("lastTimestamp") or fields.get("firstTimestamp") or "",
+    }]
+
+
+def _search_session_content(
+    session_data: dict[str, Any],
+    project_dir: str,
+    query: str,
+    session_info: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    report_session = normalize_session_for_report(session_data)
+    session_id = str(session_data.get("sessionId") or report_session.session_id or "")
+    info = session_info or {}
+    display_name = str(session_data.get("displayName") or info.get("displayName") or "")
+    title = str(session_data.get("title") or info.get("title") or "")
+    event_to_turn: dict[str, str] = {}
+    for turn in report_session.turns:
+        for event_id in turn.event_ids:
+            event_to_turn[event_id] = turn.turn_id
+    for event in report_session.events:
+        fields = {
+            "content": event.content,
+            "summary": event.summary,
+            "toolName": event.tool_name,
+            "role": event.role,
+            "kind": event.kind,
+        }
+        matched = _field_matches(fields, query)
+        if not matched:
+            continue
+        results.append({
+            "type": "event",
+            "sessionId": session_id,
+            "projectDir": project_dir,
+            "displayName": display_name,
+            "title": title,
+            "eventId": event.event_id,
+            "turnId": event_to_turn.get(event.event_id),
+            "timestamp": event.timestamp or "",
+            "matchedFields": matched,
+            "snippet": _short_snippet(" ".join(_plain_text(fields[name]) for name in matched), query),
+        })
+    for turn in report_session.turns:
+        fields = {
+            "userSummary": turn.user_summary,
+            "assistantSummary": turn.assistant_summary,
+        }
+        matched = _field_matches(fields, query)
+        if not matched:
+            continue
+        results.append({
+            "type": "turn",
+            "sessionId": session_id,
+            "projectDir": project_dir,
+            "displayName": display_name,
+            "title": title,
+            "turnId": turn.turn_id,
+            "eventId": (turn.event_ids or [None])[0],
+            "timestamp": turn.started_at or turn.ended_at or "",
+            "matchedFields": matched,
+            "snippet": _short_snippet(" ".join(_plain_text(fields[name]) for name in matched), query),
+        })
+    return results
+
+
+def _dataset_registry_task_results(
+    *,
+    registry_root: Path | None,
+    candidate_session_ids: set[str],
+    query: str,
+) -> list[dict[str, Any]]:
+    from ccwhat.task_dataset import default_dataset_registry_root
+
+    root = (registry_root or default_dataset_registry_root()).expanduser()
+    if not root.is_dir():
+        return []
+    results: list[dict[str, Any]] = []
+    for dataset_dir in sorted(root.iterdir(), key=lambda p: p.name, reverse=True):
+        if not dataset_dir.is_dir():
+            continue
+        manifest_path = dataset_dir / "manifest.json"
+        dataset_path = dataset_dir / "dataset.jsonl"
+        if not manifest_path.is_file() or not dataset_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            project_dir = str((manifest.get("session") or {}).get("project_dir") or "")
+            for raw_line in dataset_path.read_text(encoding="utf-8").splitlines():
+                if not raw_line.strip():
+                    continue
+                row = json.loads(raw_line)
+                metadata = row.get("metadata") or {}
+                session_id = str(metadata.get("session_id") or "")
+                if session_id not in candidate_session_ids:
+                    continue
+                trace_path = str(metadata.get("trace_path") or "")
+                trace = {}
+                if trace_path:
+                    trace_file = dataset_dir / trace_path
+                    if trace_file.is_file():
+                        trace = json.loads(trace_file.read_text(encoding="utf-8"))
+                fields = {
+                    "taskId": row.get("id"),
+                    "title": (row.get("input") or {}).get("instruction"),
+                    "taskType": metadata.get("task_type"),
+                    "status": metadata.get("status"),
+                    "startEventId": metadata.get("start_event_id"),
+                    "endEventId": metadata.get("end_event_id"),
+                    "commands": trace.get("commands"),
+                    "testCommands": trace.get("test_commands"),
+                    "filesRead": (trace.get("files") or {}).get("read"),
+                    "filesChanged": (trace.get("files") or {}).get("changed"),
+                    "errors": trace.get("errors"),
+                    "finalClaim": trace.get("final_claim"),
+                }
+                matched = _field_matches(fields, query)
+                if not matched:
+                    continue
+                results.append({
+                    "type": "task",
+                    "sessionId": session_id,
+                    "projectDir": project_dir,
+                    "taskId": str(row.get("id") or ""),
+                    "title": _plain_text(fields["title"])[:120],
+                    "taskType": str(metadata.get("task_type") or ""),
+                    "eventId": str(metadata.get("start_event_id") or ""),
+                    "matchedFields": matched,
+                    "snippet": _short_snippet(" ".join(_plain_text(fields[name]) for name in matched), query),
+                    "timestamp": str((manifest.get("created_at") or "")),
+                    "source": "dataset",
+                    "datasetId": dataset_dir.name,
+                })
+        except (OSError, json.JSONDecodeError):
+            continue
+    return results
+
+
+# ---------------------------------------------------------------------------
 # HTTP request handler
 # ---------------------------------------------------------------------------
 
@@ -451,6 +712,108 @@ def _make_handler(
             if _adapter is not None:
                 return _adapter.name
             return None
+
+        def _handle_search(self, query_string: str) -> None:
+            params = parse_qs(query_string)
+            raw_query = params.get("q", [""])[0]
+            normalized_query = re.sub(r"\s+", " ", raw_query).strip()
+            if len(normalized_query) < 2:
+                self._send_json({"ok": False, "error": "query must be at least 2 characters"}, 400)
+                return
+
+            scope = params.get("scope", ["current_session"])[0] or "current_session"
+            if scope not in SEARCH_SCOPES:
+                self._send_json({"ok": False, "error": "invalid search scope"}, 400)
+                return
+
+            project_dir = params.get("project", [""])[0].strip()
+            session_id = params.get("session", [""])[0].strip()
+            if scope == "current_session":
+                if not re.fullmatch(r"[0-9a-zA-Z_-]{20,64}", session_id):
+                    self._send_json({"ok": False, "error": "current_session scope requires a valid session"}, 400)
+                    return
+            elif scope == "current_project" and not project_dir:
+                self._send_json({"ok": False, "error": "current_project scope requires project"}, 400)
+                return
+
+            try:
+                limit = int(params.get("limit", [str(DEFAULT_SEARCH_LIMIT)])[0] or DEFAULT_SEARCH_LIMIT)
+            except ValueError:
+                self._send_json({"ok": False, "error": "limit must be a number"}, 400)
+                return
+            if limit < 1:
+                self._send_json({"ok": False, "error": "limit must be at least 1"}, 400)
+                return
+            limit = min(limit, MAX_SEARCH_LIMIT)
+
+            try:
+                projects = self._get_sessions_data()
+            except AdapterNotImplementedError as exc:
+                self._send_json({"ok": False, "error": str(exc), "agent": self._adapter_agent() or "claude"}, 501)
+                return
+
+            candidates, source_error = _iter_session_candidates(
+                projects,
+                scope=scope,
+                project_dir=project_dir,
+                session_id=session_id,
+            )
+            if source_error:
+                self._send_json({"ok": False, "error": source_error}, 404)
+                return
+            if not candidates:
+                self._send_json({
+                    "ok": True,
+                    "query": normalized_query,
+                    "scope": scope,
+                    "results": [],
+                    "truncated": False,
+                    "warnings": [{"message": "no searchable sessions found"}],
+                })
+                return
+
+            results: list[dict[str, Any]] = []
+            warnings: list[dict[str, str]] = []
+            searchable_session_ids: set[str] = set()
+
+            for candidate in candidates:
+                if len(results) > limit:
+                    break
+                results.extend(_search_session_metadata(candidate, normalized_query))
+                sid = candidate["sessionId"]
+                try:
+                    session_data = self._get_session_data(sid)
+                    if session_data is None:
+                        warnings.append({"sessionId": sid, "projectDir": candidate["projectDir"], "message": "session not found"})
+                        continue
+                    searchable_session_ids.add(sid)
+                    results.extend(_search_session_content(
+                        session_data,
+                        candidate["projectDir"],
+                        normalized_query,
+                        session_info=candidate.get("session") if isinstance(candidate.get("session"), dict) else None,
+                    ))
+                except Exception as exc:
+                    warnings.append({"sessionId": sid, "projectDir": candidate["projectDir"], "message": str(exc)})
+
+            searchable_session_ids.update(candidate["sessionId"] for candidate in candidates)
+            results.extend(_dataset_registry_task_results(
+                registry_root=dataset_registry_root,
+                candidate_session_ids=searchable_session_ids,
+                query=normalized_query,
+            ))
+
+            results = _dedupe_search_results(results)
+            results.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+            truncated = len(results) > limit
+            self._send_json({
+                "ok": True,
+                "query": normalized_query,
+                "scope": scope,
+                "results": results[:limit],
+                "truncated": truncated,
+                "warnings": warnings,
+            })
 
         def do_OPTIONS(self) -> None:
             self.send_response(204)
@@ -704,6 +1067,8 @@ def _make_handler(
                 })
             elif path == "/api/recording/status":
                 self._send_json(get_recording_status(logs_dir, config_path))
+            elif path == "/api/search":
+                self._handle_search(query)
             elif path == "/api/projects":
                 try:
                     projects = self._get_sessions_data()
