@@ -10,6 +10,9 @@
   var s = localStorage.getItem('ccwhat-theme');
   var d = s || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.setAttribute('data-theme', d);
+  var locale = localStorage.getItem('ccwhat-locale') || 'zh';
+  document.documentElement.setAttribute('data-locale', locale);
+  document.documentElement.setAttribute('lang', locale === 'en' ? 'en' : 'zh-CN');
 })();
 </script>
 <style>
@@ -1877,6 +1880,198 @@ body {
     background: rgba(175,82,222,0.20);
     color: #bc8cff;
   }
+@media not all {
+/* ── Open Design: warm developer workbench (disabled) ─────────────────── */
+:root {
+  --bg-base: #f2f1ed;
+  --bg-surface: #ebeae5;
+  --bg-elevated: #f7f7f4;
+  --border: oklab(0.263084 -0.00230259 0.0124794 / 0.1);
+  --border-strong: oklab(0.263084 -0.00230259 0.0124794 / 0.2);
+  --text-primary: #26251e;
+  --text-secondary: rgba(38, 37, 30, 0.55);
+  --text-tertiary: rgba(38, 37, 30, 0.4);
+  --accent: #f54e00;
+  --accent-hover: #cf2d56;
+  --success: #1f8a65;
+  --warning: #c08532;
+  --danger: #cf2d56;
+  --font-display: CursorGothic, "CursorGothic Fallback", system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: berkeleyMono, ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 0 0 1px oklab(0.263084 -0.00230259 0.0124794 / 0.1);
+  --shadow-md: 0 0 16px rgba(0, 0, 0, 0.02), 0 0 8px rgba(0, 0, 0, 0.008);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.14), 0 14px 32px rgba(0, 0, 0, 0.1);
+}
+[data-theme="dark"] {
+  --bg-base: #000000;
+  --bg-surface: #26251e;
+  --bg-elevated: #26251e;
+  --border: rgba(242, 241, 237, 0.14);
+  --border-strong: rgba(242, 241, 237, 0.28);
+  --text-primary: #f2f1ed;
+  --text-secondary: rgba(242, 241, 237, 0.62);
+  --text-tertiary: rgba(242, 241, 237, 0.42);
+  --accent: #f54e00;
+  --accent-hover: #cf2d56;
+  --success: #1f8a65;
+  --warning: #c08532;
+  --danger: #cf2d56;
+}
+
+body.app-shell {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.topbar {
+  min-height: 56px;
+  padding: 8px 16px;
+  gap: 8px;
+  background: color-mix(in srgb, var(--bg-base) 92%, transparent);
+  border-bottom-color: var(--border);
+  backdrop-filter: blur(18px);
+}
+.topbar h1, .page-title, .sec-title, .task-title, .diff-card-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.11px;
+}
+.topbar h1 { font-size: 15px !important; font-weight: 600 !important; }
+.agent-badge, .badge, .task-trace-status, .global-search-type, .global-search-source {
+  border-radius: 9999px;
+}
+.adv-btn, .btn, .field, .topbar select, .theme-btn {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+.btn, .adv-btn { border-radius: var(--radius-md); }
+.btn { padding: 6px 10px; font-size: 12px; }
+.btn:hover, .adv-btn:hover, .theme-btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--accent-hover);
+}
+.field, .topbar select { min-height: 32px; border-radius: var(--radius-md); }
+.field:focus, .topbar select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
+.theme-btn { width: 32px; height: 32px; border-radius: 9999px; }
+.adv-panel, .top-search-popover, .diff-card {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.app-body { background: var(--bg-base); }
+.left-nav {
+  width: 228px;
+  padding: 14px 10px;
+  background: var(--bg-surface);
+  border-right-color: var(--border);
+}
+.nav-section { gap: 2px; }
+.nav-section-title {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 12px 10px 5px;
+}
+.nav-item {
+  min-height: 34px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 7px 10px;
+}
+.nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.nav-item.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 0 var(--accent), var(--shadow-sm);
+}
+.nav-item-icon { color: inherit; width: 16px; font-family: var(--font-mono); }
+.nav-badge { background: var(--bg-base); color: var(--text-secondary); border: 1px solid var(--border); }
+.workspace, .page, .page-pad { background: var(--bg-base); }
+.page-pad { padding: 20px; }
+.page-title { font-size: 20px; font-weight: 500; margin-bottom: 16px; }
+
+.session-title-bar, .ev-toolbar {
+  background: var(--bg-base) !important;
+  border-bottom-color: var(--border) !important;
+  padding: 8px 12px !important;
+}
+.ev-toolbar { gap: 6px; }
+.list-panel, .page-two-panel .list-panel, .task-list-pane {
+  background: var(--bg-surface);
+  border-right-color: var(--border);
+}
+.detail-panel, .page-two-panel .detail-panel, .task-detail-pane, .diff-body {
+  background: var(--bg-base);
+  padding: 18px !important;
+}
+.entry-list, .record-list { scrollbar-color: var(--border-strong) transparent; }
+.entry-item, .turn-card, .trace-conversation-card, .trace-turn-card, .task-card, .section, .ov-card,
+.global-search-column, .global-search-group, .global-search-result, .task-trace-actionbar {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+.entry-item:hover, .turn-card:hover, .trace-conversation-card:hover, .trace-turn-card:hover, .task-card:hover,
+.global-search-group:hover, .global-search-result:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.entry-item.active, .turn-card.active, .trace-conversation-card.selected, .trace-turn-card.selected, .task-card.selected {
+  box-shadow: inset 2px 0 0 var(--accent), var(--shadow-sm);
+}
+.type-check, .task-trace-status, .global-search-type, .global-search-source {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.type-check:hover, .type-check.active, .type-check.checked-user, .type-check.checked-assistant {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.task-tab, .diff-tab-btn { font-family: var(--font-sans); }
+.task-tab.active, .diff-tab-btn.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.global-search-col-title, .tab-section-hdr, .diff-card-hdr, .diff-info-bar {
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+.global-search-result:hover, .global-search-group:hover { border-color: var(--accent); }
+.global-search-type { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.placeholder, .empty-detail, .empty-state { color: var(--text-secondary); }
+pre, code, .code-block, .diff-schema-pre { font-family: var(--font-mono); }
+
+@media (max-width: 920px) {
+  .topbar { min-height: auto; align-items: stretch; flex-wrap: wrap; padding: 8px 10px; }
+  .topbar h1 { flex: 1 0 auto; }
+  .top-search-wrap { order: 3; flex: 1 0 100%; max-width: none; min-width: 0; }
+  .top-search-wrap #searchBox { min-width: 0; }
+  .left-nav { width: 56px; padding: 10px 6px; }
+  .left-nav .nav-section-title, .left-nav .nav-badge { display: none !important; }
+  .left-nav .nav-item { font-size: 0; justify-content: center; padding: 9px 6px; }
+  .left-nav .nav-item-icon { font-size: 14px; width: auto; }
+  .page-pad { padding: 14px; }
+  .list-panel, .page-two-panel .list-panel, .task-list-pane { width: min(42vw, 320px) !important; }
+  .detail-panel, .page-two-panel .detail-panel, .task-detail-pane { padding: 14px !important; }
+  .global-search-layout, .global-search-layout.scope-current-project { grid-template-columns: 1fr; }
+  .global-search-layout .global-search-project-column, .global-search-layout .global-search-session-column { display: none; }
+}
+@media (max-width: 640px) {
+  .topbar select#projectSel { max-width: calc(50% - 4px) !important; }
+  .topbar select#sessionSel { max-width: calc(50% - 4px) !important; }
+  .top-search-wrap #globalSearchScope { display: none; }
+  .list-panel, .page-two-panel .list-panel, .task-list-pane { width: 46vw !important; min-width: 152px; }
+  .ev-toolbar { max-height: 96px; overflow-y: auto; }
+}
+}
 </style><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body class="app-shell">
@@ -1889,52 +2084,52 @@ body {
   <div class="adv-wrap" id="advWrap">
     <button class="adv-btn" onclick="toggleAdv()">⚙</button>
     <div class="adv-panel" id="advPanel">
-      <label>API URL</label>
-      <input class="field" id="apiUrl" type="text" value="" placeholder="当前页面地址">
+      <label data-i18n="api_url">API URL</label>
+      <input class="field" id="apiUrl" type="text" value="" placeholder="当前页面地址" data-i18n-placeholder="api_url_placeholder">
     </div>
   </div>
-  <select class="field" id="projectSel" onchange="onProjectChange()" title="Project" style="flex:0 1 160px;min-width:100px;max-width:240px">
-    <option value="">— project —</option>
+  <select class="field" id="projectSel" onchange="onProjectChange()" title="Project" data-i18n-title="project" style="flex:0 1 160px;min-width:100px;max-width:240px">
+    <option value="" data-i18n="project_placeholder">— project —</option>
   </select>
-  <select class="field" id="sessionSel" onchange="loadSession()" title="Session" style="flex:0 1 200px;min-width:120px;max-width:280px">
-    <option value="">— session —</option>
+  <select class="field" id="sessionSel" onchange="loadSession()" title="Session" data-i18n-title="session" style="flex:0 1 200px;min-width:120px;max-width:280px">
+    <option value="" data-i18n="session_placeholder">— session —</option>
   </select>
   <div class="top-search-wrap" id="globalSearchWrap">
-    <input class="field" id="searchBox" placeholder="Search tasks / turns / events" oninput="onSearchInput()" onkeydown="onTopSearchKeydown(event)">
+    <input class="field" id="searchBox" placeholder="Search tasks / turns / events" data-i18n-placeholder="search_placeholder" oninput="onSearchInput()" onkeydown="onTopSearchKeydown(event)">
     <select class="field" id="globalSearchScope" onchange="renderGlobalSearchState()">
-      <option value="current_session">Current session</option>
-      <option value="current_project">Current project</option>
-      <option value="all_projects">All projects</option>
+      <option value="current_session" data-i18n="scope_current_session">Current session</option>
+      <option value="current_project" data-i18n="scope_current_project">Current project</option>
+      <option value="all_projects" data-i18n="scope_all_projects">All projects</option>
     </select>
-    <button class="btn" id="globalSearchBtn" onclick="runGlobalSearch()" title="Search selected scope">Search</button>
-    <button class="btn top-search-toggle" id="globalSearchToggleBtn" onclick="toggleGlobalSearchPopover()" title="Show search results">Unfold result</button>
+    <button class="btn" id="globalSearchBtn" onclick="runGlobalSearch()" title="Search selected scope" data-i18n="search" data-i18n-title="search_selected_scope">Search</button>
+    <button class="btn top-search-toggle" id="globalSearchToggleBtn" onclick="toggleGlobalSearchPopover()" title="Show search results" data-i18n="unfold_results" data-i18n-title="show_search_results">Unfold result</button>
     <div class="top-search-popover" id="globalSearchPopover">
       <div class="global-search-statusbar">
         <div class="global-search-statusline">
           <span class="spinner" id="globalSearchSpinner" style="display:none"></span>
-          <div id="globalSearchStatus" class="placeholder">Enter a query to search the current session.</div>
+          <div id="globalSearchStatus" class="placeholder" data-i18n="search_hint">Enter a query to search the current session.</div>
         </div>
         <div class="global-search-actions">
-          <button class="btn global-search-fold-btn" id="globalSearchFoldBtn" onclick="collapseGlobalSearchPopover()" title="Hide search results">Fold result</button>
-          <button class="btn global-search-clear-btn" id="globalSearchClearBtn" onclick="clearOrStopGlobalSearch()" title="Clear results or stop the active search">清空/停止</button>
+          <button class="btn global-search-fold-btn" id="globalSearchFoldBtn" onclick="collapseGlobalSearchPopover()" title="Hide search results" data-i18n="fold_results" data-i18n-title="hide_search_results">Fold result</button>
+          <button class="btn global-search-clear-btn" id="globalSearchClearBtn" onclick="clearOrStopGlobalSearch()" title="Clear results or stop the active search" data-i18n="clear_stop" data-i18n-title="clear_stop_title">清空/停止</button>
         </div>
       </div>
       <div class="global-search-layout" id="globalSearchLayout" style="display:none">
         <div class="global-search-column global-search-project-column">
-          <div class="global-search-col-title">Projects</div>
+          <div class="global-search-col-title" data-i18n="projects">Projects</div>
           <div class="global-search-col-body" id="globalSearchProjects"></div>
         </div>
         <div class="global-search-column global-search-session-column">
-          <div class="global-search-col-title">Sessions</div>
+          <div class="global-search-col-title" data-i18n="sessions">Sessions</div>
           <div class="global-search-col-body" id="globalSearchSessions"></div>
         </div>
         <div class="global-search-column global-search-result-column">
-          <div class="global-search-col-title">Results</div>
+          <div class="global-search-col-title" data-i18n="results">Results</div>
           <div class="global-search-filterbar" id="globalSearchTypeFilters">
-            <label><input type="checkbox" value="task" checked onchange="onGlobalSearchTypeFilterChange()">Task</label>
-            <label><input type="checkbox" value="turn" checked onchange="onGlobalSearchTypeFilterChange()">Turn</label>
-            <label><input type="checkbox" value="event" checked onchange="onGlobalSearchTypeFilterChange()">Event</label>
-            <label><input type="checkbox" value="session" onchange="onGlobalSearchTypeFilterChange()">Session</label>
+            <label><input type="checkbox" value="task" checked onchange="onGlobalSearchTypeFilterChange()"><span data-i18n="task">Task</span></label>
+            <label><input type="checkbox" value="turn" checked onchange="onGlobalSearchTypeFilterChange()"><span data-i18n="turn">Turn</span></label>
+            <label><input type="checkbox" value="event" checked onchange="onGlobalSearchTypeFilterChange()"><span data-i18n="event">Event</span></label>
+            <label><input type="checkbox" value="session" onchange="onGlobalSearchTypeFilterChange()"><span data-i18n="session">Session</span></label>
           </div>
           <div class="global-search-col-body global-search-results" id="globalSearchResults"></div>
         </div>
@@ -1943,6 +2138,7 @@ body {
   </div>
   <button class="btn" onclick="init()" title="刷新项目列表" style="flex-shrink:0">⟳</button>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题" style="margin-left:auto">☾</button>
+  <button class="btn language-btn" id="languageBtn" onclick="toggleLocale()" title="Switch language" data-i18n-title="switch_language">EN</button>
   <button id="exportBtn" style="display:none"></button>
   <button id="analyzeBtn" style="display:none"></button>
   <button id="taskSegmentsBtn" style="display:none" onclick="onTaskSegmentsBtnClick()" disabled></button>
@@ -1954,42 +2150,42 @@ body {
   <!-- Left Nav -->
   <nav class="left-nav">
     <div class="nav-section">
-      <div class="nav-section-title">Workspace</div>
+      <div class="nav-section-title" data-i18n="workspace">Workspace</div>
       <div class="nav-item active" data-page="sessions" onclick="navigateToPage('sessions')">
-        <span class="nav-item-icon">▤</span> Session
+        <span class="nav-item-icon">▤</span><span class="nav-item-label" data-i18n="session">Session</span>
       </div>
       <div class="nav-item" data-page="tasks" onclick="navigateToPage('tasks')">
-        <span class="nav-item-icon">✓</span> Tasks
+        <span class="nav-item-icon">✓</span><span class="nav-item-label" data-i18n="tasks">Tasks</span>
         <span class="nav-badge" id="taskNavBadge" style="display:none">0</span>
       </div>
       <div class="nav-item" data-page="overview" onclick="navigateToPage('overview')">
-        <span class="nav-item-icon">□</span> Overview
+        <span class="nav-item-icon">□</span><span class="nav-item-label" data-i18n="overview">Overview</span>
       </div>
       <div class="nav-item" data-page="timeline" onclick="navigateToPage('timeline')">
-        <span class="nav-item-icon">⎇</span> Timeline
+        <span class="nav-item-icon">⎇</span><span class="nav-item-label" data-i18n="timeline">Timeline</span>
       </div>
     </div>
     <div class="nav-section">
-      <div class="nav-section-title">Evidence</div>
+      <div class="nav-section-title" data-i18n="evidence">Evidence</div>
       <div class="nav-item" data-page="reqresp" onclick="navigateToPage('reqresp')">
-        <span class="nav-item-icon">⇄</span> Req / Resp
+        <span class="nav-item-icon">⇄</span><span class="nav-item-label" data-i18n="req_resp">Req / Resp</span>
       </div>
       <div class="nav-item" data-page="differential" onclick="navigateToPage('differential')">
-        <span class="nav-item-icon">±</span> Diff
+        <span class="nav-item-icon">±</span><span class="nav-item-label" data-i18n="diff">Diff</span>
       </div>
     </div>
     <div class="nav-section">
-      <div class="nav-section-title">Analysis</div>
+      <div class="nav-section-title" data-i18n="analysis">Analysis</div>
       <div class="nav-item" data-page="diagnostics" onclick="navigateToPage('diagnostics')">
-        <span class="nav-item-icon">!</span> Diagnostics
+        <span class="nav-item-icon">!</span><span class="nav-item-label" data-i18n="diagnostics">Diagnostics</span>
       </div>
       <div class="nav-item" data-page="export" onclick="navigateToPage('export')">
-        <span class="nav-item-icon">↧</span> Export
+        <span class="nav-item-icon">↧</span><span class="nav-item-label" data-i18n="export">Export</span>
       </div>
     </div>
     <div class="nav-section" style="margin-top:auto">
       <div class="nav-item" data-page="settings" onclick="navigateToPage('settings')">
-        <span class="nav-item-icon">⚙</span> Settings
+        <span class="nav-item-icon">⚙</span><span class="nav-item-label" data-i18n="settings">Settings</span>
       </div>
     </div>
   </nav>
@@ -2003,11 +2199,11 @@ body {
       <!-- Tasks Page -->
       <div class="page" data-page="tasks">
         <div class="page-pad" id="tasksPage">
-          <div class="page-title">Task Segmentation</div>
+          <div class="page-title" data-i18n="task_segmentation">Task Segmentation</div>
           <div id="taskSegContent">
             <div class="task-seg-empty">选择 session 后点击"任务切分"生成任务列表<br>
-              <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()">自动切分</button>
-              <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()">手动切分</button>
+              <button class="btn" style="margin-top:8px" onclick="onTaskSegmentsBtnClick()" data-i18n="auto_segment">自动切分</button>
+              <button class="btn" style="margin-top:8px" onclick="startManualTaskSegmentationFromTasks()" data-i18n="manual_segment">手动切分</button>
             </div>
           </div>
         </div>
@@ -2016,7 +2212,7 @@ body {
       <!-- Overview Page -->
       <div class="page" data-page="overview">
         <div class="page-pad" id="overviewPage">
-          <div class="page-title">Session Overview</div>
+          <div class="page-title" data-i18n="session_overview">Session Overview</div>
           <div class="ov-grid" id="overviewGrid"></div>
           <div id="overviewTaskMap"></div>
           <div id="overviewDetail"></div>
@@ -2026,7 +2222,7 @@ body {
       <!-- Timeline Page -->
       <div class="page" data-page="timeline">
         <div class="page-pad" id="timelinePage">
-          <div class="page-title">Timeline</div>
+          <div class="page-title" data-i18n="timeline">Timeline</div>
           <div id="timelineContent"><div class="placeholder">选择一个 session 加载后查看时间线</div></div>
         </div>
       </div>
@@ -2049,35 +2245,35 @@ body {
           <div class="ev-toolbar" style="padding:4px 10px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-surface)">
             <span class="badge" id="countBadge"></span>
             <div class="trace-view-mode-controls" id="traceViewModeControls" style="margin-left:8px">
-              <button class="trace-view-btn active" data-trace-view="default">默认视图</button>
-              <button class="trace-view-btn" data-trace-view="debug">调试视图</button>
+              <button class="trace-view-btn active" data-trace-view="default" data-i18n="default_view">默认视图</button>
+              <button class="trace-view-btn" data-trace-view="debug" data-i18n="debug_view">调试视图</button>
             </div>
-            <button class="btn" onclick="expandAllTraceTree()" title="展开左侧树的所有任务和会话">全部展开</button>
-            <button class="btn" onclick="collapseAllTraceTree()" title="折叠左侧树的所有任务和会话">全部折叠</button>
+            <button class="btn" onclick="expandAllTraceTree()" title="展开左侧树的所有任务和会话" data-i18n="expand_all">全部展开</button>
+            <button class="btn" onclick="collapseAllTraceTree()" title="折叠左侧树的所有任务和会话" data-i18n="collapse_all">全部折叠</button>
 	            <div class="type-filters" id="typeFilters" style="margin-left:8px">
-	              <label class="type-check checked-user" data-type="user"><input type="checkbox" checked>user</label>
-	              <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked>assistant</label>
-              <label class="type-check" data-type="system"><input type="checkbox">system</label>
-              <label class="type-check" data-type="attachment"><input type="checkbox">attachment</label>
-              <label class="type-check" data-type="permission-mode"><input type="checkbox">perm</label>
-              <label class="type-check" data-type="file-history-snapshot"><input type="checkbox">fhs</label>
-              <label class="type-check" data-type="queue-operation"><input type="checkbox">queue</label>
-	              <label class="type-check checked-other" data-type="other"><input type="checkbox" checked>other</label>
+	              <label class="type-check checked-user" data-type="user"><input type="checkbox" checked><span data-i18n="filter_user">用户</span></label>
+	              <label class="type-check checked-assistant" data-type="assistant"><input type="checkbox" checked><span data-i18n="filter_assistant">助手</span></label>
+              <label class="type-check" data-type="system"><input type="checkbox"><span data-i18n="filter_system">系统</span></label>
+              <label class="type-check" data-type="attachment"><input type="checkbox"><span data-i18n="filter_attachment">附件</span></label>
+              <label class="type-check" data-type="permission-mode"><input type="checkbox"><span data-i18n="filter_permission">权限</span></label>
+              <label class="type-check" data-type="file-history-snapshot"><input type="checkbox"><span data-i18n="filter_file_snapshot">文件快照</span></label>
+              <label class="type-check" data-type="queue-operation"><input type="checkbox"><span data-i18n="filter_queue">队列</span></label>
+	              <label class="type-check checked-other" data-type="other"><input type="checkbox" checked><span data-i18n="filter_other">其他</span></label>
 	            </div>
 	            <div class="task-trace-editbar" id="taskTraceEditControls">
-	              <button class="btn" id="editTaskTraceBtn" onclick="enterTaskTraceEditMode()" disabled>编辑 Task Trace</button>
-	              <button class="btn" id="manualTaskCreateBtn" onclick="startManualTaskCreate()">手动创建 Task</button>
-	              <button class="btn" id="saveTaskTraceBtn" onclick="saveTaskTraceOverlay()" style="display:none">保存编辑</button>
-	              <button class="btn" id="undoTaskTraceBtn" onclick="undoTaskTraceOverlay()" style="display:none">撤销编辑</button>
-	              <button class="btn" id="exitTaskTraceEditBtn" onclick="exitTaskTraceEditMode()" style="display:none">退出编辑</button>
-	              <span class="task-trace-status" id="taskTraceOverlayStatus">无 overlay</span>
+              <button class="btn" id="editTaskTraceBtn" onclick="enterTaskTraceEditMode()" disabled data-i18n="edit_task_trace">编辑 Task Trace</button>
+              <button class="btn" id="manualTaskCreateBtn" onclick="startManualTaskCreate()" data-i18n="create_task">手动创建 Task</button>
+              <button class="btn" id="saveTaskTraceBtn" onclick="saveTaskTraceOverlay()" style="display:none" data-i18n="save_edits">保存编辑</button>
+              <button class="btn" id="undoTaskTraceBtn" onclick="undoTaskTraceOverlay()" style="display:none" data-i18n="undo_edits">撤销编辑</button>
+              <button class="btn" id="exitTaskTraceEditBtn" onclick="exitTaskTraceEditMode()" style="display:none" data-i18n="exit_editing">退出编辑</button>
+              <span class="task-trace-status" id="taskTraceOverlayStatus" data-i18n="no_overlay">无 overlay</span>
 	            </div>
-	            <button class="btn" id="sessionAnalyzeBtn" onclick="analyzeCurrentSession()" disabled style="margin-left:auto">报告分析</button>
+	            <button class="btn" id="sessionAnalyzeBtn" onclick="analyzeCurrentSession()" disabled style="margin-left:auto" data-i18n="analyze_report">报告分析</button>
 	          </div>
           <div style="flex:1;display:flex;overflow:hidden">
             <div class="list-panel" style="width:360px">
               <div class="entry-list" id="entryList">
-                <div class="placeholder">选择 project 和 session 后加载</div>
+                <div class="placeholder" data-i18n="select_project_and_session">选择项目和会话后加载</div>
               </div>
             </div>
             <div class="detail-panel" id="detailPanel" style="flex:1;overflow-y:auto;padding:14px">
@@ -2090,9 +2286,9 @@ body {
       <!-- Req / Resp Page -->
       <div class="page" data-page="reqresp">
         <div class="page-pad" id="reqrespPage">
-          <div class="page-title">Req / Resp</div>
+          <div class="page-title" data-i18n="req_resp">Req / Resp</div>
           <div class="ev-toolbar">
-            <button class="btn" onclick="window.open('req-resp.html','_blank')" title="在独立页面中打开">在新标签页中打开</button>
+            <button class="btn" onclick="window.open('req-resp.html','_blank')" title="在独立页面中打开" data-i18n="open_in_new_tab">在新标签页中打开</button>
           </div>
           <div id="reqrespContent">
             <div class="placeholder">请求响应查看器。<br>
@@ -2104,9 +2300,9 @@ body {
       <!-- Diff Page -->
       <div class="page" data-page="differential">
         <div class="page-pad" id="differentialPage">
-          <div class="page-title">Turn Diff 总览</div>
+          <div class="page-title" data-i18n="turn_diff_overview">Turn Diff 总览</div>
           <div class="ev-toolbar" id="diffToolbar">
-            <button class="btn" onclick="refreshDiffPage()">刷新 Turn Diff</button>
+            <button class="btn" onclick="refreshDiffPage()" data-i18n="refresh_turn_diff">刷新 Turn Diff</button>
             <span style="font-size:11px;color:var(--text-secondary)" id="diffStatus">选择一个 session 并加载后查看 Turn Diff</span>
           </div>
           <div id="diffContent"><div class="placeholder">选择一个 session 并加载后查看 Turn Diff 总览</div></div>
@@ -2116,9 +2312,9 @@ body {
       <!-- Diagnostics Page -->
       <div class="page" data-page="diagnostics">
         <div class="page-pad" id="diagnosticsPage">
-          <div class="page-title">Diagnostics</div>
+          <div class="page-title" data-i18n="diagnostics">Diagnostics</div>
           <div class="ev-toolbar">
-            <button class="btn" onclick="refreshDiagnostics()">刷新诊断</button>
+            <button class="btn" onclick="refreshDiagnostics()" data-i18n="refresh_diagnostics">刷新诊断</button>
             <span style="font-size:11px;color:var(--text-secondary)" id="diagStatus">基于当前 session 和 task 数据生成诊断</span>
           </div>
           <div id="diagContent"><div class="placeholder">选择一个 session 并加载 task 切分后查看诊断</div></div>
@@ -2128,7 +2324,7 @@ body {
       <!-- Export Page -->
       <div class="page" data-page="export">
         <div class="page-pad" id="exportPage">
-          <div class="page-title">Export</div>
+          <div class="page-title" data-i18n="export">Export</div>
           <div id="exportPageContent">
             <div class="section">
               <div class="sec-hdr"><span class="sec-title">Session Export</span></div>
@@ -2159,7 +2355,7 @@ body {
       <!-- Settings Page -->
       <div class="page" data-page="settings">
         <div class="page-pad" id="settingsPage">
-          <div class="page-title">Settings</div>
+          <div class="page-title" data-i18n="settings">Settings</div>
           <div class="section">
             <div class="sec-hdr"><span class="sec-title">Viewer</span></div>
             <div class="sec-body">
@@ -2170,7 +2366,7 @@ body {
                 <span class="ig-v" id="settingsTheme">—</span>
                 <span class="ig-k">Agent</span>
                 <span class="ig-v" id="settingsAgent">—</span>
-                <span class="ig-k">Projects</span>
+                <span class="ig-k" data-i18n="projects">Projects</span>
                 <span class="ig-v" id="settingsProjects">—</span>
               </div>
             </div>
@@ -2333,6 +2529,124 @@ function toggleTheme() {
   const btn = document.getElementById('themeBtn');
   if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
 })();
+
+// ── Interface language ────────────────────────────────────────────────────
+// Keep trace data, prompts, and raw JSON untouched: only marked UI copy is localized.
+const CCWHAT_LOCALE_KEY = 'ccwhat-locale';
+const CCWHAT_COPY = {
+  zh: {
+    api_url: 'API 地址', api_url_placeholder: '当前页面地址',
+    project_placeholder: '— 项目 —', session_placeholder: '— 会话 —',
+    search_placeholder: '搜索任务、Turn 或事件', scope_current_session: '当前会话',
+    scope_current_project: '当前项目', scope_all_projects: '全部项目',
+    search: '搜索', search_selected_scope: '搜索所选范围',
+    unfold_results: '展开结果', show_search_results: '显示搜索结果',
+    fold_results: '收起结果', hide_search_results: '隐藏搜索结果',
+    clear_stop: '清空/停止', clear_stop_title: '清空结果或停止当前搜索',
+    search_hint: '输入关键词，搜索当前会话。', projects: '项目', sessions: '会话',
+    results: '结果', task: '任务', turn: 'Turn', event: '事件', session: '会话',
+    workspace: '工作区', project: '项目', tasks: '任务', overview: '概览', timeline: '时间线',
+    evidence: '证据', req_resp: '请求/响应', diff: '对比', analysis: '分析',
+    diagnostics: '诊断', export: '导出', settings: '设置',
+    task_segmentation: '任务切分', session_overview: '会话概览',
+    auto_segment: '自动切分', manual_segment: '手动切分', rename: '重命名',
+    save: '保存', cancel: '取消', default_view: '默认视图', debug_view: '调试视图',
+    expand_all: '全部展开', collapse_all: '全部折叠', edit_task_trace: '编辑任务轨迹',
+    create_task: '手动创建任务', save_edits: '保存编辑', undo_edits: '撤销编辑',
+    exit_editing: '退出编辑', analyze_report: '报告分析', analyze_current_session: '分析当前 Session', analyzing: '分析中…', open_in_new_tab: '在新标签页中打开',
+    turn_diff_overview: 'Turn 对比概览', refresh_turn_diff: '刷新 Turn 对比',
+    refresh_diagnostics: '刷新诊断', session_export: '会话导出', task_trace_export: '任务轨迹导出',
+    open_export_dialog: '打开导出弹窗', dataset_preview: '数据集预览', viewer: '查看器', theme: '主题',
+    filter_user: '用户', filter_assistant: '助手', filter_system: '系统', filter_attachment: '附件',
+    filter_permission: '权限', filter_file_snapshot: '文件快照', filter_queue: '队列', filter_other: '其他',
+    kind_user_message: '用户', kind_assistant_text: '助手回复', kind_thinking: '思考',
+    kind_tool_use: '工具调用', kind_tool_result: '工具结果', kind_context: '上下文', kind_system: '系统', kind_unknown: '未知',
+    display_user_request: '用户请求', display_thinking: '思考', display_agent_text: '助手回复', display_tool_call: '工具调用',
+    display_tool_result: '工具结果', display_permission: '权限', display_error_signal: '错误', display_internal: '内部',
+    steps: '步骤', total_turns: '总轮次', entries: '条目',
+    select_project_and_session: '选择项目和会话后加载', select_project_and_session_for_tasks: '请先在顶部选择项目和会话，再进行任务切分',
+    no_overlay: '无覆盖层', manual_segmenting: '手动切分中', editing: '编辑中', creating: '创建中', browsing: '浏览',
+    unsaved: '未保存', saved: '已保存', preview: '预览',
+    unknown_project: '未知项目', waiting_for_matches: '正在等待匹配…', no_matching_projects: '没有匹配的项目',
+    select_project: '请选择项目。', select_project_to_view_sessions: '选择项目以查看会话。', no_matching_results: '没有匹配结果。',
+    switch_language: '切换为英文', language_button: 'EN',
+  },
+  en: {
+    api_url: 'API URL', api_url_placeholder: 'Current page URL',
+    project_placeholder: '— project —', session_placeholder: '— session —',
+    search_placeholder: 'Search tasks, turns, or events', scope_current_session: 'Current session',
+    scope_current_project: 'Current project', scope_all_projects: 'All projects',
+    search: 'Search', search_selected_scope: 'Search selected scope',
+    unfold_results: 'Unfold results', show_search_results: 'Show search results',
+    fold_results: 'Fold results', hide_search_results: 'Hide search results',
+    clear_stop: 'Clear / stop', clear_stop_title: 'Clear results or stop the active search',
+    search_hint: 'Enter a query to search the current session.', projects: 'Projects', sessions: 'Sessions',
+    results: 'Results', task: 'Task', turn: 'Turn', event: 'Event', session: 'Session',
+    workspace: 'Workspace', project: 'Project', tasks: 'Tasks', overview: 'Overview', timeline: 'Timeline',
+    evidence: 'Evidence', req_resp: 'Req / Resp', diff: 'Diff', analysis: 'Analysis',
+    diagnostics: 'Diagnostics', export: 'Export', settings: 'Settings',
+    task_segmentation: 'Task Segmentation', session_overview: 'Session Overview',
+    auto_segment: 'Auto segment', manual_segment: 'Manual segment', rename: 'Rename',
+    save: 'Save', cancel: 'Cancel', default_view: 'Default view', debug_view: 'Debug view',
+    expand_all: 'Expand all', collapse_all: 'Collapse all', edit_task_trace: 'Edit Task Trace',
+    create_task: 'Create Task', save_edits: 'Save edits', undo_edits: 'Undo edits',
+    exit_editing: 'Exit editing', analyze_report: 'Analyze report', analyze_current_session: 'Analyze current Session', analyzing: 'Analyzing…', open_in_new_tab: 'Open in new tab',
+    turn_diff_overview: 'Turn Diff Overview', refresh_turn_diff: 'Refresh Turn Diff',
+    refresh_diagnostics: 'Refresh diagnostics', session_export: 'Session Export', task_trace_export: 'Task Trace Export',
+    open_export_dialog: 'Open export dialog', dataset_preview: 'Dataset Preview', viewer: 'Viewer', theme: 'Theme',
+    filter_user: 'User', filter_assistant: 'Assistant', filter_system: 'System', filter_attachment: 'Attachment',
+    filter_permission: 'Permission', filter_file_snapshot: 'File snapshot', filter_queue: 'Queue', filter_other: 'Other',
+    kind_user_message: 'User', kind_assistant_text: 'Assistant', kind_thinking: 'Thinking',
+    kind_tool_use: 'Tool call', kind_tool_result: 'Tool result', kind_context: 'Context', kind_system: 'System', kind_unknown: 'Unknown',
+    display_user_request: 'User request', display_thinking: 'Thinking', display_agent_text: 'Assistant', display_tool_call: 'Tool call',
+    display_tool_result: 'Tool result', display_permission: 'Permission', display_error_signal: 'Error', display_internal: 'Internal',
+    steps: 'Steps', total_turns: 'Total Turns', entries: 'Entries',
+    select_project_and_session: 'Select a project and session to load', select_project_and_session_for_tasks: 'Select a project and session at the top before segmenting tasks',
+    no_overlay: 'No overlay', manual_segmenting: 'Manual segmentation', editing: 'Editing', creating: 'Creating', browsing: 'Browsing',
+    unsaved: 'Unsaved', saved: 'Saved', preview: 'Preview',
+    unknown_project: 'unknown project', waiting_for_matches: 'Waiting for matches…', no_matching_projects: 'No matching projects.',
+    select_project: 'Select a project.', select_project_to_view_sessions: 'Select a project to view sessions.', no_matching_results: 'No matching results.',
+    switch_language: 'Switch to Chinese', language_button: '中文',
+  },
+};
+let ccwhatLocale = localStorage.getItem(CCWHAT_LOCALE_KEY) || 'zh';
+
+function t(key) {
+  return CCWHAT_COPY[ccwhatLocale]?.[key] || CCWHAT_COPY.zh[key] || key;
+}
+
+function applyLocale() {
+  document.documentElement.setAttribute('data-locale', ccwhatLocale);
+  document.documentElement.setAttribute('lang', ccwhatLocale === 'en' ? 'en' : 'zh-CN');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  const projectPlaceholder = document.querySelector('#projectSel option[value=""]');
+  if (projectPlaceholder) projectPlaceholder.textContent = t('project_placeholder');
+  const sessionPlaceholder = document.querySelector('#sessionSel option[value=""]');
+  if (sessionPlaceholder) sessionPlaceholder.textContent = t('session_placeholder');
+  const button = document.getElementById('languageBtn');
+  if (button) button.textContent = t('language_button');
+  window.dispatchEvent(new CustomEvent('ccwhat-locale-change', { detail: { locale: ccwhatLocale } }));
+}
+
+function toggleLocale() {
+  ccwhatLocale = ccwhatLocale === 'zh' ? 'en' : 'zh';
+  localStorage.setItem(CCWHAT_LOCALE_KEY, ccwhatLocale);
+  applyLocale();
+}
+
+window.addEventListener('storage', event => {
+  if (event.key === CCWHAT_LOCALE_KEY && event.newValue && event.newValue !== ccwhatLocale) {
+    ccwhatLocale = event.newValue === 'en' ? 'en' : 'zh';
+    applyLocale();
+  }
+});
+window.addEventListener('ccwhat-locale-change', () => {
+  if (workbenchState?.sessionData) renderList();
+  updateSessionCountBadge();
+});
+document.addEventListener('DOMContentLoaded', applyLocale);
 
 // ── Workbench State & Page Navigation ─────────────────────────────────────
 const workbenchState = {
@@ -3148,7 +3462,7 @@ function updateSessionCountBadge() {
   if (!badge) return;
   const totalTurns = allGroupConversations.reduce((sum, group) =>
     sum + group.conversations.reduce((n, conv) => n + (conv.turns?.length || 0), 0), 0);
-  badge.textContent = `Steps ${visibleStepCountForCurrentProjection()} / Total Turns ${totalTurns} / Entries ${allEntries.length}`;
+  badge.textContent = `${t('steps')} ${visibleStepCountForCurrentProjection()} / ${t('total_turns')} ${totalTurns} / ${t('entries')} ${allEntries.length}`;
 }
 
 function renderSessionPage() {
@@ -3157,7 +3471,7 @@ function renderSessionPage() {
   if (!entryList || !detailPanel) return;
   const sid = document.getElementById('sessionSel').value;
   if (!sid) {
-    entryList.innerHTML = '<div class="placeholder">选择 project 和 session 后加载</div>';
+    entryList.innerHTML = `<div class="placeholder">${esc(t('select_project_and_session'))}</div>`;
     detailPanel.innerHTML = '<div class="empty-detail">选择一个 session 查看本地日志</div>';
     return;
   }
@@ -3263,12 +3577,7 @@ function renderTurnList() {
 
 // Human-readable kind label
 function kindLabel(kind) {
-  const labels = {
-    user_message: 'user', assistant_text: 'text', thinking: 'think',
-    tool_use: 'tool', tool_result: 'result', context: 'ctx',
-    system: 'sys', unknown: '?',
-  };
-  return labels[kind] || kind;
+  return CCWHAT_COPY[ccwhatLocale]?.[`kind_${kind}`] || kind;
 }
 
 // Primary display text for a minimal Turn card
@@ -3281,12 +3590,7 @@ function turnDisplayText(turn) {
 
 // Human-readable label for projection displayKind
 function displayKindLabel(displayKind) {
-  const labels = {
-    user_request: 'req', thinking: 'think', agent_text: 'text',
-    tool_call: 'tool', tool_result: 'result', permission: 'perm',
-    error_signal: 'err', internal: 'int',
-  };
-  return labels[displayKind] || displayKind;
+  return CCWHAT_COPY[ccwhatLocale]?.[`display_${displayKind}`] || displayKind;
 }
 
 // ── Turn View Mode Projection ─────────────────────────────────────────────
@@ -3683,6 +3987,7 @@ function renderProjectionNodeCard(node, indentClass, isTaskNode) {
     card.classList.add('edit-selected');
   }
   card.dataset.turnKey = node.underlyingTurnKey;
+  card.dataset.kind = node.turn?.kind || node.displayKind || '';
   if (indentClass) card.classList.add(indentClass);
 
   let kindBadge;
@@ -3739,10 +4044,10 @@ function updateTaskTraceOverlayControls() {
   if (status) {
     status.classList.toggle('dirty', !!overlay?.dirty);
     status.classList.toggle('saved', !!overlay?.saved && !overlay?.dirty);
-    if (!overlay) status.textContent = '无 overlay';
+    if (!overlay) status.textContent = t('no_overlay');
     else {
-      const modeText = manualTaskSegmentationMode.active ? '手动切分中' : (taskTraceEditMode ? '编辑中' : (manualTaskCreateState.active ? '创建中' : '浏览'));
-      const dirtyText = overlay.dirty ? '未保存' : (overlay.saved ? '已保存' : '预览');
+      const modeText = manualTaskSegmentationMode.active ? t('manual_segmenting') : (taskTraceEditMode ? t('editing') : (manualTaskCreateState.active ? t('creating') : t('browsing')));
+      const dirtyText = overlay.dirty ? t('unsaved') : (overlay.saved ? t('saved') : t('preview'));
       status.textContent = `${overlay.source || 'overlay'} · ${dirtyText} · ${modeText}`;
     }
   }
@@ -5793,7 +6098,7 @@ function renderTasksPage() {
   if (!el) return;
   const sessionId = document.getElementById('sessionSel').value;
   if (!sessionId || sessionId !== currentLoadedSessionId) {
-    el.innerHTML = `<div class="placeholder">先在顶部选择 project 和 session，再进行任务切分<br>
+    el.innerHTML = `<div class="placeholder">${esc(t('select_project_and_session_for_tasks'))}<br>
       <button class="btn" style="margin-top:8px" disabled>自动切分</button>
       <button class="btn" style="margin-top:8px" disabled>手动切分</button>
       ${datasetSaveButton(sessionId, 'margin-top:8px')}</div>`;
@@ -6583,7 +6888,7 @@ function renderSettingsPage() {
   if (apiEl) apiEl.textContent = document.getElementById('apiUrl').value || window.location.origin;
   if (themeEl) themeEl.textContent = document.documentElement.getAttribute('data-theme');
   if (agentEl) agentEl.textContent = document.getElementById('agentBadge').textContent;
-  if (projEl) projEl.textContent = `${allProjects.length} project(s)`;
+  if (projEl) projEl.textContent = ccwhatLocale === 'zh' ? `${allProjects.length} 个项目` : `${allProjects.length} project(s)`;
 }
 
 // Auto-switch to a page when a specific action completes
@@ -8620,7 +8925,7 @@ function globalSearchResultTitle(result) {
 
 function globalSearchResultSource(result) {
   const info = sessionInfoForSearchResult(result);
-  const project = result.projectDir || info.projectDir || 'unknown project';
+  const project = result.projectDir || info.projectDir || t('unknown_project');
   const sessionId = result.sessionId ? String(result.sessionId).slice(0, 8) : '';
   return sessionId ? `${project} · ${sessionId}` : project;
 }
@@ -8972,7 +9277,7 @@ function globalSearchSessionLabel(sessionId, sampleResult) {
 }
 
 function globalSearchProjectLabel(projectDir) {
-  const value = String(projectDir || 'unknown project');
+  const value = String(projectDir || t('unknown_project'));
   const parts = value.split(/[\\/]/).filter(Boolean);
   return parts.slice(-1)[0] || value;
 }
@@ -8981,7 +9286,7 @@ function buildGlobalSearchGroups() {
   const projects = new Map();
   for (const result of globalSearchState.results || []) {
     if (!globalSearchTypeAllowed(result)) continue;
-    const projectDir = result.projectDir || sessionInfoForSearchResult(result).projectDir || 'unknown project';
+    const projectDir = result.projectDir || sessionInfoForSearchResult(result).projectDir || t('unknown_project');
     const sessionId = result.sessionId || '';
     if (!projects.has(projectDir)) {
       projects.set(projectDir, { projectDir, label: globalSearchProjectLabel(projectDir), resultCount: 0, sessions: new Map() });
@@ -9067,7 +9372,7 @@ function syncGlobalSearchTopSelectors(projectDir, sessionId) {
   const project = allProjects.find(p => p.projectDir === projectDir);
   if (project) {
     const selected = sessionSel.value;
-    sessionSel.innerHTML = '<option value="">— session —</option>';
+    sessionSel.innerHTML = `<option value="">${esc(t('session_placeholder'))}</option>`;
     for (const session of project.sessions || []) {
       const id = typeof session === 'string' ? session : session.id;
       const opt = document.createElement('option');
@@ -9157,22 +9462,22 @@ function renderGlobalSearchHierarchy() {
   cols.results.innerHTML = '';
 
   if (!projects.length) {
-    renderEmptyGlobalSearchColumn(cols.projects, globalSearchState.inFlight ? 'Waiting for matches...' : 'No matching projects.');
-    renderEmptyGlobalSearchColumn(cols.sessions, 'Select a project.');
-    renderEmptyGlobalSearchColumn(cols.results, globalSearchState.inFlight ? 'Waiting for matches...' : 'No matching results.');
+    renderEmptyGlobalSearchColumn(cols.projects, globalSearchState.inFlight ? t('waiting_for_matches') : t('no_matching_projects'));
+    renderEmptyGlobalSearchColumn(cols.sessions, t('select_project'));
+    renderEmptyGlobalSearchColumn(cols.results, globalSearchState.inFlight ? t('waiting_for_matches') : t('no_matching_results'));
     appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
     return;
   }
 
   for (const project of projects) {
     const sessionNames = project.sessions.slice(0, 3).map(s => s.label).join(', ');
-    const extra = project.sessions.length > 3 ? `, +${project.sessions.length - 3} more` : '';
+    const extra = project.sessions.length > 3 ? (ccwhatLocale === 'zh' ? `，另有 ${project.sessions.length - 3} 个` : `, +${project.sessions.length - 3} more`) : '';
     const node = document.createElement('div');
     node.className = `global-search-group${project.projectDir === globalSearchState.selectedProject ? ' selected' : ''}`;
     node.tabIndex = 0;
     node.innerHTML = `
       <div class="global-search-group-title" title="${esc(project.projectDir)}">${esc(project.label)}</div>
-      <div class="global-search-group-meta">${project.sessions.length} session(s) - ${project.resultCount} result(s)</div>
+      <div class="global-search-group-meta">${ccwhatLocale === 'zh' ? `${project.sessions.length} 个会话 · ${project.resultCount} 个结果` : `${project.sessions.length} session(s) · ${project.resultCount} result(s)`}</div>
       <div class="global-search-group-meta" title="${esc(sessionNames + extra)}">${esc(compactSearchText(sessionNames + extra, 130))}</div>`;
     node.onclick = event => { event.stopPropagation(); selectGlobalSearchProject(project.projectDir); };
     node.onkeydown = event => { if (event.key === 'Enter') { event.stopPropagation(); selectGlobalSearchProject(project.projectDir); } };
@@ -9181,7 +9486,7 @@ function renderGlobalSearchHierarchy() {
 
   const project = projects.find(p => p.projectDir === globalSearchState.selectedProject);
   if (!project) {
-    renderEmptyGlobalSearchColumn(cols.sessions, 'Select a project to view sessions.');
+    renderEmptyGlobalSearchColumn(cols.sessions, t('select_project_to_view_sessions'));
     renderEmptyGlobalSearchColumn(cols.results, 'Select a session to view results.');
     appendGlobalSearchWarnings(cols.results, globalSearchState.warnings);
     return;
@@ -9264,7 +9569,7 @@ function appendGlobalSearchWarnings(list, warnings) {
   const body = document.createElement('div');
   body.style.cssText = 'margin-top:6px;text-align:left;font-size:11px;color:var(--text-secondary);line-height:1.45';
   body.innerHTML = warnings.slice(0, 12).map(w =>
-    `<div>${esc(w.projectDir || 'unknown project')} · ${esc(String(w.sessionId || '').slice(0, 8) || 'unknown')} — ${esc(w.message || 'read failed')}</div>`
+    `<div>${esc(w.projectDir || t('unknown_project'))} · ${esc(String(w.sessionId || '').slice(0, 8) || 'unknown')} — ${esc(w.message || 'read failed')}</div>`
   ).join('');
   if (warnings.length > 12) body.innerHTML += `<div>... ${warnings.length - 12} more</div>`;
   details.appendChild(body);
@@ -9327,7 +9632,7 @@ async function init() {
     const sel = document.getElementById('projectSel');
     const curProject = sel.value;
     const curSession = document.getElementById('sessionSel').value;
-    sel.innerHTML = '<option value="">— project —</option>';
+    sel.innerHTML = `<option value="">${esc(t('project_placeholder'))}</option>`;
     for (const p of allProjects) {
       const opt = document.createElement('option');
       opt.value = p.projectDir;
@@ -9508,7 +9813,7 @@ function onProjectChange(restoreSession) {
   const projectDir = document.getElementById('projectSel').value;
   const proj = allProjects.find(p => p.projectDir === projectDir);
   const sel = document.getElementById('sessionSel');
-  sel.innerHTML = '<option value="">— session —</option>';
+  sel.innerHTML = `<option value="">${esc(t('session_placeholder'))}</option>`;
   if (proj) {
     for (const s of proj.sessions) {
       const id = typeof s === 'string' ? s : s.id;
@@ -9754,7 +10059,7 @@ function resetAnalysisState() {
   for (const analyzeBtn of [document.getElementById('analyzeBtn'), document.getElementById('sessionAnalyzeBtn')]) {
     if (analyzeBtn) {
       analyzeBtn.disabled = true;
-      analyzeBtn.textContent = analyzeBtn.id === 'sessionAnalyzeBtn' ? '报告分析' : '分析当前 Session';
+      analyzeBtn.textContent = analyzeBtn.id === 'sessionAnalyzeBtn' ? t('analyze_report') : t('analyze_current_session');
     }
   }
   selectedTaskSegmentId = null;
@@ -9809,14 +10114,14 @@ function updateAnalyzeButton() {
   const loaded = sessionId && sessionId === currentLoadedSessionId;
   for (const analyzeBtn of [document.getElementById('analyzeBtn'), document.getElementById('sessionAnalyzeBtn')]) {
     if (!analyzeBtn) continue;
-    const idleText = analyzeBtn.id === 'sessionAnalyzeBtn' ? '报告分析' : '分析当前 Session';
+    const idleText = analyzeBtn.id === 'sessionAnalyzeBtn' ? t('analyze_report') : t('analyze_current_session');
     if (!loaded) {
       analyzeBtn.disabled = true;
       analyzeBtn.textContent = idleText;
       continue;
     }
     analyzeBtn.disabled = analysisInFlight;
-    analyzeBtn.textContent = analysisInFlight ? '分析中…' : idleText;
+    analyzeBtn.textContent = analysisInFlight ? t('analyzing') : idleText;
   }
 }
 

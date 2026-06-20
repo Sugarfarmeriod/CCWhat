@@ -100,7 +100,7 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
         self.assertIn("nav-item active", session_nav_snippet)
 
     def test_left_nav_core_modules_are_present(self):
-        nav_start = _HTML.index('<nav class="left-nav">')
+        nav_start = _HTML.index('<nav class="left-nav"')
         nav_end = _HTML.index('</nav>', nav_start)
         nav = _HTML[nav_start:nav_end]
         for page in [
@@ -115,10 +115,17 @@ class TestSessionTasksWorkbenchScope(unittest.TestCase):
             "settings",
         ]:
             self.assertIn(f'data-page="{page}"', nav)
-        self.assertIn('> Session', nav)
-        self.assertIn('> Tasks', nav)
-        self.assertIn('> Req / Resp', nav)
-        self.assertIn('> Diff', nav)
+        self.assertIn('data-i18n="session"', nav)
+        self.assertIn('data-i18n="tasks"', nav)
+        self.assertIn('data-i18n="req_resp"', nav)
+        self.assertIn('data-i18n="diff"', nav)
+
+    def test_locale_toggle_keeps_a_persisted_bilingual_shell(self):
+        self.assertIn("const CCWHAT_LOCALE_KEY = 'ccwhat-locale'", _HTML)
+        self.assertIn('function toggleLocale()', _HTML)
+        self.assertIn('localStorage.setItem(CCWHAT_LOCALE_KEY, ccwhatLocale)', _HTML)
+        self.assertIn('id="languageBtn"', _HTML)
+        self.assertIn("window.addEventListener('storage'", _HTML)
 
     def test_session_page_contains_migrated_log_viewer(self):
         self.assertIn('data-page="sessions"', _HTML)
@@ -1353,9 +1360,9 @@ class TestFrontendP1Optimizations(unittest.TestCase):
         self.assertIn("function updateSessionCountBadge", _HTML)
         fn_start = _HTML.index("function updateSessionCountBadge")
         snippet = _HTML[fn_start:fn_start + 900]
-        self.assertIn("Steps ${visibleStepCountForCurrentProjection()}", snippet)
-        self.assertIn("Total Turns ${totalTurns}", snippet)
-        self.assertIn("Entries ${allEntries.length}", snippet)
+        self.assertIn("${t('steps')} ${visibleStepCountForCurrentProjection()}", snippet)
+        self.assertIn("${t('total_turns')} ${totalTurns}", snippet)
+        self.assertIn("${t('entries')} ${allEntries.length}", snippet)
 
     def test_turn_diff_extracts_thinking_from_entry_content(self):
         self.assertIn("function extractThinkingText", _HTML)

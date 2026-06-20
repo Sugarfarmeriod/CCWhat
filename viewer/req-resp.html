@@ -10,6 +10,9 @@
   var s = localStorage.getItem('ccwhat-theme');
   var d = s || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.setAttribute('data-theme', d);
+  var locale = localStorage.getItem('ccwhat-locale') || 'zh';
+  document.documentElement.setAttribute('data-locale', locale);
+  document.documentElement.setAttribute('lang', locale === 'en' ? 'en' : 'zh-CN');
 })();
 </script>
 <style>
@@ -533,37 +536,151 @@ select.field { cursor: pointer; }
   opacity: 0.9; transition: opacity 0.15s;
 }
 .replay-action-btn:hover { opacity: 1; }
+@media not all {
+/* ── Open Design: warm request / response workbench (disabled) ────────── */
+:root {
+  --bg-base: #f2f1ed;
+  --bg-surface: #ebeae5;
+  --bg-elevated: #f7f7f4;
+  --border: oklab(0.263084 -0.00230259 0.0124794 / 0.1);
+  --border-strong: oklab(0.263084 -0.00230259 0.0124794 / 0.2);
+  --text-primary: #26251e;
+  --text-secondary: rgba(38, 37, 30, 0.55);
+  --text-tertiary: rgba(38, 37, 30, 0.4);
+  --accent: #f54e00;
+  --accent-hover: #cf2d56;
+  --success: #1f8a65;
+  --warning: #c08532;
+  --danger: #cf2d56;
+  --font-display: CursorGothic, "CursorGothic Fallback", system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: berkeleyMono, ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 0 0 1px oklab(0.263084 -0.00230259 0.0124794 / 0.1);
+  --shadow-md: 0 0 16px rgba(0, 0, 0, 0.02), 0 0 8px rgba(0, 0, 0, 0.008);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.14), 0 14px 32px rgba(0, 0, 0, 0.1);
+}
+[data-theme="dark"] {
+  --bg-base: #000000;
+  --bg-surface: #26251e;
+  --bg-elevated: #26251e;
+  --border: rgba(242, 241, 237, 0.14);
+  --border-strong: rgba(242, 241, 237, 0.28);
+  --text-primary: #f2f1ed;
+  --text-secondary: rgba(242, 241, 237, 0.62);
+  --text-tertiary: rgba(242, 241, 237, 0.42);
+  --accent: #f54e00;
+  --accent-hover: #cf2d56;
+  --success: #1f8a65;
+  --warning: #c08532;
+  --danger: #cf2d56;
+}
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.topbar {
+  min-height: 56px;
+  padding: 8px 16px;
+  gap: 8px;
+  background: color-mix(in srgb, var(--bg-base) 92%, transparent);
+  border-bottom-color: var(--border);
+  backdrop-filter: blur(18px);
+}
+.topbar h1, .sec-title, .fmt-card-title { font-family: var(--font-display); letter-spacing: -0.11px; }
+.topbar h1 { font-size: 15px; font-weight: 600; }
+.adv-btn, .btn, .field, .topbar select, .theme-btn {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+.btn, .adv-btn { border-radius: var(--radius-md); padding: 6px 10px; }
+.field, .topbar select { min-height: 32px; border-radius: var(--radius-md); }
+.field:focus, .topbar select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
+.btn:hover, .adv-btn:hover, .theme-btn:hover { background: var(--bg-surface); border-color: var(--border-strong); color: var(--accent-hover); }
+.theme-btn { width: 32px; height: 32px; border-radius: 9999px; }
+.adv-panel, .fmt-card, .replay-modal, .replay-dialog {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+.stats-bar {
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border-bottom-color: var(--border);
+}
+.stats-group + .stats-group, .sparkline-wrap { border-left-color: var(--border); }
+.main { background: var(--bg-base); }
+.list-panel { width: 360px; background: var(--bg-surface); border-right-color: var(--border); }
+.record-item { padding: 10px 12px; border-bottom-color: var(--border); }
+.record-item:hover { background: var(--bg-elevated); }
+.record-item.active { background: var(--bg-elevated); border-left-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+.ri-method, .sse-badge { background: color-mix(in srgb, var(--accent) 12%, var(--bg-base)); color: var(--accent); }
+.detail-panel { padding: 18px; background: var(--bg-base); }
+.section, .tab-section, .record-item, .source-chip, .fmt-card, .replay-card {
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+.section, .tab-section { background: var(--bg-elevated); }
+.sec-hdr, .tab-section-hdr, .fmt-card-hdr { background: var(--bg-surface); border-color: var(--border); }
+.tab-btn.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.nav-link { color: var(--text-secondary); }
+.nav-link:hover { color: var(--accent-hover); }
+.placeholder, .empty-detail { color: var(--text-secondary); }
+pre, code, .raw-block, .json-tree { font-family: var(--font-mono); }
+#filterTitleReq + label { color: var(--text-secondary) !important; }
+@media (max-width: 920px) {
+  .topbar { min-height: auto; align-items: stretch; padding: 8px 10px; }
+  .topbar h1 { flex: 1 0 auto; }
+  .topbar #searchBox { flex: 1 0 100%; width: 100% !important; order: 3; }
+  .nav-links { margin-left: 0; }
+  .list-panel { width: min(42vw, 320px); }
+  .detail-panel { padding: 14px; }
+  .stats-bar.visible { padding: 8px 10px; }
+}
+@media (max-width: 640px) {
+  .list-panel { width: 46vw; min-width: 152px; }
+  .record-item { padding: 8px; }
+  .detail-panel { padding: 12px; }
+  .topbar #dateSel { width: 112px !important; }
+}
+}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <h1>ccwhat · Req/Resp</h1>
+  <h1>ccwhat · <span data-i18n="req_resp">请求/响应</span></h1>
   <div class="adv-wrap" id="advWrap">
-    <button class="adv-btn" onclick="toggleAdv()">⚙ 高级设置</button>
+    <button class="adv-btn" onclick="toggleAdv()">⚙ <span data-i18n="advanced_settings">高级设置</span></button>
     <div class="adv-panel" id="advPanel">
-      <label>API URL</label>
-      <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址">
+      <label data-i18n="api_url">API URL</label>
+      <input class="field" id="apiUrl" type="text" value="" placeholder="默认: 当前页面地址" data-i18n-placeholder="api_url_placeholder">
       <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
         <input type="checkbox" id="filterTitleReq" checked onchange="renderList();renderStats()">
-        <label for="filterTitleReq" style="font-size:11px;color:#e1e4e8;cursor:pointer;margin:0">过滤 title 生成请求</label>
+        <label for="filterTitleReq" style="font-size:11px;color:#e1e4e8;cursor:pointer;margin:0" data-i18n="filter_title_requests">过滤 title 生成请求</label>
       </div>
     </div>
   </div>
   <select class="field" id="sessionSel" style="max-width:280px" onchange="onSessionChange()">
-    <option value="">— session —</option>
+    <option value="" data-i18n="session_placeholder">— session —</option>
   </select>
   <select class="field" id="dateSel" style="width:130px" onchange="loadRecords()">
-    <option value="">— date —</option>
+    <option value="" data-i18n="date_placeholder">— date —</option>
   </select>
   <div class="source-filter-wrap" id="sourceFilterWrap"></div>
-  <input class="field" id="searchBox" placeholder="搜索 message ID 或 URL…" oninput="renderList()" style="width:220px">
-  <button class="btn" onclick="init()">刷新</button>
+  <input class="field" id="searchBox" placeholder="搜索 message ID 或 URL…" data-i18n-placeholder="search_placeholder" oninput="renderList()" style="width:220px">
+  <button class="btn" onclick="init()" data-i18n="refresh">刷新</button>
   <span class="badge" id="countBadge"></span>
   <div class="nav-links">
-    <a class="nav-link" href="claude-log.html">Claude Log</a>
+    <a class="nav-link" href="claude-log.html" data-i18n="session_viewer">会话查看器</a>
   </div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn language-btn" id="languageBtn" onclick="toggleLocale()" title="Switch language" data-i18n-title="switch_language">EN</button>
 </div>
 
 <!-- Format overlay (singleton) -->
@@ -571,7 +688,7 @@ select.field { cursor: pointer; }
   <div class="fmt-card">
     <div class="fmt-card-hdr">
       <span>
-        <span class="fmt-card-title">格式化预览</span>
+        <span class="fmt-card-title" data-i18n="format_preview">格式化预览</span>
         <span class="fmt-card-mode" id="fmtMode"></span>
       </span>
       <button class="fmt-card-close" onclick="closeFormatOverlay()">✕</button>
@@ -585,11 +702,11 @@ select.field { cursor: pointer; }
 <div class="main">
   <div class="list-panel">
     <div class="record-list" id="recordList">
-      <div class="placeholder">选择 session 和日期后加载</div>
+      <div class="placeholder" data-i18n="select_session_and_date">选择 session 和日期后加载</div>
     </div>
   </div>
   <div class="detail-panel" id="detailPanel">
-    <div class="empty-detail">← 点击列表项查看详情</div>
+    <div class="empty-detail" data-i18n="select_record">← 点击列表项查看详情</div>
   </div>
 </div>
 
@@ -607,6 +724,58 @@ function toggleTheme() {
   const btn = document.getElementById('themeBtn');
   if (btn) btn.textContent = t === 'dark' ? '☀' : '☾';
 })();
+
+// ── Interface language ────────────────────────────────────────────────────
+// Only marked UI copy is localized; request payloads and responses stay in their original language and format.
+const CCWHAT_LOCALE_KEY = 'ccwhat-locale';
+const CCWHAT_COPY = {
+  zh: {
+    req_resp: '请求/响应', advanced_settings: '高级设置', api_url: 'API 地址',
+    api_url_placeholder: '默认：当前页面地址', filter_title_requests: '过滤标题生成请求',
+    session_placeholder: '— 会话 —', date_placeholder: '— 日期 —',
+    search_placeholder: '搜索消息 ID 或 URL…', refresh: '刷新', session_viewer: '会话查看器',
+    format_preview: '格式化预览', select_session_and_date: '选择会话和日期后加载',
+    select_record: '← 点击列表项查看详情', switch_language: '切换为英文', language_button: 'EN',
+  },
+  en: {
+    req_resp: 'Req / Resp', advanced_settings: 'Advanced settings', api_url: 'API URL',
+    api_url_placeholder: 'Default: current page URL', filter_title_requests: 'Filter title-generation requests',
+    session_placeholder: '— session —', date_placeholder: '— date —',
+    search_placeholder: 'Search message ID or URL…', refresh: 'Refresh', session_viewer: 'Session Viewer',
+    format_preview: 'Formatted preview', select_session_and_date: 'Select a session and date to load',
+    select_record: '← Select a record to view details', switch_language: 'Switch to Chinese', language_button: '中文',
+  },
+};
+let ccwhatLocale = localStorage.getItem(CCWHAT_LOCALE_KEY) || 'zh';
+
+function t(key) {
+  return CCWHAT_COPY[ccwhatLocale]?.[key] || CCWHAT_COPY.zh[key] || key;
+}
+
+function applyLocale() {
+  document.documentElement.setAttribute('data-locale', ccwhatLocale);
+  document.documentElement.setAttribute('lang', ccwhatLocale === 'en' ? 'en' : 'zh-CN');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  const button = document.getElementById('languageBtn');
+  if (button) button.textContent = t('language_button');
+  window.dispatchEvent(new CustomEvent('ccwhat-locale-change', { detail: { locale: ccwhatLocale } }));
+}
+
+function toggleLocale() {
+  ccwhatLocale = ccwhatLocale === 'zh' ? 'en' : 'zh';
+  localStorage.setItem(CCWHAT_LOCALE_KEY, ccwhatLocale);
+  applyLocale();
+}
+
+window.addEventListener('storage', event => {
+  if (event.key === CCWHAT_LOCALE_KEY && event.newValue && event.newValue !== ccwhatLocale) {
+    ccwhatLocale = event.newValue === 'en' ? 'en' : 'zh';
+    applyLocale();
+  }
+});
+document.addEventListener('DOMContentLoaded', applyLocale);
 
 let allRecords = [];
 let selectedIdx = -1;
