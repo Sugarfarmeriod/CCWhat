@@ -2,6 +2,16 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.4 - 2026-06-20
+
+### 修复详情面板 Thinking 字段缺失
+
+### 修复
+
+- **详情面板 Thinking 卡片**：修复 `buildMinimalTurnDetailHtml()` 中遗漏的 `buildThinkingSection()` 调用，Turn 详情面板现在正确显示 Thinking / Reasoning 内容。
+
+---
+
 ## v2.2.3 - 2026-06-19
 
 ### 全局 Session / Task 搜索
