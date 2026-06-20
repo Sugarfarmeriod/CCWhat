@@ -18,7 +18,7 @@
 
 <p>
   <strong>Changelog:</strong>
-  <a href="./CHANGELOG.md">v2.2.4</a> ·
+  <a href="./CHANGELOG.md">v2.2.5</a> ·
   <a href="./CHANGELOG.md">更新日志</a>
 </p>
 
@@ -219,3 +219,29 @@ AgentLens 组合两类证据：
 - [更新日志](CHANGELOG.md)
 
 欢迎通过 Issue 提交问题或建议，通过 Pull Request 参与开发。
+
+## 📈 v2 版本演进
+
+**v2.2** — 当前版本
+
+- 双语切换界面（中文/英文），语言选择持久化
+- 全局 Session / Task / Turn / Event 搜索，支持三种范围
+- 请求回放与对比，支持原文重放和改写后重新发送
+- Turn 详情面板重构，四栏折叠式布局
+- 零配置自动录制，自动读取 Agent 本地配置
+
+**v2.1**
+
+- 零配置自动录制（读取 Agent 配置文件提取 API domain）
+- OpenAI 格式 SSE 解析，支持 OpenCode 等 Agent
+- 任务自动切分与手动校正
+- Dataset 导出（manifest.json、dataset.jsonl、traces、scores）
+
+**v2.0**
+
+- 请求回放功能
+- 网络抓包与 Viewer 集成
+- Session → Task → Conversation → Turn 层级结构
+- 首个稳定版本
+
+完整更新历史见 [CHANGELOG.md](./CHANGELOG.md)。
