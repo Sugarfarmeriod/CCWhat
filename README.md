@@ -8,7 +8,7 @@
   </picture>
 </a>
 
-<h3>End-to-end tracing and observability for AI agents.</h3>
+<h3>Tracing and observability platform for coding agents.</h3>
 
 <p>
   <strong>Languages:</strong>
