@@ -601,6 +601,20 @@ body {
     white-space: pre-wrap; word-break: break-all;
   }
 
+  /* Thinking section */
+  .thinking-block {
+    background: rgba(175,82,222,0.05); border: 1px solid rgba(175,82,222,0.2);
+    border-radius: var(--radius-sm); padding: 12px;
+    font-size: 12px; line-height: 1.7; color: var(--text-primary);
+    max-height: 400px; overflow: auto; white-space: pre-wrap;
+    font-family: var(--font-mono);
+  }
+  .thinking-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 3px;
+    background: rgba(175,82,222,0.15); color: var(--type-sys-fg);
+    margin-left: auto;
+  }
+
   /* ── Collapsible Section (new design) ───────────────────────────────── */
   .detail-collapsible {
     border: 1px solid var(--border);
@@ -5339,6 +5353,27 @@ function extractToolUses(entry) {
   return toolUses;
 }
 
+// Extract thinking content from entry
+function extractThinking(entry) {
+  if (!entry) return null;
+  const content = entry.message?.content ?? entry.content;
+
+  // Check content blocks for thinking/reasoning
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block?.type === 'thinking' || block?.type === 'reasoning') {
+        return block.thinking || block.text || block.content || JSON.stringify(block);
+      }
+    }
+  }
+
+  // Check entry level thinking fields
+  if (entry.thinking) return entry.thinking;
+  if (entry.reasoning) return entry.reasoning;
+
+  return null;
+}
+
 // Build System Prompt section HTML
 function buildSystemPromptSection() {
   const systemPrompt = extractSystemPrompt();
@@ -5430,6 +5465,24 @@ function buildToolsSection(entry) {
   return html;
 }
 
+// Build Thinking section HTML
+function buildThinkingSection(entry) {
+  const thinking = extractThinking(entry);
+
+  let html = `<details class="detail-panel-section" ${thinking ? 'open' : ''}>
+    <summary>Thinking <span class="thinking-badge">推理</span></summary>
+    <div class="panel-section-body">`;
+
+  if (!thinking) {
+    html += `<div class="turn-detail-empty">当前 Turn 无 Thinking 内容</div>`;
+  } else {
+    html += `<div class="thinking-block">${esc(thinking)}</div>`;
+  }
+
+  html += `</div></details>`;
+  return html;
+}
+
 // Build Raw JSON section HTML
 function buildRawJsonSectionNew(entry, turn) {
   const rawData = { entry, turn };
@@ -5478,6 +5531,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
   // Four panels
   html += buildSystemPromptSection();
   html += buildMessageSection(e);
+  html += buildThinkingSection(e);
   html += buildToolsSection(e);
   html += buildRawJsonSectionNew(e, turn);
 
