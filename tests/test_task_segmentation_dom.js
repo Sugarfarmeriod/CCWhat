@@ -199,6 +199,22 @@ async function clearAllTypes(dom) {
   await flushAsync();
 }
 
+async function test_locale_toggle_updates_dynamic_selector_placeholders() {
+  const dom = makeDOM();
+  const win = dom.window;
+  const doc = win.document;
+  const projectSel = doc.getElementById('projectSel');
+  const sessionSel = doc.getElementById('sessionSel');
+
+  projectSel.innerHTML = '<option value="">— 项目 —</option>';
+  sessionSel.innerHTML = '<option value="">— 会话 —</option>';
+  win.toggleLocale();
+
+  assert.strictEqual(projectSel.options[0].textContent, '— project —');
+  assert.strictEqual(sessionSel.options[0].textContent, '— session —');
+  console.log('  ✓ locale toggle updates regenerated project and session placeholders');
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: eventIdToEntryIdx populated after loadSession
 // ---------------------------------------------------------------------------
@@ -1671,11 +1687,10 @@ async function test_debug_view_defaults_to_complete_timeline() {
   win.toggleConversation(convCards[0].dataset.conversationKey);
   await flushAsync();
 
-  const turnTexts = Array.from(doc.querySelectorAll('.trace-turn-card'))
-    .map(card => card.textContent.replace(/\s+/g, ' ').trim());
+  const turnCards = Array.from(doc.querySelectorAll('.trace-turn-card'));
   assert.ok(
-    turnTexts.some(text => text.includes('sys') || text.includes('system') || text.includes('acceptEdits')),
-    `debug view should show internal system turn by default, got: ${turnTexts.join(' | ')}`
+    turnCards.some(card => card.dataset.kind === 'system' || card.textContent.includes('acceptEdits')),
+    `debug view should show internal system turn by default, got: ${turnCards.map(card => card.textContent.replace(/\s+/g, ' ').trim()).join(' | ')}`
   );
 
   const unchecked = Array.from(doc.querySelectorAll('#typeFilters input')).filter(input => !input.checked);
@@ -1699,7 +1714,7 @@ async function test_detail_filter_does_not_hide_selected_internal_turn() {
   await flushAsync();
 
   const internalTurn = Array.from(doc.querySelectorAll('.trace-turn-card'))
-    .find(card => card.textContent.includes('sys') || card.textContent.includes('acceptEdits'));
+    .find(card => card.dataset.kind === 'system' || card.textContent.includes('acceptEdits'));
   assert.ok(internalTurn, 'Internal system turn should be selectable in debug view');
   internalTurn.click();
   await flushAsync();
@@ -1951,6 +1966,7 @@ async function test_turn_diff_long_content_and_line_highlight() {
 // ---------------------------------------------------------------------------
 
 const tests = [
+  test_locale_toggle_updates_dynamic_selector_placeholders,
   test_map_populated_after_load,
   test_turn_root_has_data_idx_in_dom,
   test_turn_detail_filters_assistant_when_only_user_enabled,
