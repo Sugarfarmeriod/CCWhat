@@ -18,7 +18,7 @@
 
 <p>
   <strong>Changelog:</strong>
-  <a href="./CHANGELOG.md">v2.2.3</a> ·
+  <a href="./CHANGELOG.md">v2.2.4</a> ·
   <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
