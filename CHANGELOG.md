@@ -2,6 +2,31 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.5 - 2026-06-20
+
+### Viewer 双语切换与界面优化
+
+### 新增
+
+- **双语切换**：`viewer/claude-log.html` 和 `viewer/req-resp.html` 新增中英双语支持，点击顶部语言按钮可在中文/英文间切换。
+- **语言持久化**：语言选择保存在 `localStorage` (`ccwhat-locale`)，刷新页面后保持上次选择。
+
+### 改进
+
+- **界面风格统一**：优化两个 Viewer 的视觉层次，统一配色和间距，提升开发者工具使用体验。
+- **仅本地化 UI 文案**：原始日志、请求/响应内容和分析数据保持原语言，仅界面元素随语言切换。
+
+### 测试
+
+- 新增 `tests/test_viewer_locale.py` 覆盖语言切换、动态占位符、导航文案和搜索范围文案。
+- 更新现有 DOM 测试验证 `data-i18n` 属性正确性。
+
+### 贡献者
+
+本版本双语切换能力由 [@rmxob](https://github.com/rmxob) 贡献，详见 [PR #6](https://github.com/PacemakerG/CCWhat/pull/6)。
+
+---
+
 ## v2.2.4 - 2026-06-20
 
 ### 修复详情面板 Thinking 字段缺失
