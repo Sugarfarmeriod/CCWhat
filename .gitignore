@@ -9,6 +9,7 @@ dist/
 build/
 .venv/
 .vscode/settings.json
+.idea/
 .agents/
 drawio/
 

@@ -47,9 +47,9 @@ function testSearchEntryAndDefaultScope() {
   assertContains('Unfold result', 'Folded results should replace the search controls with an unfold button');
   assertContains('position: relative; z-index: 200;', 'Topbar should layer above the workspace');
   assertContains('z-index: 220;', 'Search popover should have an explicit high layer');
-  assertContains('<option value="current_session">Current session</option>', 'Current session should be first/default option');
-  assertContains('<option value="current_project">Current project</option>', 'Current project scope should be offered');
-  assertContains('<option value="all_projects">All projects</option>', 'All projects scope should be offered');
+  assertContains('<option value="current_session" data-i18n="scope_current_session">Current session</option>', 'Current session should be first/default option');
+  assertContains('<option value="current_project" data-i18n="scope_current_project">Current project</option>', 'Current project scope should be offered');
+  assertContains('<option value="all_projects" data-i18n="scope_all_projects">All projects</option>', 'All projects scope should be offered');
   assertNotContains("case 'search': renderGlobalSearchState(); break;", 'Search should not be routed as a standalone page');
 }
 
