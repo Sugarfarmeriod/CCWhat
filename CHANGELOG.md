@@ -2,7 +2,30 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
-## v2.2.6 - 2026-06-22
+## v2.2.7 - 2026-06-22
+
+### FastAPI 后端重构
+
+### 改进
+
+- **后端框架迁移**：Viewer 后端从 `BaseHTTPRequestHandler` / `ThreadingHTTPServer` 迁移到 FastAPI + uvicorn，新增 `create_app()` 应用工厂和 `ViewerServer` 生产启动封装。
+- **接口兼容保留**：保留 `/api/projects`、`/api/session/{id}`、`/api/search`、分析报告、任务切分、Dataset 保存/下载、请求导出、请求回放等现有接口响应契约。
+- **兼容测试层**：保留 `_make_handler()` 作为旧测试和外部调用的兼容适配层，通过 FastAPI `TestClient` 转发请求，降低迁移风险。
+- **CLI 启动适配**：`ccwhat run` 的托管 Viewer 改为协议类型依赖，不再绑定 stdlib `HTTPServer` 实现。
+
+### 文档
+
+- 新增 FastAPI 重构说明和重构后项目结构文档，记录后端入口、路由分组、兼容边界与重点注意事项。
+
+### 测试
+
+- 更新 Viewer server 构造测试以覆盖新的 `ViewerServer` 封装。
+- 验证 viewer/API 相关测试集：`220 passed`。
+- 验证真实 uvicorn 启动 smoke：`/api/viewer/status` 返回 200。
+
+---
+
+## v2.2.6 - 2026-06-21
 
 ### 代码瘦身
 

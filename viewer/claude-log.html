@@ -5817,6 +5817,7 @@ function buildStepOverviewHeader(turn) {
 // Kind-specific detail for minimal Turns with complete evidence.
 function buildMinimalTurnDetailHtml(groupId, turn) {
   const e = allEntries[turn.sourceEntryIdx];
+  const block = getTurnContentBlock(e, turn);
 
   if (!e) {
     return `<div class="four-panel-detail">
@@ -5834,6 +5835,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
   html += buildStepOverviewHeader(turn);
 
   // Four panels
+  html += buildStepOverviewSection(e, turn, block);
   html += buildSystemPromptSection();
   html += buildMessageSection(e);
   html += buildThinkingSection(e);

@@ -13,7 +13,7 @@ import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from http.server import HTTPServer
+from typing import Protocol
 
 import click
 
@@ -23,6 +23,14 @@ from ccwhat.config import (
     generate_local_session_id,
     load_config,
 )
+
+
+class _ManagedWebServer(Protocol):
+    def serve_forever(self) -> None: ...
+
+    def shutdown(self) -> None: ...
+
+    def server_close(self) -> None: ...
 
 
 
@@ -178,7 +186,7 @@ def _start_managed_web(
     config_path: Path | None,
     analyzer_cmd: tuple[str, ...] | None = None,
     agent_name: str = "claude",
-) -> HTTPServer | None:
+) -> _ManagedWebServer | None:
     from viewer.server import create_server, open_viewer, viewer_url
 
     url = viewer_url(port)
@@ -251,7 +259,7 @@ def _probe_viewer_agent(port: int) -> str | None:
     return None
 
 
-def _stop_managed_web(server: HTTPServer | None, web_port: int | None = None) -> None:
+def _stop_managed_web(server: _ManagedWebServer | None, web_port: int | None = None) -> None:
     if server is None:
         return
     server.shutdown()
@@ -379,7 +387,7 @@ def run(
 
     local_session_id = generate_local_session_id()
     proxy_proc: subprocess.Popen | None = None
-    web_server: HTTPServer | None = None
+    web_server: _ManagedWebServer | None = None
 
     if _proxy_is_running(port):
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")
