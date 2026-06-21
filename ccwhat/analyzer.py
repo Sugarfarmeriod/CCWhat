@@ -55,11 +55,6 @@ def _normalize_analyzer_agent(agent: str | None) -> str:
     return _normalize(agent or "claude")
 
 
-def _supported_analyzer(agent: str | None) -> bool:
-    spec = _get_analyzer_spec(_normalize_analyzer_agent(agent))
-    return spec is not None
-
-
 def _default_analyze_cmd(agent: str | None = None) -> list[str]:
     normalized = _normalize_analyzer_agent(agent)
     spec = _get_analyzer_spec(normalized)
@@ -218,12 +213,10 @@ def run_mc_analysis(
     timeout: int | None = None,
     runner: Any | None = None,
     cmd: list[str] | tuple[str, ...] | None = None,
-    allowed_dirs: list[str] | None = None,
     agent: str | None = None,
     default_agent: str | None = None,
 ) -> tuple[str, int]:
     from ccwhat.analyzers.registry import (
-        _normalize as _registry_normalize,
         get_candidates,
         prepare_candidate,
     )
@@ -237,12 +230,6 @@ def run_mc_analysis(
 
     # If explicit cmd or env override, use it directly (no fallback)
     if has_cmd_source:
-        if spec is None and not has_cmd_source:
-            raise AnalysisError(
-                f"Analyzer protocol is not supported for agent '{normalized_agent}'. "
-                f"Supported agents: {', '.join(_list_analyzer_names())}",
-                "analyzer_not_supported",
-            )
         run = runner or subprocess.run
         return _run_one_try(prompt, resolved_cmd, effective_timeout, spec, run)
 
@@ -262,7 +249,6 @@ def run_mc_analysis(
 
     # Try primary spec first, then fallback candidates
     last_error: AnalysisError | None = None
-    tmpdir: str | None = None
     try:
         return _run_one_try(prompt, resolved_cmd, effective_timeout, spec, run)
     except (AnalysisError, subprocess.TimeoutExpired) as primary_err:
@@ -272,10 +258,9 @@ def run_mc_analysis(
         last_error = _as_analysis_error(primary_err, effective_timeout)
 
     # Try fallback candidates
-    import tempfile as _tf
     _cleanup_dirs: list[str] = []
     try:
-        for idx, candidate in enumerate(candidates):
+        for candidate in candidates:
             try:
                 cand_cmd, extra = prepare_candidate(candidate)
                 _cleanup_dirs.append(str(Path(extra.get("last_message_file", "")).parent))

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from ccwhat.analyzers.base import AnalyzerSpec
 from ccwhat.analyzers import codex as codex_parsers
