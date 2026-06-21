@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import html
 import json
 import time
@@ -173,7 +172,6 @@ def _render_generic_html(
 def build_html_session_report(
     session: dict[str, Any],
     *,
-    allowed_dirs: list[str] | None = None,
     enable_llm: bool = True,
     custom_prompt: str = "",
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
@@ -193,7 +191,6 @@ def build_html_session_report(
         try:
             diagnosis, llm_elapsed_ms = run_mc_analysis(
                 _diagnosis_prompt(prompt_context, custom_prompt),
-                allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
                 agent=analyzer_agent,
                 default_agent=report_session.primary_agent_type,
@@ -222,7 +219,6 @@ def build_html_session_report(
 def build_generic_html_report(
     session: dict[str, Any],
     *,
-    allowed_dirs: list[str] | None = None,
     enable_llm: bool = True,
     custom_prompt: str = "",
     analyzer_cmd: list[str] | tuple[str, ...] | None = None,
@@ -244,7 +240,6 @@ def build_generic_html_report(
         try:
             report_markdown, llm_elapsed_ms = run_mc_analysis(
                 _generic_prompt(prompt_context, custom_prompt),
-                allowed_dirs=allowed_dirs,
                 cmd=analyzer_cmd,
                 agent=analyzer_agent,
                 default_agent=report_session.primary_agent_type,

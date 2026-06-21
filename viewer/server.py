@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import re
-import sys
 import time
 import uuid
 import webbrowser
@@ -18,7 +17,6 @@ import urllib.request
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter, SessionRenameError
 from ccwhat.adapters.claude import ClaudeAdapter
-from ccwhat.adapters.registry import create_adapter
 from ccwhat.session_report import normalize_session_for_report
 
 
@@ -974,13 +972,11 @@ def _make_handler(
                 # New HTML report pipeline (session_report module)
                 from ccwhat.session_report import build_generic_html_report, build_html_session_report
                 report_session = normalize_session_for_report(session)
-                allowed = [report_session.project_path] if report_session.project_path else None
                 report_started = time.monotonic()
                 effective_agent = _analyzer_agent or self._adapter_agent() or report_session.primary_agent_type or "claude"
                 if mode == "generic":
                     result = build_generic_html_report(
                         session,
-                        allowed_dirs=allowed,
                         custom_prompt=custom_prompt,
                         analyzer_cmd=analyzer_cmd,
                         analyzer_agent=effective_agent,
@@ -989,7 +985,6 @@ def _make_handler(
                 else:
                     result = build_html_session_report(
                         session,
-                        allowed_dirs=allowed,
                         custom_prompt=custom_prompt,
                         analyzer_cmd=analyzer_cmd,
                         analyzer_agent=effective_agent,

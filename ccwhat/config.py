@@ -221,15 +221,3 @@ def _toml_str_list(key: str, values: list[str]) -> str:
 def generate_local_session_id() -> str:
     """Generate a local session ID for requests without X-Claude-Code-Session-Id."""
     return f"local-{uuid.uuid4()}"
-
-
-# ---------------------------------------------------------------------------
-# Legacy migration helper
-# ---------------------------------------------------------------------------
-
-
-def legacy_raw_log_dir_if_exists() -> Path | None:
-    """Return legacy raw-req-resp dir if it exists, for migration reads."""
-    if LEGACY_RAW_LOG_DIR.exists():
-        return LEGACY_RAW_LOG_DIR
-    return None

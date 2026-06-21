@@ -7,7 +7,6 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -16,7 +15,6 @@ import click
 from ccwhat.config import (
     DEFAULT_CONFIG_PATH,
     RecordingConfig,
-    generate_local_session_id,
     normalize_path,
     save_config,
 )

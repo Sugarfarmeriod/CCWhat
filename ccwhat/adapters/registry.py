@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from ccwhat.adapters.base import AdapterNotImplementedError, AgentAdapter
 from ccwhat.adapters.claude import ClaudeAdapter

@@ -22,8 +22,6 @@ from ccwhat.config import (
     DEFAULT_RAW_LOG_DIR,
     generate_local_session_id,
     load_config,
-    normalize_path,
-    validate_domain,
 )
 
 
@@ -38,17 +36,6 @@ def _viewer_agent_marker_path(port: int) -> Path:
     """Return path to the marker file tracking which agent the viewer serves."""
     import tempfile
     return Path(tempfile.gettempdir()) / f"ccwhat-viewer-{port}.agent"
-
-
-def _viewer_agent_matches(port: int, agent_name: str) -> bool:
-    """Return True if an existing viewer on this port serves the given agent."""
-    marker = _viewer_agent_marker_path(port)
-    if not marker.exists():
-        return False
-    try:
-        return marker.read_text().strip() == agent_name
-    except OSError:
-        return False
 
 
 def _write_viewer_agent_marker(port: int, agent_name: str) -> None:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from ccwhat.adapters.registry import create_adapter, normalize_agent_name
+from ccwhat.adapters.registry import create_adapter
 from ccwhat.config import DEFAULT_CONFIG_PATH, DEFAULT_RAW_LOG_DIR
 
 

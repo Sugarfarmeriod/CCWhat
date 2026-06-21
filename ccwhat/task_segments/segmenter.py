@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from .evidence import detect_final_claim, extract_evidence
 from .models import (

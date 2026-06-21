@@ -2,6 +2,18 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.2.6 - 2026-06-22
+
+### 代码瘦身
+
+### 改进
+
+- **死代码清理**：移除未使用的 analyzer helper、viewer agent marker helper、legacy raw log helper、无效 `allowed_dirs` 分析参数和未引用的交互报告 prompt 模板。
+- **导入整理**：清理多个后端模块中的未使用 import 和无效局部变量，降低后续 FastAPI 迁移前的噪音。
+- **缓存清理**：移除仓库中的 Python `__pycache__` 和 `.DS_Store` 本地缓存文件。
+
+---
+
 ## v2.2.5 - 2026-06-20
 
 ### Viewer 双语切换与界面优化

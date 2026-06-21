@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import click
 
 
@@ -23,8 +21,6 @@ def start_mc(extra_args: tuple) -> None:
     )
     # Forward to run command for backwards compatibility
     from ccwhat.commands.run import run
-    from click.testing import CliRunner
 
-    args = ["--"] + list(extra_args) if extra_args else ["--", "claude"]
     ctx = click.get_current_context()
     ctx.invoke(run, target_args=("claude", *extra_args))
