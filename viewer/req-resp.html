@@ -536,6 +536,41 @@ select.field { cursor: pointer; }
   opacity: 0.9; transition: opacity 0.15s;
 }
 .replay-action-btn:hover { opacity: 1; }
+/* Multi-message edit list */
+.replay-msg-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  padding-right: 4px;
+}
+.replay-msg-item {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elevated); overflow: hidden;
+}
+.replay-msg-item.expanded { border-color: var(--border-strong); }
+.replay-msg-item.has-edit { border-left: 3px solid var(--accent); }
+.replay-msg-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; user-select: none; background: var(--bg-surface);
+}
+.replay-msg-header:hover { background: color-mix(in srgb, var(--bg-surface) 95%, var(--accent)); }
+.msg-role {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 2px 6px; border-radius: 4px; background: var(--accent); color: #fff;
+}
+.msg-idx { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
+.msg-edit-mark { font-size: 12px; margin-left: 4px; }
+.msg-chevron {
+  margin-left: auto; font-size: 10px; color: var(--text-tertiary);
+  transition: transform 0.2s ease;
+}
+.replay-msg-item.expanded .msg-chevron { transform: rotate(90deg); }
+.replay-msg-body {
+  display: none; padding: 12px; border-top: 1px solid var(--border);
+}
+.replay-msg-item.expanded .replay-msg-body { display: block; }
+/* Diff section collapsible */
+.diff-section-chevron { transition: transform 0.2s ease; }
+.replay-diff-section.collapsed .diff-section-chevron { transform: rotate(-90deg); }
+.replay-diff-section.collapsed .replay-diff-grid { display: none; }
 @media not all {
 /* ── Open Design: warm request / response workbench (disabled) ────────── */
 :root {
@@ -2184,6 +2219,10 @@ let currentModalRecord = null;
 let currentModalRecordKey = null;
 let currentModalRecordIdx = null;
 
+// Multi-message edit state (reset each time renderReplayEditView opens)
+let editedMessages = {};   // {msgIndex: editedText}
+let originalContent = {};  // {msgIndex: originalText}
+
 function setReplayRunning(running, cacheKey) {
   isReplayRunning = running;
   runningReplayKey = running ? cacheKey : null;
@@ -2223,53 +2262,105 @@ function closeReplayModal() {
 }
 
 function renderReplayEditView(record, reqJson, userMsg) {
+  // Reset edit state
+  editedMessages = {};
+  originalContent = {};
+
   const modalBody = document.getElementById('replayModalBody');
-  const msgs = reqJson.messages || [];
-  const replayMsg = userMsg || findReplayTargetMessage(msgs);
-  const editText = extractReplayTargetText(replayMsg);
-  const msgTypeHint = replayMsg ? `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]` : '';
+  const msgs = (reqJson && reqJson.messages) || [];
+
+  // Initialize originalContent for each message
+  msgs.forEach((msg, idx) => {
+    originalContent[idx] = extractMsgTextNoThinking(stripSystemReminders(msg));
+  });
+
+  // Render all messages as collapsible list
+  const itemsHtml = msgs.map((msg, idx) => {
+    const role = msg.role || 'unknown';
+    const isLast = idx === msgs.length - 1;
+    return `
+      <div class="replay-msg-item${isLast ? ' expanded' : ''}" id="replay-msg-item-${idx}">
+        <div class="replay-msg-header" onclick="toggleMsgItem(${idx})">
+          <span class="msg-role">${esc(role)}</span>
+          <span class="msg-idx">#${idx}</span>
+          <span class="msg-edit-mark" id="replay-msg-edit-mark-${idx}" style="display:none">✏️</span>
+          <span class="msg-chevron">▶</span>
+        </div>
+        <div class="replay-msg-body">
+          <textarea class="replay-textarea" style="min-height:100px;width:100%;box-sizing:border-box"
+            data-msg-idx="${idx}"
+            oninput="onMsgTextareaInput(${idx}, this)">${esc(originalContent[idx])}</textarea>
+        </div>
+      </div>`;
+  }).join('');
+
   modalBody.innerHTML = `
-    <div class="replay-edit-section">
-      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">编辑消息内容 ${esc(msgTypeHint)}</div>
-      <textarea id="replayModalTextarea" class="replay-textarea" placeholder="输入消息内容...">${esc(editText)}</textarea>
+    <div class="replay-edit-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:10px">
+      <div class="replay-msg-list">${itemsHtml}</div>
       <div class="replay-actions">
         <button class="replay-btn replay-btn-secondary" onclick="sendReplayFromModal(true)">原文不改，直接回放</button>
         <button class="replay-btn replay-btn-primary" onclick="sendReplayFromModal(false)">发送改写版本</button>
       </div>
     </div>
-    <div id="replayModalResult" style="flex:1;overflow:auto;"></div>
   `;
 }
 
 function renderReplayDiffView(statusData) {
   const modalBody = document.getElementById('replayModalBody');
-  const originalReqJson = currentModalRecord?.request?.body ? JSON.parse(currentModalRecord.request.body) : {};
-  const originalMsgs = originalReqJson.messages || [];
-  const originalReplayMsg = findReplayTargetMessage(originalMsgs);
-  const originalPrompt = extractReplayTargetText(originalReplayMsg);
-  const editedPrompt = statusData.editedText || statusData.originalText || originalPrompt;
+  const replayResult = statusData.result;
+  const appliedEdits = statusData.appliedEdits || [];
+
   const originalParsed = currentModalRecord?._sse_parsed;
   const parsedFromEvents = currentModalRecord?.sse_events?.length ? parseSseEvents(currentModalRecord.sse_events) : null;
   const originalResult = convertOriginalResponseToResult(currentModalRecord, originalParsed || parsedFromEvents);
-  const replayResult = statusData.result;
+
+  const sectionBase = `diff-section-${Date.now()}`;
+
+  // Build edit comparison blocks for each edited message
+  let editBlocksHtml = '';
+  appliedEdits.forEach((edit, n) => {
+    const sectionId = `${sectionBase}-edit-${n}`;
+    editBlocksHtml += `
+      <div class="replay-diff-section" id="${sectionId}" style="flex:0 0 auto">
+        <div class="replay-diff-header" onclick="toggleDiffSection('${sectionId}')">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="diff-section-chevron">▼</span>
+            <h4>修改 #${n + 1} <span style="color:var(--text-tertiary);font-weight:400">(${esc(edit.role || '')})</span></h4>
+          </div>
+        </div>
+        <div class="replay-diff-grid" style="grid-template-rows:auto">
+          <div class="replay-diff-cell">
+            <div class="replay-diff-cell-header"><h5>原始输入</h5></div>
+            <div class="replay-diff-cell-content"><pre>${esc(edit.originalText || '')}</pre></div>
+          </div>
+          <div class="replay-diff-cell">
+            <div class="replay-diff-cell-header"><h5>改写输入</h5></div>
+            <div class="replay-diff-cell-content"><pre>${esc(edit.editedText || '')}</pre></div>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  // Final response comparison block
+  const originalResponseHtml = originalResult
+    ? renderResponseMarkdownNoThinking(originalResult)
+    : '<div style="color:var(--text-tertiary);font-style:italic">原始响应不可用</div>';
+
+  const responseSectionId = `${sectionBase}-response`;
   modalBody.innerHTML = `
-    <div class="replay-diff-section">
-      <div class="replay-diff-header">
-        <h4>对比视图</h4>
-        <button class="replay-btn replay-btn-secondary replay-btn-sm" onclick="switchToEditView()">重新编辑</button>
+    ${editBlocksHtml}
+    <div class="replay-diff-section" id="${responseSectionId}" style="flex:1;min-height:280px">
+      <div class="replay-diff-header" onclick="toggleDiffSection('${responseSectionId}')">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="diff-section-chevron">▼</span>
+          <h4>最终响应</h4>
+        </div>
+        <button class="replay-btn replay-btn-secondary" onclick="event.stopPropagation();switchToEditView()">重新编辑</button>
       </div>
       <div class="replay-diff-grid">
         <div class="replay-diff-cell">
-          <div class="replay-diff-cell-header"><h5>原始 Prompt</h5></div>
-          <div class="replay-diff-cell-content"><pre>${esc(originalPrompt)}</pre></div>
-        </div>
-        <div class="replay-diff-cell">
-          <div class="replay-diff-cell-header"><h5>回放 Prompt</h5></div>
-          <div class="replay-diff-cell-content"><pre>${esc(editedPrompt)}</pre></div>
-        </div>
-        <div class="replay-diff-cell">
           <div class="replay-diff-cell-header"><h5>原始响应</h5></div>
-          <div class="replay-diff-cell-content">${renderResponseMarkdownNoThinking(originalResult)}</div>
+          <div class="replay-diff-cell-content">${originalResponseHtml}</div>
         </div>
         <div class="replay-diff-cell">
           <div class="replay-diff-cell-header"><h5>回放响应</h5></div>
@@ -2278,6 +2369,55 @@ function renderReplayDiffView(statusData) {
       </div>
     </div>
   `;
+}
+
+function stripSystemReminders(msg) {
+  if (!msg || !Array.isArray(msg.content)) return msg;
+  return { ...msg, content: msg.content.filter(b => !(b.type === 'text' && b.text && b.text.trimStart().startsWith('<system-reminder>'))) };
+}
+
+function extractMsgTextNoThinking(msg) {
+  if (!msg) return '';
+  const content = msg.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const block of content) {
+      if (block.type === 'thinking') continue;
+      if (block.type === 'text' && block.text) parts.push(block.text);
+      else if (block.type === 'tool_result' && block.content) {
+        if (typeof block.content === 'string') parts.push(`[Tool Result] ${block.content}`);
+        else if (Array.isArray(block.content)) {
+          const t = block.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+          parts.push(`[Tool Result] ${t}`);
+        }
+      } else if (block.type === 'tool_use') {
+        parts.push(`[Tool Use: ${block.name}] ${JSON.stringify(block.input)}`);
+      }
+    }
+    return parts.join('\n\n');
+  }
+  if (msg.text) return msg.text;
+  return '';
+}
+
+function toggleMsgItem(idx) {
+  const item = document.getElementById(`replay-msg-item-${idx}`);
+  if (item) item.classList.toggle('expanded');
+}
+
+function toggleDiffSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('collapsed');
+}
+
+function onMsgTextareaInput(idx, textarea) {
+  editedMessages[idx] = textarea.value;
+  const isEdited = textarea.value !== originalContent[idx];
+  const item = document.getElementById(`replay-msg-item-${idx}`);
+  const mark = document.getElementById(`replay-msg-edit-mark-${idx}`);
+  if (item) item.classList.toggle('has-edit', isEdited);
+  if (mark) mark.style.display = isEdited ? 'inline' : 'none';
 }
 
 function extractMsgText(msg) {
@@ -2453,67 +2593,59 @@ function renderResponseMarkdownNoThinking(responseJson) {
   return html || '<div style="color:var(--text-tertiary);font-style:italic">无内容</div>';
 }
 
-async function switchToEditView() {
+function switchToEditView() {
   if (!currentModalRecord) return;
-  const statusResp = await fetch(`${apiBase()}/api/replay/status?recordKey=${encodeURIComponent(currentModalRecordKey)}`);
-  const statusData = await statusResp.json();
-  let editText = '';
-  if (statusData.ok && statusData.hasReplay) {
-    editText = statusData.editedText || statusData.originalText || '';
-  } else {
-    try {
-      const body = JSON.parse(currentModalRecord.request?.body || '{}');
-      const msgs = body.messages || [];
-      const replayMsg = findReplayTargetMessage(msgs);
-      if (replayMsg) editText = extractReplayTargetText(replayMsg);
-    } catch {}
-  }
-  let msgTypeHint = '';
-  try {
-    const body = JSON.parse(currentModalRecord.request?.body || '{}');
-    const msgs = body.messages || [];
-    const replayMsg = findReplayTargetMessage(msgs);
-    if (replayMsg) msgTypeHint = `[${replayMsg.role}${replayMsg.name ? ': ' + replayMsg.name : ''}]`;
-  } catch {}
-  const modalBody = document.getElementById('replayModalBody');
-  modalBody.innerHTML = `
-    <div class="replay-edit-section">
-      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">编辑消息内容 ${esc(msgTypeHint)}</div>
-      <textarea id="replayModalTextarea" class="replay-textarea" placeholder="输入消息内容...">${esc(editText)}</textarea>
-      <div class="replay-actions">
-        <button class="replay-btn replay-btn-secondary" onclick="sendReplayFromModal(true)">原文不改，直接回放</button>
-        <button class="replay-btn replay-btn-primary" onclick="sendReplayFromModal(false)">发送改写版本</button>
-      </div>
-    </div>
-    <div id="replayModalResult" style="flex:1;overflow:auto;"></div>
-  `;
+  const reqJson = JSON.parse(currentModalRecord.request?.body || '{}');
+  renderReplayEditView(currentModalRecord, reqJson, null);
 }
 
 async function sendReplayFromModal(useOriginal) {
-  const textarea = document.getElementById('replayModalTextarea');
-  const resultDiv = document.getElementById('replayModalResult');
-  const editedText = useOriginal ? null : textarea.value;
+  // Show loading - replace entire modal body temporarily
+  const modalBody = document.getElementById('replayModalBody');
+  const loadingHtml = `
+    <div class="replay-loading" style="padding:30px;justify-content:center">
+      <span class="replay-spinner"></span>
+      <span>请求中...</span>
+    </div>`;
+  modalBody.innerHTML = loadingHtml;
   setReplayRunning(true, currentModalRecordKey);
-  resultDiv.innerHTML = `<div class="replay-loading"><span class="replay-spinner"></span><span>请求中...</span></div>`;
-  document.querySelectorAll('.replay-btn').forEach(btn => btn.disabled = true);
+
   try {
     const record = currentModalRecord;
     const reqJson = JSON.parse(record.request?.body || '{}');
-    const msgs = reqJson.messages || [];
-    const userMsg = findReplayTargetMessage(msgs);
-    const originalText = extractReplayTargetText(userMsg);
+
+    // Collect edited entries with changes, sorted by index
+    let edits = [];
+    if (!useOriginal) {
+      Object.entries(editedMessages).forEach(([idxStr, text]) => {
+        const idx = parseInt(idxStr, 10);
+        if (text !== originalContent[idx]) {
+          edits.push({ msgIndex: idx, editedText: text });
+        }
+      });
+      edits.sort((a, b) => a.msgIndex - b.msgIndex);
+    }
+
+    // Create session
     const createResp = await fetch(`${apiBase()}/api/replay/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record, reqJson, userMsg, originalText, recordKey: currentModalRecordKey })
+      body: JSON.stringify({
+        record,
+        reqJson,
+        originalText: '',
+        recordKey: currentModalRecordKey
+      })
     });
     if (!createResp.ok) throw new Error(`Failed to create session: ${createResp.status}`);
     const createData = await createResp.json();
     if (!createData.ok) throw new Error(createData.error || 'Failed to create session');
+
+    // Send replay with edits array
     const sendResp = await fetch(`${apiBase()}/api/replay/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: createData.sessionId, editedText })
+      body: JSON.stringify({ sessionId: createData.sessionId, edits })
     });
     if (!sendResp.ok) {
       const errorText = await sendResp.text();
@@ -2521,13 +2653,15 @@ async function sendReplayFromModal(useOriginal) {
     }
     const sendData = await sendResp.json();
     if (!sendData.ok) throw new Error(sendData.error || 'Unknown error');
-    const statusResp = await fetch(`${apiBase()}/api/replay/status?recordKey=${encodeURIComponent(currentModalRecordKey)}`);
-    const statusData = await statusResp.json();
-    if (statusData.ok && statusData.hasReplay) renderReplayDiffView(statusData);
+
+    // Render diff view with appliedEdits from response
+    renderReplayDiffView({
+      result: sendData.result,
+      appliedEdits: sendData.appliedEdits || [],
+    });
   } catch (err) {
-    resultDiv.innerHTML = `<div style="color:var(--danger);padding:20px">错误: ${esc(err.message)}</div>`;
+    modalBody.innerHTML = `<div style="color:var(--danger);padding:20px">错误: ${esc(err.message)}</div>`;
   } finally {
-    document.querySelectorAll('.replay-btn').forEach(btn => btn.disabled = false);
     setReplayRunning(false, null);
   }
 }
