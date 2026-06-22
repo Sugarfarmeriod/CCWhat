@@ -629,7 +629,13 @@ class TestRunAgentInferenceAndFallback(unittest.TestCase):
         from unittest import mock
         from click.testing import CliRunner
         from ccwhat.cli import cli
-        with mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
+        fake_run = mock.Mock(run_id="run-test", control={"token": "token"})
+        fake_registry = mock.Mock()
+        fake_registry.create_run.return_value = fake_run
+        with mock.patch("ccwhat.commands.run.RunRegistry", return_value=fake_registry), \
+             mock.patch("ccwhat.commands.run.RuntimeController"), \
+             mock.patch("ccwhat.commands.run.install_claude_integration"), \
+             mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
              mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
              mock.patch("ccwhat.commands.run.subprocess.Popen") as mp:
             m = mock.MagicMock()

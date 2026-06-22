@@ -23,6 +23,13 @@ from ccwhat.config import (
     generate_local_session_id,
     load_config,
 )
+from ccwhat.runtime.claude_integration import (
+    ClaudeIntegrationConflict,
+    install_claude_integration,
+)
+from ccwhat.runtime.controller import RuntimeController
+from ccwhat.runtime.ports import resolve_runtime_ports
+from ccwhat.runtime.registry import RunRegistry, utc_now
 
 
 class _ManagedWebServer(Protocol):
@@ -312,14 +319,16 @@ def _resolve_target_binary(target_args: tuple[str, ...]) -> tuple[str, ...]:
     help="Path to config.toml.",
 )
 @click.option("--no-setup", is_flag=True, help="Skip onboarding even if no config exists.")
+@click.option("--runtime-recording/--no-runtime-recording", default=False, hidden=True)
 @click.argument("target_args", nargs=-1, type=click.UNPROCESSED)
 def run(
-    port: int,
+    port: int | None,
     web: bool,
-    web_port: int,
+    web_port: int | None,
     output: Path,
     config_path: Path | None,
     no_setup: bool,
+    runtime_recording: bool,
     target_args: tuple[str, ...],
 ) -> None:
     """Launch a command through the ccwhat proxy with env vars injected.
@@ -342,6 +351,13 @@ def run(
         sys.exit(1)
 
     agent_name = infer_agent_from_target(target_args)
+    proxy_auto_allocated = port is None
+    viewer_auto_allocated = web_port is None
+    port, web_port, control_port = resolve_runtime_ports(
+        proxy_port=port,
+        viewer_port=web_port,
+        need_viewer=web,
+    )
     cfg = load_config(config_path)
 
     from ccwhat.config import DEFAULT_MAX_BODY_BYTES, DEFAULT_REDACT_HEADERS, DEFAULT_REDACT_PATTERNS
@@ -388,6 +404,35 @@ def run(
     local_session_id = generate_local_session_id()
     proxy_proc: subprocess.Popen | None = None
     web_server: _ManagedWebServer | None = None
+    registry: RunRegistry | None = None
+    runtime_run_id: str | None = None
+    runtime_controller: RuntimeController | None = None
+    runtime_token = ""
+
+    if runtime_recording and agent_name == "claude":
+        registry = RunRegistry()
+        runtime_run = registry.create_run(
+            agent=agent_name,
+            workspace=Path.cwd(),
+            target_args=target_args,
+            proxy_port=port,
+            viewer_port=web_port,
+            control_port=control_port,
+            proxy_auto_allocated=proxy_auto_allocated,
+            viewer_auto_allocated=viewer_auto_allocated,
+        )
+        runtime_run_id = runtime_run.run_id
+        runtime_token = str(runtime_run.control.get("token") or "")
+        try:
+            install_claude_integration(Path.cwd())
+        except (ClaudeIntegrationConflict, json.JSONDecodeError) as exc:
+            registry.update(runtime_run_id, status="integration_error", finished_at=utc_now())
+            click.echo(f"Error: failed to install Claude Code CCWhat integration: {exc}", err=True)
+            sys.exit(1)
+        runtime_controller = RuntimeController(registry, runtime_run_id, control_port)
+        runtime_controller.start()
+        registry.update(runtime_run_id, status="running")
+        click.echo(f"Runtime run       : {runtime_run_id}")
 
     if _proxy_is_running(port):
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")
@@ -416,6 +461,11 @@ def run(
     child_env["HTTPS_PROXY"] = f"http://127.0.0.1:{port}"
     child_env["HTTP_PROXY"] = f"http://127.0.0.1:{port}"
     child_env["NODE_EXTRA_CA_CERTS"] = str(ca_cert)
+    if runtime_run_id is not None:
+        child_env["CCWHAT_RUNTIME_RUN_ID"] = runtime_run_id
+        child_env["CCWHAT_RUNTIME_CONTROL_PORT"] = str(control_port)
+        child_env["CCWHAT_RUNTIME_TOKEN"] = runtime_token
+        child_env["CCWHAT_RUNTIME_WORKSPACE"] = str(Path.cwd().resolve())
     # NO_PROXY is preserved unless already overridden
 
     target_proc: subprocess.Popen | None = None
@@ -426,6 +476,12 @@ def run(
         if resolved != target_args:
             click.echo(f"Resolved {target_args[0]} → {resolved[0]}")
         target_proc = subprocess.Popen(list(resolved), env=child_env)
+        if registry is not None and runtime_run_id is not None:
+            registry.update(
+                runtime_run_id,
+                agent_process={"pid": target_proc.pid, "status": "running"},
+                status="running",
+            )
         exit_code = target_proc.wait()
     except FileNotFoundError:
         click.echo(f"Error: command not found: {target_args[0]}", err=True)
@@ -439,6 +495,19 @@ def run(
                 target_proc.kill()
                 exit_code = target_proc.wait()
     finally:
+        if registry is not None and runtime_run_id is not None:
+            registry.update(
+                runtime_run_id,
+                status="exited",
+                finished_at=utc_now(),
+                agent_process={
+                    "pid": target_proc.pid if target_proc is not None else None,
+                    "status": "exited",
+                    "exit_code": exit_code,
+                },
+            )
+        if runtime_controller is not None:
+            runtime_controller.stop()
         if proxy_proc is not None:
             proxy_proc.terminate()
             try:

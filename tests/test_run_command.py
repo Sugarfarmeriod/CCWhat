@@ -324,7 +324,13 @@ class RunCommandTests(unittest.TestCase):
             return m
 
         cfg = RecordingConfig(preset="claude", onboarding_complete=True)
+        fake_run = mock.Mock(run_id="run-test", control={"token": "token"})
+        fake_registry = mock.Mock()
+        fake_registry.create_run.return_value = fake_run
         with mock.patch("ccwhat.commands.run.load_config", return_value=cfg), \
+             mock.patch("ccwhat.commands.run.RunRegistry", return_value=fake_registry), \
+             mock.patch("ccwhat.commands.run.RuntimeController"), \
+             mock.patch("ccwhat.commands.run.install_claude_integration"), \
              mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
              mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
              mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen):
@@ -360,7 +366,13 @@ class RunCommandTests(unittest.TestCase):
             m.wait.return_value = 0
             return m
 
+        fake_run = mock.Mock(run_id="run-test", control={"token": "token"})
+        fake_registry = mock.Mock()
+        fake_registry.create_run.return_value = fake_run
         with mock.patch("ccwhat.commands.run.load_config", return_value=cfg), \
+             mock.patch("ccwhat.commands.run.RunRegistry", return_value=fake_registry), \
+             mock.patch("ccwhat.commands.run.RuntimeController"), \
+             mock.patch("ccwhat.commands.run.install_claude_integration"), \
              mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
              mock.patch("ccwhat.commands.run._start_managed_web") as start_web, \
              mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen):
