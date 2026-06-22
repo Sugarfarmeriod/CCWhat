@@ -712,7 +712,35 @@ class ViewerBackend:
             "result": session.get("result"),
             "isLoading": session.get("isLoading", False),
             "error": session.get("error"),
+            "appliedEdits": session.get("appliedEdits", []),
         }
+
+    @staticmethod
+    def _extract_msg_text_no_thinking(msg: dict[str, Any]) -> str:
+        """Extract message text, skipping thinking blocks."""
+        if not msg:
+            return ""
+        content = msg.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if block.get("type") == "thinking":
+                    continue
+                if block.get("type") == "text" and block.get("text"):
+                    parts.append(block["text"])
+                elif block.get("type") == "tool_result" and block.get("content"):
+                    tool_content = block["content"]
+                    if isinstance(tool_content, str):
+                        parts.append(f"[Tool Result] {tool_content}")
+                    elif isinstance(tool_content, list):
+                        texts = [c.get("text", "") for c in tool_content if c.get("type") == "text"]
+                        parts.append(f"[Tool Result] {''.join(texts)}")
+                elif block.get("type") == "tool_use":
+                    parts.append(f"[Tool Use: {block.get('name', '')}] {json.dumps(block.get('input', {}))}")
+            return "\n\n".join(parts)
+        return ""
 
     def create_replay_session_response(self, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         record = payload.get("record", {})
@@ -732,6 +760,7 @@ class ViewerBackend:
             "isLoading": False,
             "result": None,
             "error": None,
+            "appliedEdits": [],
         }
         self.replay_store[session_id] = session_data
         if record_key:
@@ -741,51 +770,35 @@ class ViewerBackend:
 
     def send_replay_response(self, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         session_id = payload.get("sessionId", "")
-        edited_text = payload.get("editedText")
+        edits = payload.get("edits", [])  # [{msgIndex, editedText}]
 
         if not session_id or session_id not in self.replay_store:
             return 404, {"ok": False, "error": "session not found"}
 
         session = self.replay_store[session_id]
-        should_edit_request = edited_text is not None
-        if should_edit_request:
-            session["editedText"] = edited_text
-
         session["isLoading"] = True
+
+        # Deep copy to avoid mutating stored original
         req_body = json.loads(json.dumps(session["reqJson"]))
         msgs = req_body.get("messages", [])
 
-        if should_edit_request and msgs:
-            last_msg = msgs[-1]
-            content = last_msg.get("content", "")
-            if isinstance(content, str):
-                last_msg["content"] = session["editedText"]
-            elif isinstance(content, list):
-                for block in content:
-                    if block.get("type") == "text":
-                        block["text"] = session["editedText"]
-                        break
-                else:
-                    for block in content:
-                        if block.get("type") != "tool_result":
-                            continue
-                        tool_content = block.get("content")
-                        if isinstance(tool_content, str):
-                            block["content"] = session["editedText"]
-                        elif isinstance(tool_content, list):
-                            for item in tool_content:
-                                if item.get("type") == "text":
-                                    item["text"] = session["editedText"]
-                                    break
-                            else:
-                                block["content"] = session["editedText"]
-                        else:
-                            block["content"] = session["editedText"]
-                        break
-                    else:
-                        last_msg["content"] = session["editedText"]
-                if not any(b.get("type") in {"text", "tool_result"} for b in content):
-                    last_msg["content"] = session["editedText"]
+        # Apply edits: record originalText before each replacement
+        applied_edits = []
+        for edit in edits:
+            raw_idx = edit.get("msgIndex", 0)
+            edited_text = edit.get("editedText", "")
+            idx = max(0, min(raw_idx, len(msgs) - 1)) if msgs else 0
+            if not msgs:
+                continue
+            msg = msgs[idx]
+            original_text = self._extract_msg_text_no_thinking(msg)
+            msg["content"] = edited_text
+            applied_edits.append({
+                "msgIndex": idx,
+                "role": msg.get("role", ""),
+                "originalText": original_text,
+                "editedText": edited_text,
+            })
 
         api_url = os.environ.get("CLAUDE_API_URL", "https://mcli.sankuai.com/v1/messages")
         if "?" not in api_url:
@@ -820,8 +833,9 @@ class ViewerBackend:
             response.close()
             result = json.loads(response_data)
             session["result"] = result
+            session["appliedEdits"] = applied_edits
             session["isLoading"] = False
-            return 200, {"ok": True, "result": result}
+            return 200, {"ok": True, "result": result, "appliedEdits": applied_edits}
         except Exception as exc:
             session["isLoading"] = False
             session["error"] = str(exc)
