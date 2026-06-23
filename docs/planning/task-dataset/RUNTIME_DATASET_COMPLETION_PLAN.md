@@ -25,24 +25,28 @@ ccwhat -- <agent>
 
 ## 总体切分
 
-建议拆成 3 个子计划、4 个 OpenSpec change。
+建议拆成 3 个子计划、6 个 OpenSpec change。
 
 ```text
 Plan 1: Runtime Recording MVP
-  Change 1: add-runtime-task-recording-mvp
+  Change 1: add-runtime-task-recording-mvp [已完成并归档]
 
 Plan 2: Multi-Agent Slash Integration
-  Change 2: productionize-agent-slash-integrations
+  Change 2: add-codex-runtime-slash-integration
+  Change 3: add-opencode-runtime-command-integration
+  Change 4: verify-opencode-model-visibility-and-promote-confidence
 
 Plan 3: Diagnosis-Ready Dataset and Attribution
-  Change 3: promote-runtime-dataset-v2
-  Change 4: add-auto-attribution-diagnosis
+  Change 5: promote-runtime-dataset-v2
+  Change 6: add-auto-attribution-diagnosis
 ```
 
 这样切的原因：
 
 - Plan 1 先跑通一条完整竖切链路。
-- Plan 2 把竖切链路推广到三类 Agent，并处理安装、升级、冲突和降级证据。
+- Plan 2 把竖切链路推广到 Codex/OpenCode，并处理安装、升级、冲突和降级证据。
+- Codex 已具备与 Claude 相近的 `UserPromptSubmit` block 能力，适合先做正式竖切。
+- OpenCode 已确认支持项目级 command 和 `command.execute.before` plugin hook；是否完全不触发模型请求仍需抓包确认。
 - Plan 3 在稳定采集能力上完成最终 Dataset 契约和自动归因诊断。
 
 不建议拆成更多小 plan，因为过细会导致很多中间态只是在搭架子，不能直接证明最终目标。
@@ -51,7 +55,7 @@ Plan 3: Diagnosis-Ready Dataset and Attribution
 
 ## Plan 1: Runtime Recording MVP
 
-### Change 1: `add-runtime-task-recording-mvp`
+### Change 1: `add-runtime-task-recording-mvp` [已完成并归档]
 
 目标：先用一个 Agent 跑通完整 runtime recording 闭环。
 
@@ -63,7 +67,7 @@ Claude Code
 
 原因：
 
-- Claude Code 官方 hook 里有 `UserPromptExpansion`，最贴近 slash command 展开前拦截。
+- Claude Code 官方 hook 里有 `UserPromptSubmit`，可在 prompt 发送给模型前拦截并 block。
 - 更容易验证“原生菜单可见 + 本地执行 + 不发送模型”的强证据路径。
 
 ### 范围
@@ -87,7 +91,7 @@ ccwhat -- claude
 ### 主要任务
 
 1. Runtime run registry
-   - 新增 `~/.ccwhat/runtime-runs/<run-id>/run.json`
+   - 新增 `~/.ccwhat/runtime-runs/<agent>/<run-id>/run.json`
    - 记录 agent、workspace、pid、ports、active_task_id、status
    - 支持多个 run 并发
 
@@ -112,8 +116,8 @@ ccwhat -- claude
 5. Claude Code native menu integration
    - 写入 CCWhat 管理的 Claude command/skill 文件
    - 写入或更新 Claude hook 配置
-   - 使用 `UserPromptExpansion` 捕获 CCWhat command
-   - block 原 prompt 展开并调用 CCWhat controller
+   - 使用 `UserPromptSubmit` 捕获 CCWhat command
+   - block 原 prompt 并调用 CCWhat controller
 
 6. `ccwhat -- claude` wiring
    - 启动前 ensure integration
@@ -131,7 +135,7 @@ ccwhat -- claude
 - Dataset staging 中存在：
 
 ```text
-~/.ccwhat/runtime-runs/<run-id>/
+~/.ccwhat/runtime-runs/claude/<run-id>/
   run.json
   tasks/task-001/
     task.json
@@ -177,95 +181,200 @@ ccwhat -- claude
 
 ## Plan 2: Multi-Agent Slash Integration
 
-### Change 2: `productionize-agent-slash-integrations`
+Plan 2 不再把 Codex 和 OpenCode 混进一个大 change。原因是两者确定性不同：
 
-目标：把 Plan 1 跑通的机制推广到 Codex、OpenCode、Claude Code，并形成可安装、可升级、可诊断的 integration 管理体系。
+```text
+Codex:
+  已有官方 UserPromptSubmit hook，可做原生菜单 + 本地 controller + block prompt 的强证据路径。
+
+OpenCode:
+  custom command 默认是 prompt-based。
+  项目级 plugin 可在 command.execute.before 调用本地 controller，并清空 command parts。
+  仍需确认清空 parts 后是否完全不会触发空模型请求。
+```
+
+因此 Plan 2 的执行顺序是：
+
+1. 先做 Codex 正式竖切。
+2. 再做 OpenCode command/plugin MVP。
+3. 抓包确认 OpenCode command 清空 parts 后的模型可见性，并据此提升或保留 confidence。
+
+这样可以尽快把 OpenCode 接入 runtime Dataset，同时把模型可见性作为独立验收项处理。
+
+### Change 2: `add-codex-runtime-slash-integration`
+
+目标：把 Plan 1 的 runtime recording 机制推广到 Codex，达到与 Claude Code 相同的强证据标准。
 
 ### 范围
 
-这个 change 不重新设计 runtime recording，而是生产化 Agent integration。
-
-```text
-ccwhat integrations install --agent claude
-ccwhat integrations install --agent codex
-ccwhat integrations install --agent opencode
-ccwhat integrations doctor
-ccwhat integrations uninstall --agent <agent>
-```
-
-同时让：
+这个 change 不重新设计 runtime recording，而是实现 Codex 的原生菜单注册、提交前 hook block 和 `ccwhat -- codex` runtime wiring。
 
 ```text
 ccwhat -- codex
-ccwhat -- opencode
-ccwhat -- claude
+  -> 创建 runtime run
+  -> 自动分配 proxy/viewer/control 端口
+  -> 安装或检查 Codex CCWhat prompt/skill + hook
+  -> 原生 slash 菜单出现 CCWhat 命令
+  -> /ccwhat:start 触发 marker prompt
+  -> Codex UserPromptSubmit hook 捕获 marker
+  -> 调用 CCWhat runtime controller
+  -> block prompt，不发送模型
+  -> 生成 task staging
 ```
-
-启动时自动 ensure 对应 integration 可用。
 
 ### 主要任务
 
-1. Integration installer framework
-   - agent-specific installer interface
-   - managed marker
-   - version hash
-   - conflict detection
-   - uninstall only removes CCWhat-managed files
+1. Codex command registration
+   - 写入 CCWhat 管理的 Codex prompt/skill 文件
+   - 菜单中至少出现 start、finish
+   - 优先 `/ccwhat:start`、`/ccwhat:finish`
+   - 如 Codex 命名限制不支持冒号，降级为 `/ccwhat-start`、`/ccwhat-finish`
 
-2. Claude Code adapter hardening
-   - 固化 Plan 1 的 command/skill + hook 路径
-   - 补 `doctor` 检查
+2. Codex hook installation
+   - 写入或更新 Codex `UserPromptSubmit` hook
+   - hook 检测 CCWhat marker
+   - hook 调用 runtime controller
+   - hook 返回 block，阻止 marker prompt 发给模型
 
-3. Codex adapter
-   - 注册 slash 菜单入口
-   - 使用 `UserPromptSubmit` hook 捕获 marker
-   - block prompt 并调用 CCWhat controller
-   - 记录 `model_visible` 和 `agent_log_visible`
+3. Runtime evidence
+   - `integration=codex_user_prompt_submit`
+   - `model_visible=false`
+   - `agent_log_visible=false` 或实测后的真实值
+   - `confidence=high`
 
-4. OpenCode adapter
-   - 注册 OpenCode command 菜单项
-   - spike 并实现 plugin 拦截路径
-   - 如果不能 cancel prompt，启用明确降级路径
-   - 降级时必须记录 `model_visible=true`、`confidence=medium`
+4. `ccwhat -- codex` wiring
+   - 启动前 ensure Codex integration
+   - 创建 run
+   - 启动 controller/proxy/viewer
+   - 注入 run env
+   - Agent 退出时关闭 controller
 
-5. Compatibility matrix
-   - 每个 Agent 输出自身能力：
+5. Tests and manual acceptance
+   - 文件生成/升级/冲突检测测试
+   - hook -> controller -> staging 测试
+   - CLI wiring 测试
+   - 手工验收说明
+
+### 验收标准
+
+- 用户通过 `ccwhat -- codex` 启动 Codex。
+- Codex 原生 slash 菜单中能看到 CCWhat start/finish。
+- 选择 start 后，本地生成 active task。
+- 选择 finish 后，task finalized。
+- 最新 runtime run 下存在：
+
+```text
+~/.ccwhat/runtime-runs/codex/<run-id>/
+  run.json
+  tasks/task-001/
+    task.json
+    control_events.jsonl
+    repo_before.tar.gz
+    repo_after.tar.gz
+    diff.patch
+```
+
+- `control_events.jsonl` 中 Codex 命令证据标记：
 
 ```json
 {
-  "agent": "codex",
-  "menu_visible": true,
+  "integration": "codex_user_prompt_submit",
   "model_visible": false,
-  "agent_log_visible": false,
   "confidence": "high"
 }
 ```
 
-### 验收标准
-
-- 三类 Agent 启动后都能在原生 slash 菜单看到 CCWhat 命令，或明确报告该 Agent 的限制。
-- Claude Code 和 Codex 至少应达到 `model_visible=false`。
-- OpenCode 如果无法做到不发送模型，必须以降级证据形式跑通。
-- `ccwhat integrations doctor` 能报告每个 Agent 的安装状态、命令可见性、hook/plugin 状态和降级情况。
-
 ### 不在本 change 中做
 
-- 自动归因诊断
+- OpenCode 正式适配
+- integration doctor/uninstall 完整 CLI
 - Dataset v2 schema 升级
-- Viewer 诊断页面
+- 自动归因诊断
 - Natural language skill 触发
+
+### Change 3: `add-opencode-runtime-command-integration`
+
+目标：把 OpenCode 接入 runtime recording MVP，先跑通用户手动 start/finish 切 Task 的完整链路。
+
+### 范围
+
+```text
+ccwhat -- opencode
+  -> 创建 runtime run
+  -> 自动分配 proxy/viewer/control 端口
+  -> 安装或检查项目级 OpenCode command + plugin
+  -> /ccwhat:start 触发 OpenCode command
+  -> command.execute.before plugin 调用 CCWhat runtime controller
+  -> command prompt 进入模型，但只要求回复“收到”
+  -> 生成 task staging
+```
+
+### 主要任务
+
+1. OpenCode command registration
+   - 写入 `.opencode/command/ccwhat:start.md`
+   - 写入 `.opencode/command/ccwhat:finish.md`
+   - 清理 CCWhat 早期生成的 `.opencode/command/ccwhat-start.md` 和 `.opencode/command/ccwhat-finish.md`
+   - 命令不带参数，后端自动生成 `Task1`、`Task2`
+   - 命令 prompt 明确说明这是 CCWhat 本地 task-boundary marker，模型只回复“收到”
+
+2. OpenCode plugin installation
+   - 写入 `.opencode/plugin/ccwhat-runtime.js`
+   - plugin 使用 `command.execute.before`
+   - plugin 调用 runtime controller
+   - plugin 不再声明可以阻止模型请求
+
+3. Runtime evidence
+   - `integration=opencode_command_execute_before`
+   - `model_visible=true`
+   - `agent_log_visible=true`
+   - `confidence=medium`
+
+4. `ccwhat -- opencode` wiring
+   - 启动前 ensure OpenCode integration
+   - 创建 run
+   - 启动 controller/proxy/viewer
+   - 注入 run env
+
+### 验收标准
+
+- 用户通过 `ccwhat -- opencode` 启动 OpenCode。
+- OpenCode 原生 slash 菜单中能看到 `/ccwhat:start` 和 `/ccwhat:finish`。
+- 选择 start 后，本地生成 active task。
+- 选择 finish 后，task finalized。
+- 最新 runtime run 下存在 `task.json`、`control_events.jsonl`、repo before/after snapshot 和 `diff.patch`。
+
+### Change 4: `investigate-opencode-local-intercept`
+
+目标：继续调研 OpenCode 是否存在真正的本地拦截能力，让 `/ccwhat:start`、`/ccwhat:finish` 完全不进入模型请求。
+
+需要确认：
+
+1. OpenCode 是否提供 cancel/prevent command prompt 的官方 API。
+2. plugin 是否能替换 command prompt 为本地响应，且不触发模型请求。
+3. 是否需要改用 PTY wrapper 或 OpenCode 数据库轮询兜底。
+4. 如果找到真拦截路径，再把 `control_events.jsonl` 的 `model_visible`、`agent_log_visible`、`confidence` 调整为更强证据。
+
+结论：
+
+- 当前已知 OpenCode command prompt 会进入模型请求，本阶段接受 `model_visible=true` 的降级路径。
+- 真拦截能力作为后续增强，不阻塞 OpenCode runtime MVP 跑通。
 
 ### 需要提前决策
 
-1. OpenCode 如果无法 cancel prompt，是否允许第一版以 medium-confidence 降级上线？
+1. Codex 如果自定义 prompt 被 block 后仍进入本地 transcript，是否接受？
+
+推荐：接受，但 `agent_log_visible` 必须按实测结果标记。
+
+2. OpenCode 如果无法 cancel prompt，是否允许第一版以 medium-confidence 降级上线？
 
 推荐：允许，但必须在 `doctor` 和 Dataset evidence 中清楚标记。
 
-2. Agent integration 默认写全局用户配置还是项目配置？
+3. Agent integration 默认写全局用户配置还是项目配置？
 
-推荐：默认全局用户配置。项目配置作为高级选项。
+推荐：本阶段默认项目配置，减少修改用户全局 Agent 配置的风险；后续 doctor/install CLI 再支持全局安装。
 
-3. integration 冲突时是否自动覆盖非 CCWhat 文件？
+4. integration 冲突时是否自动覆盖非 CCWhat 文件？
 
 推荐：不覆盖。提示用户处理。
 
@@ -467,4 +576,3 @@ errors/final claim
 ```bash
 openspec change add-runtime-task-recording-mvp
 ```
-

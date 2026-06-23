@@ -47,9 +47,9 @@ class CcwhatGroup(click.Group):
     invoke_without_command=True,
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-@click.option("--port", default=7788, show_default=True, type=int, help="Proxy port.")
+@click.option("--port", default=None, show_default="auto", type=int, help="Proxy port.")
 @click.option("--web/--no-web", default=True, show_default=True, help="Start and open the viewer.")
-@click.option("--web-port", default=7789, show_default=True, type=int, help="Viewer port.")
+@click.option("--web-port", default=None, show_default="auto", type=int, help="Viewer port.")
 @click.option(
     "--output",
     default=str(DEFAULT_RAW_LOG_DIR),
@@ -69,9 +69,9 @@ class CcwhatGroup(click.Group):
 @click.pass_context
 def cli(
     ctx: click.Context,
-    port: int,
+    port: int | None,
     web: bool,
-    web_port: int,
+    web_port: int | None,
     output: str,
     config_path: str | None,
     no_setup: bool,
@@ -95,6 +95,7 @@ def cli(
             output=Path(output),
             config_path=Path(config_path) if config_path else None,
             no_setup=no_setup,
+            runtime_recording=True,
             target_args=tuple(target_args),
         )
         return
