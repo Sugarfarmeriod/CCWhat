@@ -219,7 +219,7 @@ def test_claude_integration_generates_managed_files_and_detects_conflicts() -> N
         assert "CCWHAT_COMMAND=start" in start_command.read_text(encoding="utf-8")
         assert finish_command.exists()
         assert hook.exists()
-        assert "UserPromptExpansion" in settings.read_text(encoding="utf-8")
+        assert "UserPromptSubmit" in settings.read_text(encoding="utf-8")
 
         start_command.write_text("user file\n", encoding="utf-8")
         try:

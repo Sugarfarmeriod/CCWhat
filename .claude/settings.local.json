@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "ccwhat:(start|finish|abort|status|note)|ccwhat-(start|finish|abort|status|note)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ccwhat-runtime-hook.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

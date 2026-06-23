@@ -95,7 +95,7 @@ def _install_hook_settings(settings_path: Path, hook_path: Path) -> None:
     if not isinstance(hooks, dict):
         raise ClaudeIntegrationConflict(f"Claude settings hooks is not an object: {settings_path}")
 
-    entries = hooks.setdefault("UserPromptExpansion", [])
+    entries = hooks.setdefault("UserPromptSubmit", [])
     if not isinstance(entries, list):
         raise ClaudeIntegrationConflict("Claude UserPromptExpansion hooks is not a list")
 
