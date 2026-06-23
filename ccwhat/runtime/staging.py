@@ -21,7 +21,7 @@ class ControlEvidence:
     command: str
     raw_args: str = ""
     agent: str = "claude"
-    integration: str = "claude_user_prompt_expansion"
+    integration: str = "claude_user_prompt_submit"
     model_visible: bool = False
     agent_log_visible: bool = False
     confidence: str = "high"
@@ -47,7 +47,7 @@ class TaskStaging:
             "schema": "ccwhat-runtime-task-v1",
             "task_id": task_id,
             "run_id": run.run_id,
-            "title": title or task_id,
+            "title": self._task_title(task_id),
             "status": "recording",
             "started_at": now,
             "finished_at": None,
@@ -142,6 +142,12 @@ class TaskStaging:
         tasks_dir = self.registry.run_dir(run_id) / "tasks"
         existing = sorted(tasks_dir.glob("task-*")) if tasks_dir.exists() else []
         return f"task-{len(existing) + 1:03d}"
+
+    def _task_title(self, task_id: str) -> str:
+        try:
+            return f"Task{int(task_id.rsplit('-', 1)[1])}"
+        except (IndexError, ValueError):
+            return task_id
 
     def _task_dir(self, run_id: str, task_id: str) -> Path:
         return self.registry.run_dir(run_id) / "tasks" / task_id

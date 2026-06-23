@@ -30,8 +30,8 @@
 6. 检查本地 staging：
 
    ```bash
-   ls ~/.ccwhat/runtime-runs
-   find ~/.ccwhat/runtime-runs -path '*/tasks/task-001/*' -maxdepth 6
+   ls ~/.ccwhat/runtime-runs/claude
+   find ~/.ccwhat/runtime-runs/claude -path '*/tasks/task-001/*' -maxdepth 6
    ```
 
    最新 run 的 `tasks/task-001/` 目录下应存在：
@@ -47,7 +47,7 @@
 7. 检查控制命令证据：
 
    ```bash
-   tail -n 2 ~/.ccwhat/runtime-runs/<run-id>/tasks/task-001/control_events.jsonl
+   tail -n 2 ~/.ccwhat/runtime-runs/claude/<run-id>/tasks/task-001/control_events.jsonl
    ```
 
    `model_visible` 应为 `false`，`confidence` 应为 `high`。

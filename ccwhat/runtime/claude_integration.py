@@ -12,7 +12,7 @@ import sys
 INTEGRATION_VERSION = "1"
 MANAGED_MARKER = "CCWHAT MANAGED RUNTIME TASK COMMAND"
 COMMANDS = {
-    "start": ("CCWhat Task start", "[title]"),
+    "start": ("CCWhat Task start", ""),
     "finish": ("CCWhat Task finish", ""),
     "abort": ("CCWhat Task abort", ""),
     "status": ("CCWhat Task status", ""),
@@ -97,7 +97,7 @@ def _install_hook_settings(settings_path: Path, hook_path: Path) -> None:
 
     entries = hooks.setdefault("UserPromptSubmit", [])
     if not isinstance(entries, list):
-        raise ClaudeIntegrationConflict("Claude UserPromptExpansion hooks is not a list")
+        raise ClaudeIntegrationConflict("Claude UserPromptSubmit hooks is not a list")
 
     command = _portable_hook_command(hook_path)
     managed_entry = {
