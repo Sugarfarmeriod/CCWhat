@@ -27,7 +27,15 @@ from ccwhat.runtime.claude_integration import (
     ClaudeIntegrationConflict,
     install_claude_integration,
 )
+from ccwhat.runtime.codex_integration import (
+    CodexIntegrationConflict,
+    install_codex_integration,
+)
 from ccwhat.runtime.controller import RuntimeController
+from ccwhat.runtime.opencode_integration import (
+    OpenCodeIntegrationConflict,
+    install_opencode_integration,
+)
 from ccwhat.runtime.ports import resolve_runtime_ports
 from ccwhat.runtime.registry import RunRegistry, utc_now
 
@@ -409,7 +417,7 @@ def run(
     runtime_controller: RuntimeController | None = None
     runtime_token = ""
 
-    if runtime_recording and agent_name == "claude":
+    if runtime_recording and agent_name in {"claude", "codex", "opencode"}:
         registry = RunRegistry()
         runtime_run = registry.create_run(
             agent=agent_name,
@@ -424,10 +432,20 @@ def run(
         runtime_run_id = runtime_run.run_id
         runtime_token = str(runtime_run.control.get("token") or "")
         try:
-            install_claude_integration(Path.cwd())
-        except (ClaudeIntegrationConflict, json.JSONDecodeError) as exc:
+            if agent_name == "claude":
+                install_claude_integration(Path.cwd())
+            elif agent_name == "codex":
+                install_codex_integration(Path.cwd())
+            else:
+                install_opencode_integration(Path.cwd())
+        except (
+            ClaudeIntegrationConflict,
+            CodexIntegrationConflict,
+            OpenCodeIntegrationConflict,
+            json.JSONDecodeError,
+        ) as exc:
             registry.update(runtime_run_id, status="integration_error", finished_at=utc_now())
-            click.echo(f"Error: failed to install Claude Code CCWhat integration: {exc}", err=True)
+            click.echo(f"Error: failed to install {agent_name} CCWhat integration: {exc}", err=True)
             sys.exit(1)
         runtime_controller = RuntimeController(registry, runtime_run_id, control_port)
         runtime_controller.start()

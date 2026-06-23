@@ -4,7 +4,6 @@ name: "CCWhat: start"
 description: CCWhat Task start
 category: Workflow
 tags: [ccwhat, runtime, task]
-argument-hint: [title]
 ---
 
 CCWHAT_COMMAND=start

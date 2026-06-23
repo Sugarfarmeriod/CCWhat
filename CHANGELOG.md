@@ -2,6 +2,21 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.3.1 - 2026-06-23
+
+### OpenCode Runtime Task Recording
+
+通过 `ccwhat -- opencode` 启动时，现在支持原生 task 命令进行任务记录。OpenCode 通过 `.opencode/command/` 和 `.opencode/plugin/` 集成。
+
+### 新增
+
+- **OpenCode 支持**：`ccwhat -- opencode` 启动后，OpenCode 中新增 start/finish 命令，通过 `.opencode/command/` 和 `.opencode/plugin/` 注册
+- **通用 runtime 架构**：`ccwhat.runtime.registry` 支持按 agent 名称分目录存储运行数据
+- **Agent 统一**：Claude Code / OpenCode 均可通过 `ccwhat -- <agent>` 启动并自动注入任务记录能力
+
+---
+
+
 ## v2.3.0 - 2026-06-23
 
 ### Runtime Task Recording MVP

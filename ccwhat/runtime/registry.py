@@ -40,7 +40,18 @@ class RunRegistry:
         self.root = root or RUNTIME_RUNS_DIR
 
     def run_dir(self, run_id: str) -> Path:
+        legacy = self.root / run_id
+        if (legacy / "run.json").exists():
+            return legacy
+        if self.root.exists():
+            matches = sorted(self.root.glob(f"*/{run_id}"))
+            for match in matches:
+                if (match / "run.json").exists():
+                    return match
         return self.root / run_id
+
+    def _run_dir_for_run(self, run: RuntimeRun) -> Path:
+        return self.root / _safe_agent_dir(run.agent) / run.run_id
 
     def run_path(self, run_id: str) -> Path:
         return self.run_dir(run_id) / "run.json"
@@ -77,9 +88,10 @@ class RunRegistry:
         return RuntimeRun(**data)
 
     def save(self, run: RuntimeRun) -> None:
-        run_dir = self.run_dir(run.run_id)
+        existing = self.run_dir(run.run_id)
+        run_dir = existing if (existing / "run.json").exists() else self._run_dir_for_run(run)
         run_dir.mkdir(parents=True, exist_ok=True)
-        path = self.run_path(run.run_id)
+        path = run_dir / "run.json"
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(asdict(run), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         tmp.replace(path)
@@ -95,3 +107,8 @@ class RunRegistry:
 
     def set_active_task(self, run_id: str, task_id: str | None) -> RuntimeRun:
         return self.update(run_id, active_task_id=task_id)
+
+
+def _safe_agent_dir(agent: str) -> str:
+    value = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in agent.lower())
+    return value or "unknown"
