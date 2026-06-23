@@ -2,6 +2,27 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
 
+## v2.3.0 - 2026-06-23
+
+### Runtime Task Recording MVP
+
+通过 `ccwhat -- claude` 启动 Claude Code 时，现在支持原生 slash 命令进行任务记录。
+
+### 新增
+
+- **CCWhat Task 命令**：Claude Code slash 菜单中新增 `/ccwhat:start` 和 `/ccwhat:finish` 命令
+- **任务记录**：支持记录任务开始、完成时间，自动捕获 git 快照和 diff
+- **本地 staging**：任务数据保存在 `~/.ccwhat/runtime-runs/<run-id>/tasks/` 目录
+- **控制事件日志**：记录所有 CCWhat 命令执行历史到 `control_events.jsonl`
+
+### 技术细节
+
+- 新增 `ccwhat.runtime` 模块：控制器、注册表、staging、Claude hook 集成
+- 自动安装 Claude Code 集成：命令文件和 hook 配置
+- 支持 HTTP 控制器本地通信
+
+---
+
 ## v2.2.8 - 2026-06-22
 
 ### 请求回放功能增强
