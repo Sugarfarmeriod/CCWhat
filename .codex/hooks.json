@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "ccwhat_managed": "CCWHAT MANAGED CODEX RUNTIME TASK COMMAND",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/elon2ge/workspace/CCWhat/.venv/bin/python3 -m ccwhat.runtime.codex_hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

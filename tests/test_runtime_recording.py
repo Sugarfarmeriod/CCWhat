@@ -1,0 +1,636 @@
+from __future__ import annotations
+
+import json
+import io
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from unittest import mock
+
+from click.testing import CliRunner
+
+from ccwhat.cli import cli
+from ccwhat.config import RecordingConfig
+from ccwhat.runtime.claude_integration import (
+    ClaudeIntegrationConflict,
+    install_claude_integration,
+)
+from ccwhat.runtime.codex_integration import (
+    CodexIntegrationConflict,
+    install_codex_integration,
+)
+from ccwhat.runtime.opencode_integration import (
+    OpenCodeIntegrationConflict,
+    install_opencode_integration,
+)
+from ccwhat.runtime.client import call_controller
+from ccwhat.runtime.controller import RuntimeController
+from ccwhat.runtime.claude_hook import main as claude_hook_main
+from ccwhat.runtime.codex_hook import main as codex_hook_main
+from ccwhat.runtime.ports import allocate_port, resolve_runtime_ports
+from ccwhat.runtime.registry import RunRegistry
+
+
+def _init_repo(path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=path, check=True, stdout=subprocess.PIPE)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=path, check=True)
+    (path / "README.md").write_text("before\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=path, check=True, stdout=subprocess.PIPE)
+
+
+def test_run_registry_isolates_active_tasks() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = RunRegistry(Path(tmp))
+        run_a = registry.create_run(
+            agent="claude",
+            workspace=Path(tmp),
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=11003,
+        )
+        run_b = registry.create_run(
+            agent="claude",
+            workspace=Path(tmp),
+            target_args=("claude",),
+            proxy_port=12001,
+            viewer_port=12002,
+            control_port=12003,
+        )
+
+        registry.set_active_task(run_a.run_id, "task-001")
+
+        assert registry.run_path(run_a.run_id).parent.parent.name == "claude"
+        assert registry.load(run_a.run_id).active_task_id == "task-001"
+        assert registry.load(run_b.run_id).active_task_id is None
+        assert registry.run_path(run_a.run_id) != registry.run_path(run_b.run_id)
+
+
+def test_run_registry_loads_legacy_flat_runtime_runs() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = RunRegistry(Path(tmp))
+        run = registry.create_run(
+            agent="claude",
+            workspace=Path(tmp),
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=11003,
+        )
+        flat_dir = Path(tmp) / run.run_id
+        flat_dir.mkdir()
+        current_path = registry.run_path(run.run_id)
+        flat_path = flat_dir / "run.json"
+        flat_path.write_text(current_path.read_text(encoding="utf-8"), encoding="utf-8")
+        current_path.unlink()
+
+        assert registry.load(run.run_id).run_id == run.run_id
+        assert registry.run_path(run.run_id) == flat_path
+
+
+def test_runtime_ports_allocate_distinct_ports_and_keep_explicit_values() -> None:
+    proxy, viewer, control = resolve_runtime_ports(proxy_port=None, viewer_port=None, need_viewer=True)
+    assert len({proxy, viewer, control}) == 3
+
+    explicit_proxy = allocate_port()
+    explicit_viewer = allocate_port({explicit_proxy})
+    proxy, viewer, control = resolve_runtime_ports(
+        proxy_port=explicit_proxy,
+        viewer_port=explicit_viewer,
+        need_viewer=True,
+    )
+    assert proxy == explicit_proxy
+    assert viewer == explicit_viewer
+    assert control not in {explicit_proxy, explicit_viewer}
+
+
+def test_controller_start_finish_writes_runtime_task_staging() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        try:
+            token = str(run.control["token"])
+            started = call_controller(
+                port,
+                token,
+                "start",
+                {
+                    "title": "ignored runtime task",
+                    "integration": "claude_user_prompt_submit",
+                    "model_visible": False,
+                    "confidence": "high",
+                },
+            )
+            assert started["ok"] is True
+            noted = call_controller(
+                port,
+                token,
+                "note",
+                {
+                    "raw_args": "important runtime note",
+                    "integration": "claude_user_prompt_submit",
+                    "model_visible": False,
+                    "confidence": "high",
+                },
+            )
+            assert noted["ok"] is True
+
+            (workspace / "README.md").write_text("after\n", encoding="utf-8")
+            finished = call_controller(
+                port,
+                token,
+                "finish",
+                {
+                    "integration": "claude_user_prompt_submit",
+                    "model_visible": False,
+                    "confidence": "high",
+                },
+            )
+            assert finished["ok"] is True
+            second = call_controller(
+                port,
+                token,
+                "start",
+                {
+                    "title": "ignored second task",
+                    "integration": "claude_user_prompt_submit",
+                    "model_visible": False,
+                    "confidence": "high",
+                },
+            )
+            assert second["ok"] is True
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        second_task_dir = registry.run_dir(run.run_id) / "tasks" / "task-002"
+        second_task = json.loads((second_task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task["title"] == "Task1"
+        assert second_task["title"] == "Task2"
+        assert task["status"] == "finalized"
+        assert task["evidence_availability"]["repo_before"] is True
+        assert task["evidence_availability"]["repo_after"] is True
+        assert task["evidence_availability"]["diff"] is True
+        assert (task_dir / "repo_before.tar.gz").exists()
+        assert (task_dir / "repo_after.tar.gz").exists()
+        assert "-before" in (task_dir / "diff.patch").read_text(encoding="utf-8")
+        assert "+after" in (task_dir / "diff.patch").read_text(encoding="utf-8")
+        events = (task_dir / "control_events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(events) == 3
+        assert json.loads(events[0])["model_visible"] is False
+        assert json.loads(events[1])["command"] == "note"
+
+
+def test_controller_rejects_errors() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=None,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        try:
+            token = str(run.control["token"])
+            assert call_controller(port, token, "finish", {})["ok"] is False
+            assert call_controller(port, token, "start", {})["ok"] is True
+            assert call_controller(port, token, "start", {})["ok"] is False
+        finally:
+            controller.stop()
+
+
+def test_controller_rejects_non_git_workspace_on_start() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "not-git"
+        workspace.mkdir()
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=None,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        try:
+            result = call_controller(port, str(run.control["token"]), "start", {})
+        finally:
+            controller.stop()
+
+        assert result["ok"] is False
+        assert "not a git repository" in result["error"]
+        assert not (registry.run_dir(run.run_id) / "tasks").exists()
+
+
+def test_claude_integration_generates_managed_files_and_detects_conflicts() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = Path(tmp)
+        written = install_claude_integration(workspace)
+
+        start_command = workspace / ".claude" / "commands" / "ccwhat" / "start.md"
+        finish_command = workspace / ".claude" / "commands" / "ccwhat" / "finish.md"
+        hook = workspace / ".claude" / "hooks" / "ccwhat-runtime-hook.sh"
+        settings = workspace / ".claude" / "settings.local.json"
+        assert start_command in written
+        start_text = start_command.read_text(encoding="utf-8")
+        assert "CCWHAT_COMMAND=start" in start_text
+        assert "argument-hint" not in start_text
+        assert finish_command.exists()
+        assert hook.exists()
+        assert "UserPromptSubmit" in settings.read_text(encoding="utf-8")
+
+        start_command.write_text("user file\n", encoding="utf-8")
+        try:
+            install_claude_integration(workspace)
+        except ClaudeIntegrationConflict as exc:
+            assert "refusing to overwrite" in str(exc)
+        else:
+            raise AssertionError("expected ClaudeIntegrationConflict")
+
+
+def test_codex_integration_generates_managed_files_and_detects_conflicts() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "workspace"
+        home = root / "codex-home"
+        workspace.mkdir()
+        written = install_codex_integration(workspace, home=home)
+
+        start_prompt = home / "prompts" / "ccwhat-start.md"
+        finish_prompt = home / "prompts" / "ccwhat-finish.md"
+        start_source_command = workspace / ".agents" / "skills" / "source-command-ccwhat-start" / "SKILL.md"
+        finish_source_command = workspace / ".agents" / "skills" / "source-command-ccwhat-finish" / "SKILL.md"
+        hooks = workspace / ".codex" / "hooks.json"
+        start_text = start_prompt.read_text(encoding="utf-8")
+        source_command_text = start_source_command.read_text(encoding="utf-8")
+        assert start_prompt in written
+        assert start_text.startswith("---\ndescription: CCWhat Task start\n")
+        assert "CCWHAT_COMMAND=start" in start_text
+        assert "argument-hint" not in start_text
+        assert finish_prompt.exists()
+        assert start_source_command in written
+        assert 'name: "source-command-ccwhat-start"' in source_command_text
+        assert "CCWHAT_COMMAND=start" in source_command_text
+        assert "Optional input" not in source_command_text
+        assert finish_source_command.exists()
+        assert hooks.exists()
+        hooks_payload = json.loads(hooks.read_text(encoding="utf-8"))
+        submit_hooks = hooks_payload["hooks"]["UserPromptSubmit"]
+        assert "ccwhat.runtime.codex_hook" in json.dumps(submit_hooks)
+
+        obsolete_prompt = home / "prompts" / "ccwhat-note.md"
+        obsolete_source = workspace / ".agents" / "skills" / "source-command-ccwhat-note" / "SKILL.md"
+        obsolete_prompt.write_text("<!-- CCWHAT MANAGED CODEX RUNTIME TASK COMMAND v1 -->\n", encoding="utf-8")
+        obsolete_source.parent.mkdir(parents=True)
+        obsolete_source.write_text("<!-- CCWHAT MANAGED CODEX RUNTIME TASK COMMAND v1 -->\n", encoding="utf-8")
+        install_codex_integration(workspace, home=home)
+        assert not obsolete_prompt.exists()
+        assert not obsolete_source.exists()
+
+        start_source_command.write_text("user file\n", encoding="utf-8")
+        try:
+            install_codex_integration(workspace, home=home)
+        except CodexIntegrationConflict as exc:
+            assert "refusing to overwrite" in str(exc)
+        else:
+            raise AssertionError("expected CodexIntegrationConflict")
+
+
+def test_opencode_integration_generates_managed_files_and_detects_conflicts() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = Path(tmp)
+        written = install_opencode_integration(workspace)
+
+        start_command = workspace / ".opencode" / "command" / "ccwhat:start.md"
+        finish_command = workspace / ".opencode" / "command" / "ccwhat:finish.md"
+        plugin = workspace / ".opencode" / "plugin" / "ccwhat-runtime.js"
+        start_text = start_command.read_text(encoding="utf-8")
+        plugin_text = plugin.read_text(encoding="utf-8")
+        assert start_command in written
+        assert finish_command.exists()
+        assert "CCWHAT_COMMAND=start" in start_text
+        assert "Reply exactly with: 收到" in start_text
+        assert "command.execute.before" in plugin_text
+        assert "opencode_command_execute_before" in plugin_text
+        assert "ccwhat:start" in plugin_text
+        assert "ccwhat:finish" in plugin_text
+        assert "model_visible: true" in plugin_text
+        assert "agent_log_visible: true" in plugin_text
+        assert "output.parts = []" not in plugin_text
+
+        obsolete_command = workspace / ".opencode" / "command" / "ccwhat-start.md"
+        obsolete_command.write_text(
+            "<!-- CCWHAT MANAGED OPENCODE RUNTIME TASK COMMAND v1 -->\nold\n",
+            encoding="utf-8",
+        )
+        install_opencode_integration(workspace)
+        assert not obsolete_command.exists()
+
+        start_command.write_text("user file\n", encoding="utf-8")
+        try:
+            install_opencode_integration(workspace)
+        except OpenCodeIntegrationConflict as exc:
+            assert "refusing to overwrite" in str(exc)
+        else:
+            raise AssertionError("expected OpenCodeIntegrationConflict")
+
+
+def test_claude_hook_command_drives_controller_and_staging() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        env = {
+            "CCWHAT_RUNTIME_CONTROL_PORT": str(port),
+            "CCWHAT_RUNTIME_TOKEN": str(run.control["token"]),
+        }
+        try:
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"CCWHAT_COMMAND=start\\nCCWHAT_ARGS=ignored hook task"}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                assert claude_hook_main() == 2
+                assert "decision" in stdout.getvalue()
+
+            (workspace / "README.md").write_text("after hook\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"CCWHAT_COMMAND=finish\\nCCWHAT_ARGS="}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO):
+                assert claude_hook_main() == 2
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        assert (task_dir / "task.json").exists()
+        assert (task_dir / "control_events.jsonl").exists()
+        assert (task_dir / "repo_before.tar.gz").exists()
+        assert (task_dir / "repo_after.tar.gz").exists()
+        assert (task_dir / "diff.patch").exists()
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task["title"] == "Task1"
+        assert task["status"] == "finalized"
+
+
+def test_codex_hook_command_drives_controller_and_staging() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="codex",
+            workspace=workspace,
+            target_args=("codex",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        env = {
+            "CCWHAT_RUNTIME_CONTROL_PORT": str(port),
+            "CCWHAT_RUNTIME_TOKEN": str(run.control["token"]),
+        }
+        try:
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"CCWHAT_COMMAND=start\\nCCWHAT_ARGS=ignored codex task"}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                assert codex_hook_main() == 0
+                assert '"decision": "block"' in stdout.getvalue()
+
+            (workspace / "README.md").write_text("after codex\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"CCWHAT_COMMAND=finish\\nCCWHAT_ARGS="}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO):
+                assert codex_hook_main() == 0
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        assert (task_dir / "task.json").exists()
+        assert (task_dir / "control_events.jsonl").exists()
+        assert (task_dir / "repo_before.tar.gz").exists()
+        assert (task_dir / "repo_after.tar.gz").exists()
+        assert (task_dir / "diff.patch").exists()
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        events = (task_dir / "control_events.jsonl").read_text(encoding="utf-8").splitlines()
+        first_event = json.loads(events[0])
+        assert task["title"] == "Task1"
+        assert task["status"] == "finalized"
+        assert first_event["agent"] == "codex"
+        assert first_event["integration"] == "codex_user_prompt_submit"
+        assert first_event["model_visible"] is False
+
+
+def test_codex_hook_short_text_fallback_drives_controller() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="codex",
+            workspace=workspace,
+            target_args=("codex",),
+            proxy_port=11001,
+            viewer_port=11002,
+            control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        env = {
+            "CCWHAT_RUNTIME_CONTROL_PORT": str(port),
+            "CCWHAT_RUNTIME_TOKEN": str(run.control["token"]),
+        }
+        try:
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"ccwhat start ignored fallback task"}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                assert codex_hook_main() == 0
+                assert '"decision": "block"' in stdout.getvalue()
+
+            (workspace / "README.md").write_text("after fallback\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, env), \
+                 mock.patch("sys.stdin", io.StringIO('{"prompt":"ccwhat finish"}')), \
+                 mock.patch("sys.stdout", new_callable=io.StringIO):
+                assert codex_hook_main() == 0
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task["title"] == "Task1"
+        assert task["status"] == "finalized"
+
+
+def test_top_level_claude_run_creates_runtime_and_injects_env() -> None:
+    runner = CliRunner()
+    captured_env: dict[str, str] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        runtime_root = Path(tmp) / "runtime"
+        registry = RunRegistry(runtime_root)
+
+        def fake_popen(args, env=None, **kwargs):
+            captured_env.update(env or {})
+            proc = mock.MagicMock()
+            proc.pid = 1234
+            proc.wait.return_value = 0
+            return proc
+
+        with runner.isolated_filesystem():
+            _init_repo(Path.cwd())
+            with mock.patch("ccwhat.commands.run.load_config", return_value=RecordingConfig(preset="claude")), \
+                 mock.patch("ccwhat.commands.run.RunRegistry", return_value=registry), \
+                 mock.patch("ccwhat.commands.run.RuntimeController") as controller_cls, \
+                 mock.patch("ccwhat.commands.run.install_claude_integration") as install_integration, \
+                 mock.patch("ccwhat.commands.run.resolve_runtime_ports", return_value=(19001, 19002, 19003)), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen):
+                controller_cls.return_value.start.return_value = None
+                controller_cls.return_value.stop.return_value = None
+                result = runner.invoke(cli, ["--", "claude"])
+
+        assert result.exit_code == 0
+        install_integration.assert_called_once()
+        assert captured_env["CCWHAT_RUNTIME_CONTROL_PORT"] == "19003"
+        assert captured_env["CCWHAT_RUNTIME_RUN_ID"]
+        run_path = next(runtime_root.glob("*/*/run.json"))
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        assert run["proxy"]["port"] == 19001
+        assert run["viewer"]["port"] == 19002
+        assert run["control"]["port"] == 19003
+        assert run["agent_process"]["pid"] == 1234
+
+
+def test_top_level_codex_run_creates_runtime_and_injects_env() -> None:
+    runner = CliRunner()
+    captured_env: dict[str, str] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        runtime_root = Path(tmp) / "runtime"
+        registry = RunRegistry(runtime_root)
+
+        def fake_popen(args, env=None, **kwargs):
+            captured_env.update(env or {})
+            proc = mock.MagicMock()
+            proc.pid = 2345
+            proc.wait.return_value = 0
+            return proc
+
+        with runner.isolated_filesystem():
+            _init_repo(Path.cwd())
+            with mock.patch("ccwhat.commands.run.load_config", return_value=RecordingConfig(preset="codex")), \
+                 mock.patch("ccwhat.commands.run.RunRegistry", return_value=registry), \
+                 mock.patch("ccwhat.commands.run.RuntimeController") as controller_cls, \
+                 mock.patch("ccwhat.commands.run.install_codex_integration") as install_integration, \
+                 mock.patch("ccwhat.commands.run.resolve_runtime_ports", return_value=(19101, 19102, 19103)), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen):
+                controller_cls.return_value.start.return_value = None
+                controller_cls.return_value.stop.return_value = None
+                result = runner.invoke(cli, ["--", "codex"])
+
+        assert result.exit_code == 0
+        install_integration.assert_called_once()
+        assert captured_env["CCWHAT_RUNTIME_CONTROL_PORT"] == "19103"
+        assert captured_env["CCWHAT_RUNTIME_RUN_ID"]
+        run_path = next(runtime_root.glob("*/*/run.json"))
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        assert run["agent"] == "codex"
+        assert run["proxy"]["port"] == 19101
+        assert run["viewer"]["port"] == 19102
+        assert run["control"]["port"] == 19103
+        assert run["agent_process"]["pid"] == 2345
+
+
+def test_top_level_opencode_run_creates_runtime_and_injects_env() -> None:
+    runner = CliRunner()
+    captured_env: dict[str, str] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        runtime_root = Path(tmp) / "runtime"
+        registry = RunRegistry(runtime_root)
+
+        def fake_popen(args, env=None, **kwargs):
+            captured_env.update(env or {})
+            proc = mock.MagicMock()
+            proc.pid = 3456
+            proc.wait.return_value = 0
+            return proc
+
+        with runner.isolated_filesystem():
+            _init_repo(Path.cwd())
+            with mock.patch("ccwhat.commands.run.load_config", return_value=RecordingConfig(preset="opencode")), \
+                 mock.patch("ccwhat.commands.run.RunRegistry", return_value=registry), \
+                 mock.patch("ccwhat.commands.run.RuntimeController") as controller_cls, \
+                 mock.patch("ccwhat.commands.run.install_opencode_integration") as install_integration, \
+                 mock.patch("ccwhat.commands.run.resolve_runtime_ports", return_value=(19201, 19202, 19203)), \
+                 mock.patch("ccwhat.commands.run._proxy_is_running", return_value=True), \
+                 mock.patch("ccwhat.commands.run._start_managed_web", return_value=None), \
+                 mock.patch("ccwhat.commands.run.subprocess.Popen", side_effect=fake_popen):
+                controller_cls.return_value.start.return_value = None
+                controller_cls.return_value.stop.return_value = None
+                result = runner.invoke(cli, ["--", "opencode"])
+
+        assert result.exit_code == 0
+        install_integration.assert_called_once()
+        assert captured_env["CCWHAT_RUNTIME_CONTROL_PORT"] == "19203"
+        assert captured_env["CCWHAT_RUNTIME_RUN_ID"]
+        run_path = next(runtime_root.glob("*/*/run.json"))
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        assert run["agent"] == "opencode"
+        assert run["proxy"]["port"] == 19201
+        assert run["viewer"]["port"] == 19202
+        assert run["control"]["port"] == 19203
+        assert run["agent_process"]["pid"] == 3456
