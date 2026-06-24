@@ -18,7 +18,7 @@
 
 <p>
   <strong>Changelog:</strong>
-  <a href="./CHANGELOG.md">v2.3.1</a> ·
+  <a href="./CHANGELOG.md">v2.3.2</a> ·
   <a href="./CHANGELOG.md">更新日志</a>
 </p>
 

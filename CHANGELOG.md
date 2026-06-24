@@ -2,6 +2,22 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`。
 
+## v2.3.2 - 2026-06-24
+
+### Runtime V2 Dataset: Agent Behavior Trace
+
+任务数据集升级到 V2，新增 Agent 完整行为轨迹记录。现在不仅知道代码改了什么，还能回放 Agent 每一步是怎么改的。
+
+### 新增
+
+- **task_trace.json**：`/ccwhat:finish` 时从 proxy session 日志按任务时间窗口切出 Agent 行为轨迹，写入 `tasks/<task-id>/task_trace.json`
+- **任务语义字段**：`task.json` 新增 `instruction`（用户任务描述）、`success_criteria`（成功标准）、`expected_tests`（期望测试）
+- **`evidence_availability.task_trace`**：标记 task_trace 提取状态
+- **`trace_extractor.py`**：新增独立模块，复用已有 `extract_evidence` / `extract_change_evidence` 逻辑
+- **Runtime Dataset 参考文档**：`docs/runtime-dataset/RUNTIME_DATASET_REFERENCE.md`
+
+---
+
 ## v2.3.1 - 2026-06-23
 
 ### OpenCode Runtime Task Recording
