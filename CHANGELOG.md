@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`，例如 `v0.1.2`。
+这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`。
 
 ## v2.3.1 - 2026-06-23
 
