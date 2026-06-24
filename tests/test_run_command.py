@@ -18,9 +18,20 @@ from ccwhat.commands.run import run
 from ccwhat.config import RecordingConfig, save_config
 
 
+class FakeWinError10013(PermissionError):
+    @property
+    def winerror(self) -> int:
+        return 10013
+
+
 class RunCommandTests(unittest.TestCase):
     def setUp(self) -> None:
         self.runner = CliRunner()
+        self._port_bind_error_patcher = mock.patch("ccwhat.commands.run.port_bind_error", return_value=None)
+        self._port_bind_error_patcher.start()
+
+    def tearDown(self) -> None:
+        self._port_bind_error_patcher.stop()
 
     def _make_config(self, tmp: Path) -> Path:
         config_path = tmp / "config.toml"
@@ -457,6 +468,7 @@ class ProxyMarkerTests(unittest.TestCase):
 
             with mock.patch("ccwhat.commands.run.subprocess.Popen", return_value=fake_proc), \
                  mock.patch("ccwhat.commands.run._proxy_port_in_use", return_value=False), \
+                 mock.patch("ccwhat.commands.run.port_bind_error", return_value=None), \
                  mock.patch("ccwhat.commands.run._marker_path", return_value=marker):
                 result = _start_managed_proxy(
                     7788, tmp_path, ["api.anthropic.com"], ["/v1/messages"],
@@ -465,6 +477,57 @@ class ProxyMarkerTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertFalse(marker.exists())
+
+    def test_run_reports_unbindable_windows_port_before_starting_proxy(self) -> None:
+        """A Windows excluded port should fail before launching the managed proxy."""
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.toml"
+            save_config(RecordingConfig(preset="claude", onboarding_complete=True), config_path)
+            err = FakeWinError10013(13, "bind denied")
+            with mock.patch("ccwhat.commands.run._proxy_is_running", return_value=False), \
+                 mock.patch("ccwhat.commands.run.port_bind_error", return_value=err), \
+                 mock.patch("ccwhat.commands.run._start_managed_proxy") as start_proxy:
+                result = self.runner.invoke(run, [
+                    "--no-web", "--config", str(config_path), "--output", tmp, "--", "echo",
+                ])
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("port 7788 cannot be bound", result.output)
+        self.assertIn("WinError 10013", result.output)
+        self.assertIn("TCP excluded port range", result.output)
+        self.assertIn("netsh interface ipv4 show excludedportrange protocol=tcp", result.output)
+        self.assertIn("ccwhat --port <other-port> -- <cli>", result.output)
+        start_proxy.assert_not_called()
+
+    def test_proxy_command_reports_unbindable_windows_port(self) -> None:
+        from ccwhat.commands.proxy import proxy
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch("ccwhat.commands.proxy.port_bind_error", return_value=FakeWinError10013(13, "bind denied")), \
+             mock.patch("ccwhat.commands.proxy.subprocess.run") as run_proc:
+            result = self.runner.invoke(proxy, [
+                "--preset", "codex", "--output", tmp,
+            ])
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("port 7788 cannot be bound", result.output)
+        self.assertIn("ccwhat proxy --port <other-port>", result.output)
+        run_proc.assert_not_called()
+
+    def test_discover_reports_unbindable_windows_port(self) -> None:
+        from ccwhat.commands.discover import _start_discovery_proxy
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch("ccwhat.commands.discover.port_bind_error", return_value=FakeWinError10013(13, "bind denied")), \
+             mock.patch("ccwhat.commands.discover.subprocess.Popen") as popen, \
+             mock.patch("ccwhat.commands.discover.click.echo") as echo:
+            result = _start_discovery_proxy(7788, Path(tmp) / "out.jsonl")
+
+        self.assertIsNone(result)
+        message = echo.call_args.args[0]
+        self.assertIn("port 7788 cannot be bound", message)
+        self.assertIn("ccwhat discover --port <other-port>", message)
+        popen.assert_not_called()
 
     def test_live_ccwhat_marker_enables_reuse(self) -> None:
         """Port occupied + valid marker with live PID → proxy_is_running returns True."""
@@ -553,6 +616,21 @@ class ViewerRunTests(unittest.TestCase):
 
         self.assertIsNone(server)
         open_viewer.assert_not_called()
+
+    def test_start_managed_web_reports_unbindable_windows_port(self) -> None:
+        from ccwhat.commands.run import _start_managed_web
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch("ccwhat.commands.run._proxy_port_in_use", return_value=False), \
+             mock.patch("ccwhat.commands.run.port_bind_error", return_value=FakeWinError10013(13, "bind denied")), \
+             mock.patch("viewer.server.create_server") as create_server, \
+             mock.patch("ccwhat.commands.run.click.echo") as echo:
+            result = _start_managed_web(7789, Path(tmp), None, agent_name="codex")
+
+        self.assertIsNone(result)
+        message = echo.call_args.args[0]
+        self.assertIn("port 7789 cannot be bound", message)
+        self.assertIn("ccwhat --web-port <other-port> -- <cli>", message)
+        create_server.assert_not_called()
 
     def test_probe_viewer_agent_falls_back_to_projects(self) -> None:
         from ccwhat.commands.run import _probe_viewer_agent
