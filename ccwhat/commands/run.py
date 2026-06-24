@@ -36,7 +36,7 @@ from ccwhat.runtime.opencode_integration import (
     OpenCodeIntegrationConflict,
     install_opencode_integration,
 )
-from ccwhat.runtime.ports import resolve_runtime_ports
+from ccwhat.runtime.ports import format_port_bind_error, port_bind_error, resolve_runtime_ports
 from ccwhat.runtime.registry import RunRegistry, utc_now
 
 
@@ -229,6 +229,18 @@ def _start_managed_web(
         open_viewer(port)
         return None
 
+    bind_error = port_bind_error(port)
+    if bind_error is not None:
+        click.echo(
+            format_port_bind_error(
+                port,
+                bind_error,
+                "Use a different port: ccwhat --web-port <other-port> -- <cli>",
+            ),
+            err=True,
+        )
+        return None
+
     adapter = create_adapter(agent_name)
     projects_dir = adapter.default_projects_dir()
     try:
@@ -409,6 +421,20 @@ def run(
                 "starting proxy without payload recording."
             )
 
+    proxy_running = _proxy_is_running(port)
+    if not proxy_running:
+        bind_error = port_bind_error(port)
+        if bind_error is not None:
+            click.echo(
+                format_port_bind_error(
+                    port,
+                    bind_error,
+                    "Use a different port: ccwhat --port <other-port> -- <cli>",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
     local_session_id = generate_local_session_id()
     proxy_proc: subprocess.Popen | None = None
     web_server: _ManagedWebServer | None = None
@@ -452,7 +478,7 @@ def run(
         registry.update(runtime_run_id, status="running")
         click.echo(f"Runtime run       : {runtime_run_id}")
 
-    if _proxy_is_running(port):
+    if proxy_running:
         click.echo(f"Reusing existing ccwhat proxy on port {port}.")
     else:
         if effective_domains:

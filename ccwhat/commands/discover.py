@@ -18,6 +18,7 @@ from ccwhat.config import (
     normalize_path,
     save_config,
 )
+from ccwhat.runtime.ports import format_port_bind_error, port_bind_error
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +138,18 @@ def _proxy_is_running(port: int) -> bool:
 
 
 def _start_discovery_proxy(port: int, out_path: Path) -> subprocess.Popen | None:
+    bind_error = port_bind_error(port)
+    if bind_error is not None:
+        click.echo(
+            format_port_bind_error(
+                port,
+                bind_error,
+                "Use a different port: ccwhat discover --port <other-port>",
+            ),
+            err=True,
+        )
+        return None
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write(_DISCOVERY_ADDON_CODE)
         addon_path = f.name
