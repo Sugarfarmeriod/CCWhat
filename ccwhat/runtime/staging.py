@@ -10,6 +10,7 @@ import tarfile
 from typing import Any
 
 from ccwhat.runtime.registry import RunRegistry, RuntimeRun, utc_now
+from ccwhat.runtime.trace_extractor import extract_task_trace
 
 
 class RuntimeTaskError(RuntimeError):
@@ -58,17 +59,22 @@ class TaskStaging:
                 "after_commit": None,
                 "after_status": None,
             },
+            "instruction": title or None,
+            "success_criteria": None,
+            "expected_tests": [],
             "paths": {
                 "repo_before": "repo_before.tar.gz",
                 "repo_after": None,
                 "diff": None,
                 "control_events": "control_events.jsonl",
+                "task_trace": None,
             },
             "evidence_availability": {
                 "repo_before": True,
                 "repo_after": False,
                 "diff": False,
                 "control_events": True,
+                "task_trace": False,
             },
         }
         self._write_json(task_dir / "task.json", task)
@@ -88,14 +94,37 @@ class TaskStaging:
         diff = self._git_output(workspace, ["diff", "--binary", "HEAD"], allow_fail=True) or ""
         (task_dir / "diff.patch").write_text(diff, encoding="utf-8")
 
+        finished_at = utc_now()
         task["status"] = "finalized"
-        task["finished_at"] = utc_now()
+        task["finished_at"] = finished_at
         task["git"]["after_commit"] = self._git_output(workspace, ["rev-parse", "HEAD"], allow_fail=True)
         task["git"]["after_status"] = self._git_output(workspace, ["status", "--short"], allow_fail=True) or ""
         task["paths"]["repo_after"] = "repo_after.tar.gz"
         task["paths"]["diff"] = "diff.patch"
         task["evidence_availability"]["repo_after"] = True
         task["evidence_availability"]["diff"] = True
+
+        trace = extract_task_trace(
+            workspace=run.workspace,
+            started_at=task["started_at"],
+            finished_at=finished_at,
+            agent=run.agent,
+        )
+        if trace is not None:
+            trace["task_id"] = run.active_task_id
+            trace["run_id"] = run.run_id
+            trace["repo_state"]["base_commit"] = task["git"].get("before_commit")
+            trace["repo_state"]["head_commit"] = task["git"].get("after_commit")
+            self._write_json(task_dir / "task_trace.json", trace)
+            task["paths"]["task_trace"] = "task_trace.json"
+            task["evidence_availability"]["task_trace"] = True
+            if trace.get("first_user_message"):
+                task["instruction"] = trace["first_user_message"]
+            if trace.get("test_commands"):
+                task["expected_tests"] = trace["test_commands"]
+        else:
+            task["evidence_availability"]["task_trace"] = False
+
         self._write_json(task_dir / "task.json", task)
         self._append_control_event(task_dir, evidence, {"task_id": run.active_task_id, "status": "finalized"})
         self.registry.set_active_task(run.run_id, None)
