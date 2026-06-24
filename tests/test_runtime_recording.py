@@ -634,3 +634,216 @@ def test_top_level_opencode_run_creates_runtime_and_injects_env() -> None:
         assert run["viewer"]["port"] == 19202
         assert run["control"]["port"] == 19203
         assert run["agent_process"]["pid"] == 3456
+
+
+# ---------------------------------------------------------------------------
+# trace_extractor tests
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone
+
+from ccwhat.runtime.trace_extractor import extract_task_trace, find_session_log_paths
+
+
+def _write_session_jsonl(path: Path, entries: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry) + "\n")
+
+
+def _claude_entry(ts: str, etype: str, text: str) -> dict:
+    return {"type": etype, "timestamp": ts, "content": text}
+
+
+def _now_ts() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def test_trace_extractor_time_window() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        projects_dir = Path(tmp) / "projects"
+        workspace = "/fake/workspace"
+        project_dir = projects_dir / "-fake-workspace"
+        session_jsonl = project_dir / "abcd1234-0000-0000-0000-000000000001.jsonl"
+
+        entries = [
+            _claude_entry("2026-01-01T10:00:00Z", "user", "before task"),
+            _claude_entry("2026-01-01T10:01:00Z", "user", "inside task: fix bug"),
+            _claude_entry("2026-01-01T10:02:00Z", "user", "still inside"),
+            _claude_entry("2026-01-01T10:10:00Z", "user", "after task"),
+        ]
+        _write_session_jsonl(session_jsonl, entries)
+
+        trace = extract_task_trace(
+            workspace=workspace,
+            started_at="2026-01-01T10:00:30Z",
+            finished_at="2026-01-01T10:03:00Z",
+            agent="claude",
+            projects_dir=projects_dir,
+        )
+        assert trace is not None
+        event_texts = [e["text"] for e in trace["events"] if e.get("text")]
+        assert any("inside task" in t for t in event_texts)
+        assert not any("before task" in t for t in event_texts)
+        assert not any("after task" in t for t in event_texts)
+        assert trace["time_window"]["started_at"] == "2026-01-01T10:00:30Z"
+
+
+def test_trace_extractor_missing_log_returns_none() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        projects_dir = Path(tmp) / "projects"
+        projects_dir.mkdir()
+        trace = extract_task_trace(
+            workspace="/no/such/workspace",
+            started_at="2026-01-01T10:00:00Z",
+            finished_at="2026-01-01T10:01:00Z",
+            agent="claude",
+            projects_dir=projects_dir,
+        )
+        assert trace is None
+
+
+def test_task_trace_written_on_finish() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        projects_dir = root / "claude_projects"
+        project_dir = projects_dir / workspace.as_posix().replace("/", "-")
+        session_jsonl = project_dir / "abcd1234-0000-0000-0000-000000000002.jsonl"
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11101,
+            viewer_port=11102,
+            control_port=port,
+        )
+
+        with mock.patch(
+            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
+        ):
+            controller = RuntimeController(registry, run.run_id, port)
+            controller.start()
+            try:
+                token = str(run.control["token"])
+                call_controller(port, token, "start", {"title": "fix bug"})
+                # Write session entries AFTER start so timestamps fall within task window
+                entries = [
+                    _claude_entry(_now_ts(), "user", "run tests"),
+                    _claude_entry(_now_ts(), "assistant", "done"),
+                ]
+                _write_session_jsonl(session_jsonl, entries)
+                (workspace / "README.md").write_text("changed\n", encoding="utf-8")
+                call_controller(port, token, "finish", {})
+            finally:
+                controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task["evidence_availability"]["task_trace"] is True
+        assert "task_trace" in task["paths"]
+        trace_path = task_dir / "task_trace.json"
+        assert trace_path.exists()
+        trace = json.loads(trace_path.read_text(encoding="utf-8"))
+        assert trace["task_id"] == "task-001"
+        assert trace["run_id"] == run.run_id
+        assert "events" in trace
+        assert "commands" in trace
+        assert "errors" in trace
+
+
+def test_task_trace_missing_log_degrades_gracefully() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        empty_projects_dir = root / "no_claude_projects"
+        empty_projects_dir.mkdir()
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11201,
+            viewer_port=11202,
+            control_port=port,
+        )
+
+        with mock.patch(
+            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", empty_projects_dir
+        ):
+            controller = RuntimeController(registry, run.run_id, port)
+            controller.start()
+            try:
+                token = str(run.control["token"])
+                call_controller(port, token, "start", {"title": "task without log"})
+                call_controller(port, token, "finish", {})
+            finally:
+                controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task["status"] == "finalized"
+        assert task["evidence_availability"]["task_trace"] is False
+        assert not (task_dir / "task_trace.json").exists()
+
+
+def test_task_json_instruction_and_expected_tests() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+
+        projects_dir = root / "claude_projects"
+        project_dir = projects_dir / workspace.as_posix().replace("/", "-")
+        session_jsonl = project_dir / "abcd1234-0000-0000-0000-000000000003.jsonl"
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="claude",
+            workspace=workspace,
+            target_args=("claude",),
+            proxy_port=11301,
+            viewer_port=11302,
+            control_port=port,
+        )
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+
+        with mock.patch(
+            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
+        ):
+            controller = RuntimeController(registry, run.run_id, port)
+            controller.start()
+            try:
+                token = str(run.control["token"])
+                call_controller(port, token, "start", {"title": "short title"})
+
+                task_before = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+                assert task_before["instruction"] == "short title"
+                assert task_before["success_criteria"] is None
+                assert task_before["expected_tests"] == []
+
+                # Write session entries with current timestamps so they fall in task window
+                entries = [_claude_entry(_now_ts(), "user", "add unit tests for parser")]
+                _write_session_jsonl(session_jsonl, entries)
+
+                call_controller(port, token, "finish", {})
+            finally:
+                controller.stop()
+
+        task_after = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        assert task_after["instruction"] == "add unit tests for parser"
