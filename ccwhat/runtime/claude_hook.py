@@ -12,7 +12,7 @@ from ccwhat.runtime.client import call_controller
 
 
 _SENTINEL_RE = re.compile(r"CCWHAT_COMMAND=(?P<command>[a-z]+)(?:\s+CCWHAT_ARGS=(?P<args>.*))?", re.S)
-_SLASH_RE = re.compile(r"/ccwhat[:\-](?P<command>start|finish|abort|status|note)(?:\s+(?P<args>.*))?", re.S)
+_SLASH_RE = re.compile(r"/ccwhat[:\-](?P<command>start|finish|abort|status)(?:\s+(?P<args>.*))?", re.S)
 
 
 def main() -> int:
@@ -34,11 +34,6 @@ def main() -> int:
     action = command
     payload: dict[str, Any] = {
         "raw_args": raw_args,
-        "agent": "claude",
-        "integration": "claude_user_prompt_submit",
-        "model_visible": False,
-        "agent_log_visible": False,
-        "confidence": "high",
     }
     result = call_controller(int(port), token, action, payload)
     if result.get("ok"):

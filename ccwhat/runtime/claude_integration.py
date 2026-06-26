@@ -16,7 +16,6 @@ COMMANDS = {
     "finish": ("CCWhat Task finish", ""),
     "abort": ("CCWhat Task abort", ""),
     "status": ("CCWhat Task status", ""),
-    "note": ("CCWhat Task note", "[note]"),
 }
 
 
@@ -101,7 +100,7 @@ def _install_hook_settings(settings_path: Path, hook_path: Path) -> None:
 
     command = _portable_hook_command(hook_path)
     managed_entry = {
-        "matcher": r"ccwhat:(start|finish|abort|status|note)|ccwhat-(start|finish|abort|status|note)",
+        "matcher": r"ccwhat:(start|finish|abort|status)|ccwhat-(start|finish|abort|status)",
         "hooks": [{"type": "command", "command": command, "timeout": 10}],
     }
 

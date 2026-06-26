@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ccwhat.runtime.registry import RunRegistry
-from ccwhat.runtime.staging import ControlEvidence, RuntimeTaskError, TaskStaging
+from ccwhat.runtime.staging import RuntimeTaskError, TaskStaging
 
 
 class RuntimeController:
@@ -49,7 +49,7 @@ class RuntimeController:
 
             def do_POST(self) -> None:
                 action = urlparse(self.path).path.strip("/")
-                if action not in {"start", "finish", "status", "abort", "note"}:
+                if action not in {"start", "finish", "status", "abort"}:
                     self._send({"ok": False, "error": "not found"}, status=404)
                     return
                 self._handle(action, self._read_body())
@@ -62,25 +62,14 @@ class RuntimeController:
                     if token and supplied != token:
                         self._send({"ok": False, "error": "unauthorized"}, status=403)
                         return
-                    evidence = ControlEvidence(
-                        command=action,
-                        raw_args=str(body.get("raw_args") or body.get("title") or ""),
-                        agent=str(body.get("agent") or run.agent),
-                        integration=str(body.get("integration") or "local_http"),
-                        model_visible=bool(body.get("model_visible", False)),
-                        agent_log_visible=bool(body.get("agent_log_visible", False)),
-                        confidence=str(body.get("confidence") or "high"),
-                    )
                     if action == "start":
-                        data = staging.start_task(run, str(body.get("title") or ""), evidence)
+                        data = staging.start_task(run, str(body.get("title") or ""))
                     elif action == "finish":
-                        data = staging.finish_task(run, evidence)
+                        data = staging.finish_task(run)
                     elif action == "abort":
-                        data = staging.abort_task(run, evidence)
-                    elif action == "note":
-                        data = staging.note(run, evidence)
+                        data = staging.abort_task(run)
                     else:
-                        data = staging.status(run, evidence)
+                        data = staging.status(run)
                     self._send({"ok": True, "data": data})
                 except RuntimeTaskError as exc:
                     self._send({"ok": False, "error": str(exc)}, status=409)
