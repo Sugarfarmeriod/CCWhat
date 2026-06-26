@@ -17,6 +17,7 @@ from ccwhat.config import (
     normalize_path,
     validate_domain,
 )
+from ccwhat.runtime.ports import format_port_bind_error, port_bind_error
 
 
 def _build_recording_config_from_opts(
@@ -113,6 +114,18 @@ def proxy(
     effective_domains = cfg.effective_domains()
     effective_paths = cfg.effective_paths()
     local_session_id = generate_local_session_id()
+
+    bind_error = port_bind_error(port)
+    if bind_error is not None:
+        click.echo(
+            format_port_bind_error(
+                port,
+                bind_error,
+                "Use a different port: ccwhat proxy --port <other-port>",
+            ),
+            err=True,
+        )
+        sys.exit(1)
 
     cmd = [
         "mitmdump",
