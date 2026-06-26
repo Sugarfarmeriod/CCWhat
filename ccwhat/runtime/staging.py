@@ -17,22 +17,11 @@ class RuntimeTaskError(RuntimeError):
     pass
 
 
-@dataclass
-class ControlEvidence:
-    command: str
-    raw_args: str = ""
-    agent: str = "claude"
-    integration: str = "claude_user_prompt_submit"
-    model_visible: bool = False
-    agent_log_visible: bool = False
-    confidence: str = "high"
-
-
 class TaskStaging:
     def __init__(self, registry: RunRegistry) -> None:
         self.registry = registry
 
-    def start_task(self, run: RuntimeRun, title: str, evidence: ControlEvidence) -> dict[str, Any]:
+    def start_task(self, run: RuntimeRun, title: str) -> dict[str, Any]:
         if run.active_task_id:
             raise RuntimeTaskError(f"task already recording: {run.active_task_id}")
         workspace = Path(run.workspace)
@@ -42,8 +31,6 @@ class TaskStaging:
         task_dir.mkdir(parents=True, exist_ok=False)
 
         now = utc_now()
-        before_path = task_dir / "repo_before.tar.gz"
-        self._write_snapshot(workspace, before_path)
         task = {
             "schema": "ccwhat-runtime-task-v1",
             "task_id": task_id,
@@ -63,26 +50,25 @@ class TaskStaging:
             "success_criteria": None,
             "expected_tests": [],
             "paths": {
-                "repo_before": "repo_before.tar.gz",
+                "repo_before": None,
                 "repo_after": None,
                 "diff": None,
-                "control_events": "control_events.jsonl",
+                "control_events": None,
                 "task_trace": None,
             },
             "evidence_availability": {
-                "repo_before": True,
+                "repo_before": False,
                 "repo_after": False,
                 "diff": False,
-                "control_events": True,
+                "control_events": False,
                 "task_trace": False,
             },
         }
         self._write_json(task_dir / "task.json", task)
-        self._append_control_event(task_dir, evidence, {"task_id": task_id, "status": "recording"})
         self.registry.set_active_task(run.run_id, task_id)
         return task
 
-    def finish_task(self, run: RuntimeRun, evidence: ControlEvidence) -> dict[str, Any]:
+    def finish_task(self, run: RuntimeRun) -> dict[str, Any]:
         if not run.active_task_id:
             raise RuntimeTaskError("no active task to finish")
         workspace = Path(run.workspace)
@@ -90,19 +76,15 @@ class TaskStaging:
         task_dir = self._task_dir(run.run_id, run.active_task_id)
         task = self._read_json(task_dir / "task.json")
 
-        self._write_snapshot(workspace, task_dir / "repo_after.tar.gz")
-        diff = self._git_output(workspace, ["diff", "--binary", "HEAD"], allow_fail=True) or ""
-        (task_dir / "diff.patch").write_text(diff, encoding="utf-8")
-
         finished_at = utc_now()
         task["status"] = "finalized"
         task["finished_at"] = finished_at
         task["git"]["after_commit"] = self._git_output(workspace, ["rev-parse", "HEAD"], allow_fail=True)
         task["git"]["after_status"] = self._git_output(workspace, ["status", "--short"], allow_fail=True) or ""
-        task["paths"]["repo_after"] = "repo_after.tar.gz"
-        task["paths"]["diff"] = "diff.patch"
-        task["evidence_availability"]["repo_after"] = True
-        task["evidence_availability"]["diff"] = True
+        task["paths"]["repo_after"] = None
+        task["paths"]["diff"] = None
+        task["evidence_availability"]["repo_after"] = False
+        task["evidence_availability"]["diff"] = False
 
         trace = extract_task_trace(
             workspace=run.workspace,
@@ -126,11 +108,10 @@ class TaskStaging:
             task["evidence_availability"]["task_trace"] = False
 
         self._write_json(task_dir / "task.json", task)
-        self._append_control_event(task_dir, evidence, {"task_id": run.active_task_id, "status": "finalized"})
         self.registry.set_active_task(run.run_id, None)
         return task
 
-    def abort_task(self, run: RuntimeRun, evidence: ControlEvidence) -> dict[str, Any]:
+    def abort_task(self, run: RuntimeRun) -> dict[str, Any]:
         if not run.active_task_id:
             raise RuntimeTaskError("no active task to abort")
         task_dir = self._task_dir(run.run_id, run.active_task_id)
@@ -138,34 +119,16 @@ class TaskStaging:
         task["status"] = "aborted"
         task["finished_at"] = utc_now()
         self._write_json(task_dir / "task.json", task)
-        self._append_control_event(task_dir, evidence, {"task_id": run.active_task_id, "status": "aborted"})
         self.registry.set_active_task(run.run_id, None)
         return task
 
-    def status(self, run: RuntimeRun, evidence: ControlEvidence | None = None) -> dict[str, Any]:
-        payload = {
+    def status(self, run: RuntimeRun) -> dict[str, Any]:
+        return {
             "run_id": run.run_id,
             "status": "recording" if run.active_task_id else "idle",
             "active_task_id": run.active_task_id,
         }
-        if run.active_task_id and evidence is not None:
-            self._append_control_event(
-                self._task_dir(run.run_id, run.active_task_id),
-                evidence,
-                payload,
-            )
-        return payload
 
-    def note(self, run: RuntimeRun, evidence: ControlEvidence) -> dict[str, Any]:
-        if not run.active_task_id:
-            raise RuntimeTaskError("no active task for note")
-        payload = {
-            "run_id": run.run_id,
-            "status": "recording",
-            "active_task_id": run.active_task_id,
-        }
-        self._append_control_event(self._task_dir(run.run_id, run.active_task_id), evidence, payload)
-        return payload
 
     def _next_task_id(self, run_id: str) -> str:
         tasks_dir = self.registry.run_dir(run_id) / "tasks"
@@ -181,20 +144,6 @@ class TaskStaging:
     def _task_dir(self, run_id: str, task_id: str) -> Path:
         return self.registry.run_dir(run_id) / "tasks" / task_id
 
-    def _append_control_event(self, task_dir: Path, evidence: ControlEvidence, result: dict[str, Any]) -> None:
-        event = {
-            "timestamp": utc_now(),
-            "command": evidence.command,
-            "raw_args": evidence.raw_args,
-            "agent": evidence.agent,
-            "integration": evidence.integration,
-            "model_visible": evidence.model_visible,
-            "agent_log_visible": evidence.agent_log_visible,
-            "confidence": evidence.confidence,
-            "result": result,
-        }
-        with (task_dir / "control_events.jsonl").open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
 
     def _ensure_git_workspace(self, workspace: Path) -> None:
         result = subprocess.run(

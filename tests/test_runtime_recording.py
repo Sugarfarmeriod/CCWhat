@@ -132,49 +132,32 @@ def test_controller_start_finish_writes_runtime_task_staging() -> None:
                 port,
                 token,
                 "start",
-                {
-                    "title": "ignored runtime task",
-                    "integration": "claude_user_prompt_submit",
-                    "model_visible": False,
-                    "confidence": "high",
-                },
+                {"title": "ignored runtime task"},
             )
             assert started["ok"] is True
+
+            # note command removed - verify it's rejected
             noted = call_controller(
                 port,
                 token,
                 "note",
-                {
-                    "raw_args": "important runtime note",
-                    "integration": "claude_user_prompt_submit",
-                    "model_visible": False,
-                    "confidence": "high",
-                },
+                {"raw_args": "important runtime note"},
             )
-            assert noted["ok"] is True
+            assert noted["ok"] is False  # note command no longer supported
 
             (workspace / "README.md").write_text("after\n", encoding="utf-8")
             finished = call_controller(
                 port,
                 token,
                 "finish",
-                {
-                    "integration": "claude_user_prompt_submit",
-                    "model_visible": False,
-                    "confidence": "high",
-                },
+                {},
             )
             assert finished["ok"] is True
             second = call_controller(
                 port,
                 token,
                 "start",
-                {
-                    "title": "ignored second task",
-                    "integration": "claude_user_prompt_submit",
-                    "model_visible": False,
-                    "confidence": "high",
-                },
+                {"title": "ignored second task"},
             )
             assert second["ok"] is True
         finally:
@@ -187,17 +170,16 @@ def test_controller_start_finish_writes_runtime_task_staging() -> None:
         assert task["title"] == "Task1"
         assert second_task["title"] == "Task2"
         assert task["status"] == "finalized"
-        assert task["evidence_availability"]["repo_before"] is True
-        assert task["evidence_availability"]["repo_after"] is True
-        assert task["evidence_availability"]["diff"] is True
-        assert (task_dir / "repo_before.tar.gz").exists()
-        assert (task_dir / "repo_after.tar.gz").exists()
-        assert "-before" in (task_dir / "diff.patch").read_text(encoding="utf-8")
-        assert "+after" in (task_dir / "diff.patch").read_text(encoding="utf-8")
-        events = (task_dir / "control_events.jsonl").read_text(encoding="utf-8").splitlines()
-        assert len(events) == 3
-        assert json.loads(events[0])["model_visible"] is False
-        assert json.loads(events[1])["command"] == "note"
+        # repo snapshots and diff removed - evidence_availability should be false
+        assert task["evidence_availability"]["repo_before"] is False
+        assert task["evidence_availability"]["repo_after"] is False
+        assert task["evidence_availability"]["diff"] is False
+        assert task["evidence_availability"]["control_events"] is False
+        # repo snapshots and control_events no longer created
+        assert not (task_dir / "repo_before.tar.gz").exists()
+        assert not (task_dir / "repo_after.tar.gz").exists()
+        assert not (task_dir / "diff.patch").exists()
+        assert not (task_dir / "control_events.jsonl").exists()
 
 
 def test_controller_rejects_errors() -> None:
@@ -407,10 +389,11 @@ def test_claude_hook_command_drives_controller_and_staging() -> None:
 
         task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
         assert (task_dir / "task.json").exists()
-        assert (task_dir / "control_events.jsonl").exists()
-        assert (task_dir / "repo_before.tar.gz").exists()
-        assert (task_dir / "repo_after.tar.gz").exists()
-        assert (task_dir / "diff.patch").exists()
+        # repo snapshots, diff, and control_events no longer created
+        assert not (task_dir / "control_events.jsonl").exists()
+        assert not (task_dir / "repo_before.tar.gz").exists()
+        assert not (task_dir / "repo_after.tar.gz").exists()
+        assert not (task_dir / "diff.patch").exists()
         task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
         assert task["title"] == "Task1"
         assert task["status"] == "finalized"
@@ -456,18 +439,15 @@ def test_codex_hook_command_drives_controller_and_staging() -> None:
 
         task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
         assert (task_dir / "task.json").exists()
-        assert (task_dir / "control_events.jsonl").exists()
-        assert (task_dir / "repo_before.tar.gz").exists()
-        assert (task_dir / "repo_after.tar.gz").exists()
-        assert (task_dir / "diff.patch").exists()
+        # repo snapshots, diff, and control_events no longer created
+        assert not (task_dir / "control_events.jsonl").exists()
+        assert not (task_dir / "repo_before.tar.gz").exists()
+        assert not (task_dir / "repo_after.tar.gz").exists()
+        assert not (task_dir / "diff.patch").exists()
         task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
-        events = (task_dir / "control_events.jsonl").read_text(encoding="utf-8").splitlines()
-        first_event = json.loads(events[0])
         assert task["title"] == "Task1"
         assert task["status"] == "finalized"
-        assert first_event["agent"] == "codex"
-        assert first_event["integration"] == "codex_user_prompt_submit"
-        assert first_event["model_visible"] is False
+        # control_events no longer created, so no event assertions
 
 
 def test_codex_hook_short_text_fallback_drives_controller() -> None:
