@@ -2,6 +2,38 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`。
 
+## v2.3.3 - 2026-06-26
+
+### 报告模式名称优化
+
+将 Viewer 中报告生成模式的显示名称从专业术语改为更直观的描述。
+
+### 改进
+
+- **报告模式重命名**：
+  - 「元析」→「结构化报告」
+  - 「通用流程」→「行为报告」
+- **界面文案统一**：弹窗选项、生成状态提示、历史 badge、HTML 标题栏和 h1 全部同步更新
+- **内部兼容**：mode 字符串 (`yuanxi`/`generic`) 保持不变，不影响 API 和测试
+
+---
+
+### Windows TCP 排除端口范围诊断增强
+
+修复 Windows 系统默认端口落入 TCP excluded port range 导致的绑定失败问题。（Fixes #5）
+
+### 新增
+
+- **端口绑定诊断**：启动时添加 `bind()` 探针，识别"端口空闲但无法绑定"的情况
+- **WinError 10013 友好提示**：提供 Windows TCP excluded port range 说明、netsh 检查命令和端口更换建议
+- **诊断覆盖范围**：`ccwhat -- <cli>`、`ccwhat proxy`、`ccwhat discover` 和 viewer 启动路径全部支持
+
+### 贡献者
+
+- **Windows 端口诊断**：感谢 [@Sugarfarmeriod](https://github.com/Sugarfarmeriod)（[PR #8](https://github.com/PacemakerG/CCWhat/pull/8)）
+
+---
+
 ## v2.3.2 - 2026-06-24
 
 ### Runtime V2 Dataset: Agent Behavior Trace
