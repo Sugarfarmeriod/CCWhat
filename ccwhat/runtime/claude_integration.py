@@ -42,7 +42,7 @@ def install_claude_integration(workspace: Path) -> list[Path]:
     written.append(hook_path)
 
     settings_path = claude_dir / "settings.local.json"
-    _install_hook_settings(settings_path, hook_path)
+    _install_hook_settings(settings_path, hook_path, claude_dir)
     written.append(settings_path)
     return written
 
@@ -82,7 +82,7 @@ def _write_managed(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _install_hook_settings(settings_path: Path, hook_path: Path) -> None:
+def _install_hook_settings(settings_path: Path, hook_path: Path, claude_dir: Path) -> None:
     if settings_path.exists():
         data = json.loads(settings_path.read_text(encoding="utf-8") or "{}")
         if not isinstance(data, dict):
@@ -121,7 +121,41 @@ def _install_hook_settings(settings_path: Path, hook_path: Path) -> None:
     if not replaced:
         entries.append(managed_entry)
 
+    # Install PostToolUse hook for diff tracking
+    _install_posttooluse_hook(hooks, claude_dir)
+
     settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _install_posttooluse_hook(hooks: dict, claude_dir: Path) -> None:
+    """Install PostToolUse hook for incremental diff tracking."""
+    entries = hooks.setdefault("PostToolUse", [])
+    if not isinstance(entries, list):
+        entries = []
+        hooks["PostToolUse"] = entries
+
+    diff_hook_path = claude_dir / "hooks" / "ccwhat-diff-hook.sh"
+    managed_entry = {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [{"type": "command", "command": str(diff_hook_path), "timeout": 5}],
+    }
+
+    replaced = False
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            continue
+        entry_hooks = entry.get("hooks")
+        if not isinstance(entry_hooks, list):
+            continue
+        for hook in entry_hooks:
+            if isinstance(hook, dict) and "ccwhat-diff-hook.sh" in str(hook.get("command", "")):
+                entries[idx] = managed_entry
+                replaced = True
+                break
+        if replaced:
+            break
+    if not replaced:
+        entries.append(managed_entry)
 
 
 def _portable_hook_command(hook_path: Path) -> str:
