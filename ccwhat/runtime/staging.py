@@ -1,14 +1,14 @@
-"""Runtime task staging with git snapshots and diff evidence."""
+"""Runtime task staging with incremental diff tracking."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 from pathlib import Path
 import subprocess
-import tarfile
 from typing import Any
 
+from ccwhat.runtime.index import CCWhatIndex
+from ccwhat.runtime.models import StepDiffBuffer
 from ccwhat.runtime.registry import RunRegistry, RuntimeRun, utc_now
 from ccwhat.runtime.trace_extractor import extract_task_trace
 
@@ -20,6 +20,9 @@ class RuntimeTaskError(RuntimeError):
 class TaskStaging:
     def __init__(self, registry: RunRegistry) -> None:
         self.registry = registry
+        self._index: CCWhatIndex | None = None
+        self._diff_buffer: StepDiffBuffer | None = None
+        self._current_task_dir: Path | None = None
 
     def start_task(self, run: RuntimeRun, title: str) -> dict[str, Any]:
         if run.active_task_id:
@@ -66,6 +69,13 @@ class TaskStaging:
         }
         self._write_json(task_dir / "task.json", task)
         self.registry.set_active_task(run.run_id, task_id)
+
+        # Initialize incremental diff tracking
+        self._index = CCWhatIndex(workspace)
+        self._index.init()
+        self._diff_buffer = StepDiffBuffer()
+        self._current_task_dir = task_dir
+
         return task
 
     def finish_task(self, run: RuntimeRun) -> dict[str, Any]:
@@ -82,9 +92,18 @@ class TaskStaging:
         task["git"]["after_commit"] = self._git_output(workspace, ["rev-parse", "HEAD"], allow_fail=True)
         task["git"]["after_status"] = self._git_output(workspace, ["status", "--short"], allow_fail=True) or ""
         task["paths"]["repo_after"] = None
-        task["paths"]["diff"] = None
+
+        # Write diff.patch if we have recorded steps
+        if self._diff_buffer is not None and not self._diff_buffer.is_empty():
+            patch_content = self._diff_buffer.format_patch()
+            (task_dir / "diff.patch").write_text(patch_content, encoding="utf-8")
+            task["paths"]["diff"] = "diff.patch"
+            task["evidence_availability"]["diff"] = True
+        else:
+            task["paths"]["diff"] = None
+            task["evidence_availability"]["diff"] = False
+
         task["evidence_availability"]["repo_after"] = False
-        task["evidence_availability"]["diff"] = False
 
         trace = extract_task_trace(
             workspace=run.workspace,
@@ -109,6 +128,12 @@ class TaskStaging:
 
         self._write_json(task_dir / "task.json", task)
         self.registry.set_active_task(run.run_id, None)
+
+        # Clear internal state
+        self._index = None
+        self._diff_buffer = None
+        self._current_task_dir = None
+
         return task
 
     def abort_task(self, run: RuntimeRun) -> dict[str, Any]:
@@ -120,6 +145,12 @@ class TaskStaging:
         task["finished_at"] = utc_now()
         self._write_json(task_dir / "task.json", task)
         self.registry.set_active_task(run.run_id, None)
+
+        # Clear internal state
+        self._index = None
+        self._diff_buffer = None
+        self._current_task_dir = None
+
         return task
 
     def status(self, run: RuntimeRun) -> dict[str, Any]:
@@ -128,6 +159,33 @@ class TaskStaging:
             "status": "recording" if run.active_task_id else "idle",
             "active_task_id": run.active_task_id,
         }
+
+    def record_step(self, tool_name: str, file_path: str) -> int:
+        """Record a step diff for a file change.
+
+        Args:
+            tool_name: Name of the tool (e.g., "Write", "Edit")
+            file_path: Path to the changed file
+
+        Returns:
+            The assigned step index
+
+        Raises:
+            RuntimeTaskError: If no active task or index not initialized
+        """
+        if self._index is None or self._diff_buffer is None:
+            raise RuntimeTaskError("no active task for recording step")
+
+        # Add file to isolated index
+        self._index.add(file_path)
+
+        # Generate diff from HEAD to current index
+        diff = self._index.diff("HEAD")
+
+        # Add to buffer (only if there's actual diff content)
+        step_index = self._diff_buffer.add_step(tool_name, file_path, diff)
+
+        return step_index
 
 
     def _next_task_id(self, run_id: str) -> str:
