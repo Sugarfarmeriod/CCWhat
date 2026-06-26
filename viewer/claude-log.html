@@ -2473,11 +2473,11 @@ pre, code, .code-block, .diff-schema-pre { font-family: var(--font-mono); }
     <div class="mode-card-body">
       <div class="mode-options">
         <div class="mode-option selected" id="modeOptYuanxi" onclick="selectMode('yuanxi')">
-          <div class="mode-option-title">🔬 元析报告生成分析</div>
+          <div class="mode-option-title">🔬 结构化报告</div>
           <div class="mode-option-desc">结构化日志解析，生成阶段时间线、工具耗时、Agent 摘要和诊断图表。</div>
         </div>
         <div class="mode-option" id="modeOptGeneric" onclick="selectMode('generic')">
-          <div class="mode-option-title">📋 通用流程</div>
+          <div class="mode-option-title">📋 行为报告</div>
           <div class="mode-option-desc">LLM 驱动的交互编排分析，生成包含 Mermaid 流程图的 Markdown 报告。</div>
         </div>
       </div>
@@ -10158,7 +10158,7 @@ function renderAnalysisReport(cachedReport) {
   const truncatedEvents = compression ? Number(compression.truncatedEvents || 0) : 0;
   const diagnosisStatus = cachedReport.diagnosisStatus || null;
   const reportMode = cachedReport.reportMode || '';
-  const modeLabel = reportMode === 'yuanxi' ? '元析' : reportMode === 'generic' ? '通用流程' : '';
+  const modeLabel = reportMode === 'yuanxi' ? '结构化' : reportMode === 'generic' ? '行为' : '';
 
   const meta = document.createElement('div');
   meta.className = 'detail-meta';
@@ -10265,7 +10265,7 @@ async function runAnalysisForCurrentSession(mode, customPrompt, {preserveKey=nul
   const previous = preserveKey ? analysisReports[preserveKey] || null : null;
   analysisInFlight = true;
   updateAnalyzeButton();
-  const modeLabel = mode === 'yuanxi' ? '元析报告' : '通用流程报告';
+  const modeLabel = mode === 'yuanxi' ? '结构化报告' : '行为报告';
   renderAnalysisStatus(`正在生成 ${modeLabel}…`);
 
   try {
