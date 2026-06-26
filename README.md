@@ -222,7 +222,14 @@ AgentLens 组合两类证据：
 
 ## 📈 v2 版本演进
 
-**v2.2** — 当前版本
+**v2.3** — 当前版本
+
+- Runtime Task Recording：通过 `ccwhat -- claude` 启动，原生 slash 菜单触发 `/ccwhat:start` / `/ccwhat:finish`
+- Runtime Dataset V2：任务边界用户显式标定，记录 `repo_before/after` 快照、`diff.patch` 和完整 Agent 行为轨迹
+- `task_trace.json`：从 proxy session 日志按任务时间窗口提取 events、commands、errors、final_claim
+- OpenCode 支持：通过 `.opencode/command/` 注册 task 命令
+
+**v2.2**
 
 - 双语切换界面（中文/英文），语言选择持久化
 - 全局 Session / Task / Turn / Event 搜索，支持三种范围
