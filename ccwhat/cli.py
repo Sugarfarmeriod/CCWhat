@@ -10,6 +10,7 @@ from ccwhat.commands.import_ import import_
 from ccwhat.commands.proxy import proxy
 from ccwhat.commands.run import run
 from ccwhat.commands.setup import setup
+from ccwhat.commands.start import start
 from ccwhat.commands.start_mc import start_mc
 from ccwhat.commands.web_server import web_server
 from ccwhat.config import DEFAULT_RAW_LOG_DIR
@@ -104,6 +105,7 @@ def cli(
 
 
 cli.add_command(run)
+cli.add_command(start)
 cli.add_command(setup)
 cli.add_command(discover)
 cli.add_command(proxy)
