@@ -22,23 +22,60 @@ def extract_task_trace(
     finished_at: str,
     agent: str = "claude",
     projects_dir: Path | None = None,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Extract Agent behavior trace from session logs for the given task time window.
 
-    Returns a task_trace dict aligned with Dataset v1 trace structure,
-    or None if no matching session log is found.
+    Returns a task_trace dict aligned with Dataset v1 trace structure.
+    The dict always contains an extraction_status field indicating the result:
+    - "ok": Normal extraction
+    - "unsupported_agent": Agent is not claude
+    - "invalid_time_bounds": Failed to parse time window
+    - "log_not_found": Session log not found
+    - "no_events": No events in time window
     """
     if agent != "claude":
-        return None
+        return _empty_trace(
+            agent=agent,
+            workspace=workspace,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="unsupported_agent",
+            reason=f"Agent '{agent}' is not supported for trace extraction",
+        )
 
     pd = projects_dir or _CLAUDE_PROJECTS_DIR
     lower, upper = _time_bounds(started_at, finished_at)
     if lower is None or upper is None:
-        return None
+        return _empty_trace(
+            agent=agent,
+            workspace=workspace,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="invalid_time_bounds",
+            reason="Failed to parse started_at or finished_at timestamps",
+        )
 
-    events = _collect_events(pd, workspace, lower, upper)
+    project_dir = _project_dir_for_workspace(pd, workspace)
+    if project_dir is None:
+        return _empty_trace(
+            agent=agent,
+            workspace=workspace,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="log_not_found",
+            reason=f"No session log found for workspace: {workspace}",
+        )
+
+    events = _collect_events(project_dir, lower, upper)
     if not events:
-        return None
+        return _empty_trace(
+            agent=agent,
+            workspace=workspace,
+            started_at=started_at,
+            finished_at=finished_at,
+            status="no_events",
+            reason=None,
+        )
 
     evidence = extract_evidence(events, repo_root=workspace)
     changes, patches = extract_change_evidence(events, agent=agent)
@@ -47,6 +84,8 @@ def extract_task_trace(
 
     return {
         "agent": agent,
+        "extraction_status": "ok",
+        "extraction_status_reason": None,
         "time_window": {"started_at": started_at, "finished_at": finished_at},
         "events": [_event_to_dict(e) for e in events],
         "commands": list(evidence.commands),
@@ -65,6 +104,33 @@ def extract_task_trace(
             "base_commit": None,
             "head_commit": None,
         },
+    }
+
+
+def _empty_trace(
+    agent: str,
+    workspace: str,
+    started_at: str,
+    finished_at: str,
+    status: str,
+    reason: str | None,
+) -> dict[str, Any]:
+    """Return an empty trace structure for failed extraction."""
+    return {
+        "agent": agent,
+        "extraction_status": status,
+        "extraction_status_reason": reason,
+        "time_window": {"started_at": started_at, "finished_at": finished_at},
+        "events": [],
+        "commands": [],
+        "test_commands": [],
+        "files": {"read": [], "changed": []},
+        "changes": [],
+        "patches": [],
+        "errors": [],
+        "final_claim": None,
+        "first_user_message": None,
+        "repo_state": {"cwd": None, "base_commit": None, "head_commit": None},
     }
 
 
@@ -116,15 +182,11 @@ def _parse_ts(ts: str) -> datetime:
 
 
 def _collect_events(
-    projects_dir: Path,
-    workspace: str,
+    project_dir: Path,
     lower: datetime,
     upper: datetime,
 ) -> list[NormalizedEvent]:
     """Read JSONL session logs and return normalized events within the time window."""
-    project_dir = _project_dir_for_workspace(projects_dir, workspace)
-    if project_dir is None:
-        return []
 
     all_events: list[NormalizedEvent] = []
     for jsonl_path in sorted(project_dir.glob("*.jsonl")):

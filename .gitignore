@@ -12,6 +12,7 @@ build/
 .idea/
 .agents/
 drawio/
+self-docs/
 
 # ccwhat data directories
 .ccwhat/

@@ -111,20 +111,17 @@ class TaskStaging:
             finished_at=finished_at,
             agent=run.agent,
         )
-        if trace is not None:
-            trace["task_id"] = run.active_task_id
-            trace["run_id"] = run.run_id
-            trace["repo_state"]["base_commit"] = task["git"].get("before_commit")
-            trace["repo_state"]["head_commit"] = task["git"].get("after_commit")
-            self._write_json(task_dir / "task_trace.json", trace)
-            task["paths"]["task_trace"] = "task_trace.json"
-            task["evidence_availability"]["task_trace"] = True
-            if trace.get("first_user_message"):
-                task["instruction"] = trace["first_user_message"]
-            if trace.get("test_commands"):
-                task["expected_tests"] = trace["test_commands"]
-        else:
-            task["evidence_availability"]["task_trace"] = False
+        trace["task_id"] = run.active_task_id
+        trace["run_id"] = run.run_id
+        trace["repo_state"]["base_commit"] = task["git"].get("before_commit")
+        trace["repo_state"]["head_commit"] = task["git"].get("after_commit")
+        self._write_json(task_dir / "task_trace.json", trace)
+        task["paths"]["task_trace"] = "task_trace.json"
+        task["evidence_availability"]["task_trace"] = True
+        if trace.get("first_user_message"):
+            task["instruction"] = trace["first_user_message"]
+        if trace.get("test_commands"):
+            task["expected_tests"] = trace["test_commands"]
 
         self._write_json(task_dir / "task.json", task)
         self.registry.set_active_task(run.run_id, None)
