@@ -93,6 +93,10 @@ class TaskStaging:
         task["git"]["after_status"] = self._git_output(workspace, ["status", "--short"], allow_fail=True) or ""
         task["paths"]["repo_after"] = None
 
+        # Reconcile deletions: detect files deleted via Bash rm
+        if self._index is not None:
+            self._index.reconcile_deletions()
+
         # Write diff.patch if we have recorded steps
         if self._diff_buffer is not None and not self._diff_buffer.is_empty():
             patch_content = self._diff_buffer.format_patch()
@@ -181,6 +185,32 @@ class TaskStaging:
 
         # Add to buffer (only if there's actual diff content)
         step_index = self._diff_buffer.add_step(tool_name, file_path, diff)
+
+        return step_index
+
+    def remove_step(self, file_path: str) -> int:
+        """Record a step for a file deletion.
+
+        Args:
+            file_path: Path to the deleted file
+
+        Returns:
+            The assigned step index
+
+        Raises:
+            RuntimeTaskError: If no active task or index not initialized
+        """
+        if self._index is None or self._diff_buffer is None:
+            raise RuntimeTaskError("no active task for recording step")
+
+        # Remove file from isolated index
+        self._index.remove(file_path)
+
+        # Generate diff from HEAD to current index
+        diff = self._index.diff("HEAD")
+
+        # Add to buffer
+        step_index = self._diff_buffer.add_step("Bash", file_path, diff, action="delete")
 
         return step_index
 

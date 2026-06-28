@@ -2,6 +2,35 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`。
 
+## v2.3.4 - 2026-06-28
+
+### Runtime Dataset 增强：完整文件操作追踪
+
+优化增量 diff 追踪系统，现在可以完整记录 Agent 的所有文件操作，包括删除操作。
+
+### 新增
+
+- **删除操作追踪**：通过 Bash 工具的 `rm`/`unlink` 命令删除的文件现在会被记录到 diff.patch
+- **完整的文件生命周期**：创建（Write）、修改（Edit）、删除（Bash rm）全部可追踪
+- **Step header 增强**：diff.patch 中的步骤注释现在显示操作类型（MODIFY/DELETE）
+
+### 改进
+
+- **CCWhatIndex 初始化优化**：从 `read-tree --empty` 改为 `read-tree HEAD`，确保能检测所有文件变更
+- **Diff 生成优化**：添加 `--cached` 参数，正确比对 index vs HEAD
+- **Reconcile deletions**：finish 时自动扫描并同步已删除文件状态
+- **Hook 脚本增强**：支持检测 Bash 工具的删除命令并通知 controller
+
+### 技术细节
+
+- `ccwhat/runtime/index.py`: `init()` 从 HEAD 开始，`diff()` 加 `--cached`，新增 `reconcile_deletions()`
+- `ccwhat/runtime/staging.py`: 新增 `remove_step()` 方法
+- `ccwhat/runtime/controller.py`: `/step` endpoint 支持 `action=delete`
+- `ccwhat/runtime/models.py`: `StepDiff` 新增 `action` 字段
+- `.claude/hooks/ccwhat-diff-hook.sh`: 支持检测 `rm`/`unlink` 命令
+
+---
+
 ## v2.3.3 - 2026-06-26
 
 ### 报告模式名称优化
