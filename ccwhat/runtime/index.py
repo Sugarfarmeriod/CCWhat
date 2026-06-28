@@ -34,13 +34,14 @@ class CCWhatIndex:
         self._env = {**os.environ, "GIT_INDEX_FILE": str(self.index_path)}
 
     def init(self) -> None:
-        """Initialize an empty index.
+        """Initialize index from HEAD.
 
-        Creates an empty git index file. If the index already exists,
-        it will be cleared.
+        Creates a git index starting from HEAD commit's tree. This ensures
+        we can track deletions by comparing the current index state with
+        the actual filesystem at finish time.
         """
-        # Create empty index by reading from an empty tree
-        self._git_cmd(["read-tree", "--empty"])
+        # Start from HEAD to track all files, not just modified ones
+        self._git_cmd(["read-tree", "HEAD"])
 
     def add(self, file_path: str | Path) -> None:
         """Add a file to the isolated index.
@@ -70,6 +71,9 @@ class CCWhatIndex:
     def diff(self, base_commit: str = "HEAD") -> str:
         """Generate diff between base_commit and current index.
 
+        Uses --cached to compare the staged index against base_commit,
+        ensuring we see changes tracked in our isolated index.
+
         Args:
             base_commit: Commit to diff against (default: HEAD)
 
@@ -77,7 +81,7 @@ class CCWhatIndex:
             Unified diff as string
         """
         result = subprocess.run(
-            ["git", "diff", "--binary", base_commit],
+            ["git", "diff", "--cached", "--binary", base_commit],
             cwd=self.workspace,
             env=self._env,
             text=True,
@@ -98,6 +102,36 @@ class CCWhatIndex:
             Unified diff as string
         """
         return self.diff(prev_ref)
+
+    def reconcile_deletions(self) -> list[str]:
+        """Remove files from index that no longer exist on disk.
+
+        This detects file deletions (e.g., via Bash rm) that weren't
+        captured by the Write/Edit/MultiEdit hooks.
+
+        Returns:
+            List of deleted file paths
+        """
+        # Get all files currently in our index
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=self.workspace,
+            env=self._env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0:
+            return []
+
+        deleted: list[str] = []
+        for tracked in result.stdout.splitlines():
+            if tracked and not (self.workspace / tracked).exists():
+                # File was deleted from disk, remove from index
+                self._git_cmd(["rm", "--cached", tracked], check=False)
+                deleted.append(tracked)
+
+        return deleted
 
     def get_tree_hash(self) -> str | None:
         """Get the current tree hash of the index.

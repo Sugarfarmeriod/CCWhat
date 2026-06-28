@@ -71,11 +71,15 @@ class RuntimeController:
                     elif action == "step":
                         tool_name = str(body.get("tool_name") or "")
                         file_path = str(body.get("file_path") or "")
+                        step_action = str(body.get("action") or "")
                         if not tool_name or not file_path:
                             self._send({"ok": False, "error": "missing tool_name or file_path"}, status=400)
                             return
-                        step_index = staging.record_step(tool_name, file_path)
-                        data = {"step_index": step_index, "tool_name": tool_name, "file_path": file_path}
+                        if step_action == "delete":
+                            step_index = staging.remove_step(file_path)
+                        else:
+                            step_index = staging.record_step(tool_name, file_path)
+                        data = {"step_index": step_index, "tool_name": tool_name, "file_path": file_path, "action": step_action or "add"}
                     else:
                         data = staging.status(run)
                     self._send({"ok": True, "data": data})
