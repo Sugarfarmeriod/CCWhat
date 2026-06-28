@@ -7,10 +7,10 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from ccwhat.runtime.index import CCWhatIndex
-from ccwhat.runtime.models import StepDiffBuffer
-from ccwhat.runtime.registry import RunRegistry, RuntimeRun, utc_now
-from ccwhat.runtime.trace_extractor import extract_task_trace
+from ccwhat.runtime.core.index import CCWhatIndex
+from ccwhat.runtime.core.models import StepDiffBuffer
+from ccwhat.runtime.infra.registry import RunRegistry, RuntimeRun, utc_now
+from ccwhat.runtime.core.trace_extractor import extract_task_trace
 
 
 class RuntimeTaskError(RuntimeError):

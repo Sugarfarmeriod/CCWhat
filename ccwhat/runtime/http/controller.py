@@ -8,8 +8,8 @@ import threading
 from typing import Any
 from urllib.parse import urlparse
 
-from ccwhat.runtime.registry import RunRegistry
-from ccwhat.runtime.staging import RuntimeTaskError, TaskStaging
+from ccwhat.runtime.infra.registry import RunRegistry
+from ccwhat.runtime.core.staging import RuntimeTaskError, TaskStaging
 
 
 class RuntimeController:

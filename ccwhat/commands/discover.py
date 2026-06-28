@@ -18,7 +18,7 @@ from ccwhat.config import (
     normalize_path,
     save_config,
 )
-from ccwhat.runtime.ports import format_port_bind_error, port_bind_error
+from ccwhat.runtime.infra.ports import format_port_bind_error, port_bind_error
 
 
 # ---------------------------------------------------------------------------

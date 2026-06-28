@@ -12,24 +12,24 @@ from click.testing import CliRunner
 
 from ccwhat.cli import cli
 from ccwhat.config import RecordingConfig
-from ccwhat.runtime.claude_integration import (
+from ccwhat.runtime.integrations.claude import (
     ClaudeIntegrationConflict,
     install_claude_integration,
 )
-from ccwhat.runtime.codex_integration import (
+from ccwhat.runtime.integrations.codex import (
     CodexIntegrationConflict,
     install_codex_integration,
 )
-from ccwhat.runtime.opencode_integration import (
+from ccwhat.runtime.integrations.opencode import (
     OpenCodeIntegrationConflict,
     install_opencode_integration,
 )
-from ccwhat.runtime.client import call_controller
-from ccwhat.runtime.controller import RuntimeController
-from ccwhat.runtime.claude_hook import main as claude_hook_main
-from ccwhat.runtime.codex_hook import main as codex_hook_main
-from ccwhat.runtime.ports import allocate_port, resolve_runtime_ports
-from ccwhat.runtime.registry import RunRegistry
+from ccwhat.runtime.http.client import call_controller
+from ccwhat.runtime.http.controller import RuntimeController
+from ccwhat.runtime.hooks.claude import main as claude_hook_main
+from ccwhat.runtime.hooks.codex import main as codex_hook_main
+from ccwhat.runtime.infra.ports import allocate_port, resolve_runtime_ports
+from ccwhat.runtime.infra.registry import RunRegistry
 
 
 def _init_repo(path: Path) -> None:
@@ -622,7 +622,7 @@ def test_top_level_opencode_run_creates_runtime_and_injects_env() -> None:
 
 from datetime import datetime, timezone
 
-from ccwhat.runtime.trace_extractor import extract_task_trace, find_session_log_paths
+from ccwhat.runtime.core.trace_extractor import extract_task_trace, find_session_log_paths
 
 
 def _write_session_jsonl(path: Path, entries: list[dict]) -> None:
@@ -744,7 +744,7 @@ def test_task_trace_written_on_finish() -> None:
         )
 
         with mock.patch(
-            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
+            "ccwhat.runtime.core.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
         ):
             controller = RuntimeController(registry, run.run_id, port)
             controller.start()
@@ -798,7 +798,7 @@ def test_task_trace_missing_log_degrades_gracefully() -> None:
         )
 
         with mock.patch(
-            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", empty_projects_dir
+            "ccwhat.runtime.core.trace_extractor._CLAUDE_PROJECTS_DIR", empty_projects_dir
         ):
             controller = RuntimeController(registry, run.run_id, port)
             controller.start()
@@ -843,7 +843,7 @@ def test_task_json_instruction_and_expected_tests() -> None:
         task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
 
         with mock.patch(
-            "ccwhat.runtime.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
+            "ccwhat.runtime.core.trace_extractor._CLAUDE_PROJECTS_DIR", projects_dir
         ):
             controller = RuntimeController(registry, run.run_id, port)
             controller.start()

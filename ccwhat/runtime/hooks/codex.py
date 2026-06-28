@@ -1,4 +1,4 @@
-"""Claude Code hook entry point for CCWhat slash commands."""
+"""Codex hook entry point for CCWhat slash commands."""
 
 from __future__ import annotations
 
@@ -8,11 +8,15 @@ import re
 import sys
 from typing import Any
 
-from ccwhat.runtime.client import call_controller
+from ccwhat.runtime.http.client import call_controller
 
 
 _SENTINEL_RE = re.compile(r"CCWHAT_COMMAND=(?P<command>[a-z]+)(?:\s+CCWHAT_ARGS=(?P<args>.*))?", re.S)
-_SLASH_RE = re.compile(r"/ccwhat[:\-](?P<command>start|finish|abort|status)(?:\s+(?P<args>.*))?", re.S)
+_SLASH_RE = re.compile(r"/(?:prompts:)?ccwhat[-:/](?P<command>start|finish)(?:\s+(?P<args>.*))?", re.S)
+_TEXT_RE = re.compile(
+    r"^\s*ccwhat\s+(?P<command>start|finish)(?:\s+(?P<args>.*))?\s*$",
+    re.I | re.S,
+)
 
 
 def main() -> int:
@@ -28,21 +32,25 @@ def main() -> int:
     port = os.environ.get("CCWHAT_RUNTIME_CONTROL_PORT")
     token = os.environ.get("CCWHAT_RUNTIME_TOKEN", "")
     if not port:
-        _emit_block("CCWhat runtime controller is not available for this Claude Code session.")
-        return 2
+        _emit_block("CCWhat runtime controller is not available for this Codex session.")
+        return 0
 
-    action = command
     payload: dict[str, Any] = {
         "raw_args": raw_args,
+        "agent": "codex",
+        "integration": "codex_user_prompt_submit",
+        "model_visible": False,
+        "agent_log_visible": False,
+        "confidence": "high",
     }
-    result = call_controller(int(port), token, action, payload)
+    result = call_controller(int(port), token, command, payload)
     if result.get("ok"):
         task = result.get("data") or {}
         task_id = task.get("task_id") or task.get("active_task_id") or ""
         _emit_block(f"CCWhat {command} recorded locally" + (f" ({task_id})." if task_id else "."))
-        return 2
+        return 0
     _emit_block(f"CCWhat {command} failed: {result.get('error') or 'unknown error'}")
-    return 2
+    return 0
 
 
 def _read_event() -> Any:
@@ -64,7 +72,7 @@ def _strings(value: Any) -> list[str]:
             out.extend(_strings(item))
         return out
     if isinstance(value, list):
-        out = []
+        out: list[str] = []
         for item in value:
             out.extend(_strings(item))
         return out
@@ -74,18 +82,26 @@ def _strings(value: Any) -> list[str]:
 def _parse_command(text: str) -> tuple[str, str] | None:
     match = _SENTINEL_RE.search(text)
     if match:
-        return match.group("command"), (match.group("args") or "").strip().strip('"')
+        return match.group("command"), _clean_args(match.group("args") or "")
     match = _SLASH_RE.search(text)
     if match:
-        return match.group("command"), (match.group("args") or "").strip()
+        return match.group("command"), _clean_args(match.group("args") or "")
+    match = _TEXT_RE.search(text)
+    if match:
+        command = match.group("command").lower()
+        return command, _clean_args(match.group("args") or "")
     return None
+
+
+def _clean_args(raw: str) -> str:
+    args = raw.strip().strip('"')
+    return "" if args == "$ARGUMENTS" else args
 
 
 def _emit_block(message: str) -> None:
     payload = {
         "decision": "block",
         "reason": message,
-        "suppressOutput": False,
     }
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
 

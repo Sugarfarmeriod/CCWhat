@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ccwhat.runtime.index import CCWhatIndex, CCWhatIndexError
+from ccwhat.runtime.core.index import CCWhatIndex, CCWhatIndexError
 
 
 def _init_repo(path: Path) -> None:
