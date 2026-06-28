@@ -670,7 +670,7 @@ def test_trace_extractor_time_window() -> None:
         assert trace["time_window"]["started_at"] == "2026-01-01T10:00:30Z"
 
 
-def test_trace_extractor_missing_log_returns_none() -> None:
+def test_trace_extractor_missing_log_returns_log_not_found() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         projects_dir = Path(tmp) / "projects"
         projects_dir.mkdir()
@@ -681,7 +681,44 @@ def test_trace_extractor_missing_log_returns_none() -> None:
             agent="claude",
             projects_dir=projects_dir,
         )
-        assert trace is None
+        assert trace["extraction_status"] == "log_not_found"
+        assert trace["extraction_status_reason"] is not None
+        assert trace["events"] == []
+        assert trace["commands"] == []
+
+
+def test_trace_extractor_unsupported_agent() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        projects_dir = Path(tmp) / "projects"
+        projects_dir.mkdir()
+        trace = extract_task_trace(
+            workspace="/any/workspace",
+            started_at="2026-01-01T10:00:00Z",
+            finished_at="2026-01-01T10:01:00Z",
+            agent="codex",
+            projects_dir=projects_dir,
+        )
+        assert trace["extraction_status"] == "unsupported_agent"
+        assert trace["extraction_status_reason"] is not None
+        assert trace["agent"] == "codex"
+        assert trace["events"] == []
+        assert trace["commands"] == []
+        assert trace["files"] == {"read": [], "changed": []}
+
+
+def test_trace_extractor_invalid_time_bounds() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        projects_dir = Path(tmp) / "projects"
+        projects_dir.mkdir()
+        trace = extract_task_trace(
+            workspace="/any/workspace",
+            started_at="invalid-timestamp",
+            finished_at="2026-01-01T10:01:00Z",
+            agent="claude",
+            projects_dir=projects_dir,
+        )
+        assert trace["extraction_status"] == "invalid_time_bounds"
+        assert trace["extraction_status_reason"] is not None
 
 
 def test_task_trace_written_on_finish() -> None:
@@ -775,8 +812,10 @@ def test_task_trace_missing_log_degrades_gracefully() -> None:
         task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
         task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
         assert task["status"] == "finalized"
-        assert task["evidence_availability"]["task_trace"] is False
-        assert not (task_dir / "task_trace.json").exists()
+        assert task["evidence_availability"]["task_trace"] is True
+        assert (task_dir / "task_trace.json").exists()
+        trace = json.loads((task_dir / "task_trace.json").read_text(encoding="utf-8"))
+        assert trace["extraction_status"] == "log_not_found"
 
 
 def test_task_json_instruction_and_expected_tests() -> None:
