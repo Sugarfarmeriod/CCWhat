@@ -2,9 +2,9 @@
 
 <a href="https://github.com/PacemakerG/CCWhat">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/readme/logo-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="./docs/assets/readme/logo-light.png">
-    <img src="./docs/assets/readme/logo-light.png" alt="AgentLens Logo" width="640">
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/readme/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/readme/logo-light.png">
+    <img src="./assets/readme/logo-light.png" alt="AgentLens Logo" width="640">
   </picture>
 </a>
 
@@ -28,7 +28,7 @@
 
 | Dark | Light |
 | :---: | :---: |
-| ![AgentLens Dark Preview](./docs/assets/readme/preview-dark.png) | ![AgentLens Light Preview](./docs/assets/readme/preview-light.png) |
+| ![AgentLens Dark Preview](./assets/readme/preview-dark.png) | ![AgentLens Light Preview](./assets/readme/preview-light.png) |
 
 ## 😤 你肯定遇到过这种事
 
