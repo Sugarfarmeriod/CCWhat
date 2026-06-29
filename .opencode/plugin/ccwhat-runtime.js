@@ -20,18 +20,18 @@ async function callController(action, body = {}) {
 }
 
 function detectFileOperation(toolName, toolInput) {
-  // Check for file modification operations
-  if (["Write", "Edit", "MultiEdit"].includes(toolName)) {
-    const filePath = toolInput?.file_path || toolInput?.path
+  // OpenCode tool names are lowercase: write, edit, bash
+  if (["write", "edit"].includes(toolName)) {
+    const filePath = toolInput?.filePath || toolInput?.file_path || toolInput?.path
     if (filePath) return { tool: toolName, path: filePath, action: "add" }
   }
-  // Check for file deletion via Bash
-  if (toolName === "Bash") {
+  // Check for file deletion via bash
+  if (toolName === "bash") {
     const cmd = toolInput?.command || ""
-    const rmMatch = cmd.match(/^\s*(rm|unlink)\s+(?:-[a-zA-Z]+\s+)*(.+?)$/)
+    const rmMatch = cmd.match(/(?:^|[;&|]\s*)\s*(rm|unlink)\s+(?:-[a-zA-Z]+\s+)*(.+?)$/)
     if (rmMatch) {
       const paths = rmMatch[2].split(/\s+/).filter(p => p && !p.startsWith("-"))
-      return paths.map(p => ({ tool: "Bash", path: p, action: "delete" }))
+      return paths.map(p => ({ tool: "bash", path: p, action: "delete" }))
     }
   }
   return null
@@ -60,7 +60,7 @@ export default async function ccwhatRuntimePlugin() {
       // Skip if CCWhat is not enabled
       if (!process.env.CCWHAT_ENABLED) return
       const toolName = input?.tool
-      const toolInput = input?.input
+      const toolInput = input?.args
       const operations = detectFileOperation(toolName, toolInput)
       if (!operations) return
       const ops = Array.isArray(operations) ? operations : [operations]

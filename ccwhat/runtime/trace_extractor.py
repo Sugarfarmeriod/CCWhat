@@ -14,7 +14,15 @@ from ccwhat.task_segments.models import NormalizedEvent
 
 
 _CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
-_CCWHAT_RAW_REQ_RESP_DIR = Path.home() / ".ccwhat" / "raw-req-resp"
+
+_OPENCODE_TOOL_NAME_MAP = {
+    "write": "Write",
+    "edit": "Edit",
+    "read": "Read",
+    "bash": "Bash",
+    "grep": "Grep",
+    "glob": "Glob",
+}
 
 
 def extract_task_trace(
@@ -71,19 +79,7 @@ def extract_task_trace(
             )
         events = _collect_events(project_dir, lower, upper)
     else:  # opencode
-        session_dirs = _find_ccwhat_session_dirs(workspace)
-        if not session_dirs:
-            return _empty_trace(
-                agent=agent,
-                workspace=workspace,
-                started_at=started_at,
-                finished_at=finished_at,
-                status="log_not_found",
-                reason=f"No ccwhat session log found for workspace: {workspace}",
-            )
-        events = []
-        for session_dir in session_dirs:
-            events.extend(_collect_events(session_dir, lower, upper))
+        events = _collect_opencode_events(workspace, lower, upper)
     if not events:
         return _empty_trace(
             agent=agent,
@@ -180,26 +176,110 @@ def _project_dir_for_workspace(projects_dir: Path, workspace: str) -> Path | Non
     return None
 
 
-def _find_ccwhat_session_dirs(workspace: str) -> list[Path]:
-    """Find ccwhat session directories for the given workspace.
+def _collect_opencode_events(
+    workspace: str,
+    lower: datetime,
+    upper: datetime,
+) -> list[NormalizedEvent]:
+    """Read OpenCode SQLite DB and return normalized events within the time window."""
+    from ccwhat.adapters.opencode import OpenCodeAdapter
 
-    For OpenCode, session logs are stored in ~/.ccwhat/raw-req-resp/<session-id>/
-    We scan all session directories and return those with matching workspace.
-    """
-    if not _CCWHAT_RAW_REQ_RESP_DIR.is_dir():
+    adapter = OpenCodeAdapter()
+    try:
+        projects = adapter.list_projects()
+    except Exception:
         return []
 
-    workspace_path = Path(workspace).resolve()
-    session_dirs: list[Path] = []
+    try:
+        workspace_path = Path(workspace).resolve()
+    except (OSError, ValueError):
+        return []
 
-    for session_dir in _CCWHAT_RAW_REQ_RESP_DIR.iterdir():
-        if not session_dir.is_dir():
+    events: list[NormalizedEvent] = []
+    turn_index = 0
+    for proj in projects:
+        try:
+            proj_dir = Path(proj.get("projectDir") or "").resolve()
+        except (OSError, ValueError):
             continue
-        # Check if this session has any JSONL files
-        if list(session_dir.glob("*.jsonl")):
-            session_dirs.append(session_dir)
+        if proj_dir != workspace_path:
+            continue
+        for sess in proj.get("sessions", []):
+            sid = sess.get("id")
+            if not sid:
+                continue
+            try:
+                loaded = adapter.load_session(sid)
+            except Exception:
+                continue
+            if not loaded:
+                continue
+            for ev in loaded.get("events", []):
+                ne = _opencode_event_to_normalized(ev, turn_index)
+                if ne is None:
+                    continue
+                if _event_in_window(ne, lower, upper):
+                    events.append(ne)
+                    turn_index += 1
+    return events
 
-    return session_dirs
+
+def _opencode_event_to_normalized(ev: dict[str, Any], turn_index: int) -> NormalizedEvent | None:
+    """Convert an OpenCode adapter event dict to a NormalizedEvent.
+
+    Returns None for event kinds we don't surface (reasoning, step markers, etc.).
+    """
+    role = ev.get("role")
+    kind = ev.get("kind")
+    content = ev.get("content")
+    raw_tool = ev.get("toolName") or ""
+    tool_name = _OPENCODE_TOOL_NAME_MAP.get(raw_tool.lower(), raw_tool) or None
+    ts = ev.get("timestamp")
+    event_id = ev.get("id") or f"opencode:{turn_index}"
+    raw_ref: dict[str, Any] = {"agent": "opencode", "raw": ev}
+
+    if role == "user" and kind == "message":
+        text = content if isinstance(content, str) else str(content or "")
+        return NormalizedEvent(
+            event_id=event_id, source="main", agent_id="main",
+            turn_index=turn_index, event_type="user_message",
+            text=text, tool_name=None, timestamp=ts, raw_ref=raw_ref,
+        )
+    if role == "assistant" and kind == "message":
+        text = content if isinstance(content, str) else str(content or "")
+        return NormalizedEvent(
+            event_id=event_id, source="main", agent_id="main",
+            turn_index=turn_index, event_type="assistant_text",
+            text=text, tool_name=None, timestamp=ts, raw_ref=raw_ref,
+        )
+    if role == "assistant" and kind == "tool_call":
+        payload = content if isinstance(content, dict) else {}
+        files: list[str] = []
+        for key in ("filePath", "file_path", "path"):
+            v = payload.get(key)
+            if isinstance(v, str) and v:
+                files.append(v)
+                break
+        command = payload.get("command") if isinstance(payload.get("command"), str) else None
+        return NormalizedEvent(
+            event_id=event_id, source="main", agent_id="main",
+            turn_index=turn_index, event_type="tool_call",
+            text=ev.get("summary", ""),
+            tool_name=tool_name,
+            tool_use_id=ev.get("toolCallId"),
+            files=files, command=command, timestamp=ts,
+            raw_ref={**raw_ref, "tool_input": payload},
+        )
+    if role == "tool" and kind == "tool_result":
+        text = content if isinstance(content, str) else str(content or "")
+        return NormalizedEvent(
+            event_id=event_id, source="main", agent_id="main",
+            turn_index=turn_index, event_type="tool_result",
+            text=text, tool_name=tool_name,
+            tool_use_id=ev.get("toolCallId"),
+            timestamp=ts, raw_ref={**raw_ref, "result": text},
+        )
+    return None
 
 
 def _time_bounds(
