@@ -23,21 +23,21 @@ from ccwhat.config import (
     generate_local_session_id,
     load_config,
 )
-from ccwhat.runtime.claude_integration import (
+from ccwhat.runtime.integrations.claude import (
     ClaudeIntegrationConflict,
     install_claude_integration,
 )
-from ccwhat.runtime.codex_integration import (
+from ccwhat.runtime.integrations.codex import (
     CodexIntegrationConflict,
     install_codex_integration,
 )
-from ccwhat.runtime.controller import RuntimeController
-from ccwhat.runtime.opencode_integration import (
+from ccwhat.runtime.http.controller import RuntimeController
+from ccwhat.runtime.integrations.opencode import (
     OpenCodeIntegrationConflict,
     install_opencode_integration,
 )
-from ccwhat.runtime.ports import format_port_bind_error, port_bind_error, resolve_runtime_ports
-from ccwhat.runtime.registry import RunRegistry, utc_now
+from ccwhat.runtime.infra.ports import format_port_bind_error, port_bind_error, resolve_runtime_ports
+from ccwhat.runtime.infra.registry import RunRegistry, utc_now
 
 
 class _ManagedWebServer(Protocol):
