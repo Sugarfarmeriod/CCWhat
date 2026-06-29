@@ -328,9 +328,10 @@ def test_opencode_integration_generates_managed_files_and_detects_conflicts() ->
         assert "opencode_command_execute_before" in plugin_text
         assert "ccwhat:start" in plugin_text
         assert "ccwhat:finish" in plugin_text
-        assert "model_visible: true" in plugin_text
-        assert "agent_log_visible: true" in plugin_text
-        assert "output.parts = []" not in plugin_text
+        assert "tool.execute.after" in plugin_text
+        assert "detectFileOperation" in plugin_text
+        assert "CCWHAT_ENABLED" in plugin_text
+        assert "action" in plugin_text
 
         obsolete_command = workspace / ".opencode" / "command" / "ccwhat-start.md"
         obsolete_command.write_text(
