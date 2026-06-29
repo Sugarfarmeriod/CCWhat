@@ -175,6 +175,10 @@ def test_controller_start_finish_writes_runtime_task_staging() -> None:
         assert task["evidence_availability"]["repo_after"] is False
         assert task["evidence_availability"]["diff"] is False
         assert task["evidence_availability"]["control_events"] is False
+        # step diff.patch is empty (no record_step calls), but total diff captures README change
+        assert task["evidence_availability"]["diff_total"] is True
+        assert task["paths"]["diff_total"] == "diff_total.patch"
+        assert (task_dir / "diff_total.patch").exists()
         # repo snapshots and control_events no longer created
         assert not (task_dir / "repo_before.tar.gz").exists()
         assert not (task_dir / "repo_after.tar.gz").exists()
@@ -867,3 +871,111 @@ def test_task_json_instruction_and_expected_tests() -> None:
 
         task_after = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
         assert task_after["instruction"] == "add unit tests for parser"
+
+
+def test_step_diff_captures_bash_mv_and_sed_via_sync() -> None:
+    """sync_step captures mv/sed changes that bypass Write/Edit hooks,
+    and incremental step diffs do not duplicate previous steps."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+        (workspace / "old.md").write_text("hello\n", encoding="utf-8")
+        (workspace / "config.py").write_text("VERSION = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=workspace, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=workspace, capture_output=True, check=True)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="opencode", workspace=workspace, target_args=("opencode",),
+            proxy_port=11301, viewer_port=None, control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        try:
+            token = str(run.control["token"])
+            call_controller(port, token, "start", {"title": "mv and sed"})
+
+            # bash mv: rename old.md -> new.md, reported via /step action=sync
+            subprocess.run(["mv", "old.md", "new.md"], cwd=workspace, capture_output=True, check=True)
+            call_controller(port, token, "step", {"tool_name": "bash", "file_path": "", "action": "sync"})
+
+            # bash sed: modify config.py, reported via /step action=sync
+            subprocess.run(["sed", "-i", "", "s/VERSION = 1/VERSION = 2/", "config.py"],
+                           cwd=workspace, capture_output=True, check=True)
+            call_controller(port, token, "step", {"tool_name": "bash", "file_path": "", "action": "sync"})
+
+            call_controller(port, token, "finish", {})
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        task = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+
+        # Step diff and total diff both generated
+        assert task["evidence_availability"]["diff"] is True
+        assert task["evidence_availability"]["diff_total"] is True
+
+        step_patch = (task_dir / "diff.patch").read_text(encoding="utf-8")
+        total_patch = (task_dir / "diff_total.patch").read_text(encoding="utf-8")
+
+        # mv captured as a rename (in both step and total)
+        assert "rename from old.md" in step_patch
+        assert "rename to new.md" in step_patch
+        assert "rename from old.md" in total_patch
+
+        # sed captured as content change (in both)
+        assert "-VERSION = 1" in step_patch
+        assert "+VERSION = 2" in step_patch
+        assert "-VERSION = 1" in total_patch
+        assert "+VERSION = 2" in total_patch
+
+
+def test_step_diff_incremental_does_not_duplicate() -> None:
+    """Each step diff contains only that step's change, not prior steps'."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workspace = root / "repo"
+        workspace.mkdir()
+        _init_repo(workspace)
+        (workspace / "a.py").write_text("a\n", encoding="utf-8")
+        (workspace / "b.py").write_text("b\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=workspace, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=workspace, capture_output=True, check=True)
+
+        registry = RunRegistry(root / "runtime")
+        port = allocate_port()
+        run = registry.create_run(
+            agent="opencode", workspace=workspace, target_args=("opencode",),
+            proxy_port=11302, viewer_port=None, control_port=port,
+        )
+        controller = RuntimeController(registry, run.run_id, port)
+        controller.start()
+        try:
+            token = str(run.control["token"])
+            call_controller(port, token, "start", {"title": "two edits"})
+
+            (workspace / "a.py").write_text("a1\n", encoding="utf-8")
+            call_controller(port, token, "step", {"tool_name": "edit", "file_path": "a.py", "action": "add"})
+
+            (workspace / "b.py").write_text("b1\n", encoding="utf-8")
+            call_controller(port, token, "step", {"tool_name": "edit", "file_path": "b.py", "action": "add"})
+
+            call_controller(port, token, "finish", {})
+        finally:
+            controller.stop()
+
+        task_dir = registry.run_dir(run.run_id) / "tasks" / "task-001"
+        step_patch = (task_dir / "diff.patch").read_text(encoding="utf-8")
+
+        # Step 1 section contains a.py change but not b.py
+        step1 = step_patch.split("# Step 2:")[0]
+        assert "a.py" in step1
+        assert "b.py" not in step1
+
+        # Step 2 section contains b.py change but not a.py's old content
+        step2 = step_patch.split("# Step 2:")[1]
+        assert "b.py" in step2
+        assert "+a1" not in step2  # a.py's change must not leak into step 2

@@ -25,14 +25,11 @@ function detectFileOperation(toolName, toolInput) {
     const filePath = toolInput?.filePath || toolInput?.file_path || toolInput?.path
     if (filePath) return { tool: toolName, path: filePath, action: "add" }
   }
-  // Check for file deletion via bash
+  // Any bash command may modify files (mv, sed, cp, echo >, rm, ...).
+  // Rather than parse the command, sync the whole workspace so the
+  // backend reconciles actual disk state into the isolated index.
   if (toolName === "bash") {
-    const cmd = toolInput?.command || ""
-    const rmMatch = cmd.match(/(?:^|[;&|]\s*)\s*(rm|unlink)\s+(?:-[a-zA-Z]+\s+)*(.+?)$/)
-    if (rmMatch) {
-      const paths = rmMatch[2].split(/\s+/).filter(p => p && !p.startsWith("-"))
-      return paths.map(p => ({ tool: "bash", path: p, action: "delete" }))
-    }
+    return { tool: "bash", path: "", action: "sync" }
   }
   return null
 }

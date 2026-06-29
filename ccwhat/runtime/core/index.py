@@ -68,6 +68,15 @@ class CCWhatIndex:
         rel_path = Path(file_path)
         self._git_cmd(["rm", "--cached", str(rel_path)], check=False)
 
+    def sync_workspace(self) -> None:
+        """Stage all working-tree changes into the isolated index.
+
+        Captures any file change that bypassed the Write/Edit hooks (mv, sed,
+        echo redirection, cp, ...). Uses ``git add -A`` with the isolated
+        GIT_INDEX_FILE so the user's real index is never touched.
+        """
+        self._git_cmd(["add", "-A"])
+
     def diff(self, base_commit: str = "HEAD") -> str:
         """Generate diff between base_commit and current index.
 
@@ -150,6 +159,29 @@ class CCWhatIndex:
         if result.returncode == 0:
             return result.stdout.strip()
         return None
+
+    def write_tree(self) -> str | None:
+        """Write the isolated index to a tree object and return its hash."""
+        return self.get_tree_hash()
+
+    def diff_working(self, prev_tree: str | None) -> str:
+        """Diff the working tree against *prev_tree* (or HEAD if None).
+
+        Unlike :meth:`diff` (which compares the staged index), this compares
+        the actual working tree, so it reflects on-disk changes from any
+        source (Write/Edit/Bash mv/sed/...). The isolated GIT_INDEX_FILE is
+        still set so git does not touch the user's real index.
+        """
+        ref = prev_tree or "HEAD"
+        result = subprocess.run(
+            ["git", "diff", "--binary", ref],
+            cwd=self.workspace,
+            env=self._env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return result.stdout
 
     def _git_cmd(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[Any]:
         """Run a git command with the isolated index.

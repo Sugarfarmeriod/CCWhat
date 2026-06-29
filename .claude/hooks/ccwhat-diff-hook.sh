@@ -37,23 +37,14 @@ if [[ "$tool_name" =~ ^(Write|Edit|MultiEdit)$ && -n "$file_path" ]]; then
     exit 0
 fi
 
-# Handle Bash tool for file deletions
-if [[ "$tool_name" == "Bash" && -n "$bash_command" ]]; then
-    # Check if this looks like a file deletion command
-    # Matches: rm file, rm -f file, rm -rf dir, unlink file, etc.
-    if echo "$bash_command" | grep -qE '^\s*(rm|unlink)\s+'; then
-        # Extract deleted paths (simplified: take all arguments after rm/unlink)
-        deleted_paths=$(echo "$bash_command" | sed -E 's/^\s*(rm|unlink)\s+(-[a-zA-Z]+\s+)*//')
-        for path in $deleted_paths; do
-            # Skip flags/options
-            [[ "$path" == -* ]] && continue
-            # Notify controller about deletion
-            curl -s -X POST "http://127.0.0.1:${CCWHAT_RUNTIME_CONTROL_PORT}/step" \
-                -H "Content-Type: application/json" \
-                -d "{\"tool_name\":\"Bash\",\"file_path\":\"$path\",\"action\":\"delete\"}" \
-                > /dev/null 2>&1 &
-        done
-    fi
+# Any Bash command may modify files (mv, sed, cp, echo >, rm, ...).
+# Sync the whole workspace so the backend reconciles actual disk state.
+if [[ "$tool_name" == "Bash" ]]; then
+    curl -s -X POST "http://127.0.0.1:${CCWHAT_RUNTIME_CONTROL_PORT}/step" \
+        -H "Content-Type: application/json" \
+        -d "{\"tool_name\":\"Bash\",\"file_path\":\"\",\"action\":\"sync\"}" \
+        > /dev/null 2>&1 &
+    exit 0
 fi
 
 exit 0

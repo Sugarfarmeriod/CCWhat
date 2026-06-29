@@ -7,10 +7,10 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from ccwhat.runtime.index import CCWhatIndex
-from ccwhat.runtime.models import StepDiffBuffer
-from ccwhat.runtime.registry import RunRegistry, RuntimeRun, utc_now
-from ccwhat.runtime.trace_extractor import extract_task_trace
+from ccwhat.runtime.core.index import CCWhatIndex
+from ccwhat.runtime.core.models import StepDiffBuffer
+from ccwhat.runtime.infra.registry import RunRegistry, RuntimeRun, utc_now
+from ccwhat.runtime.core.trace_extractor import extract_task_trace
 
 
 class RuntimeTaskError(RuntimeError):
@@ -23,6 +23,7 @@ class TaskStaging:
         self._index: CCWhatIndex | None = None
         self._diff_buffer: StepDiffBuffer | None = None
         self._current_task_dir: Path | None = None
+        self._prev_tree: str | None = None  # tree hash of previous step, for incremental diff
 
     def start_task(self, run: RuntimeRun, title: str) -> dict[str, Any]:
         if run.active_task_id:
@@ -56,6 +57,7 @@ class TaskStaging:
                 "repo_before": None,
                 "repo_after": None,
                 "diff": None,
+                "diff_total": None,
                 "control_events": None,
                 "task_trace": None,
             },
@@ -63,6 +65,7 @@ class TaskStaging:
                 "repo_before": False,
                 "repo_after": False,
                 "diff": False,
+                "diff_total": False,
                 "control_events": False,
                 "task_trace": False,
             },
@@ -75,6 +78,7 @@ class TaskStaging:
         self._index.init()
         self._diff_buffer = StepDiffBuffer()
         self._current_task_dir = task_dir
+        self._prev_tree = self._index.write_tree()  # baseline = HEAD
 
         return task
 
@@ -93,11 +97,12 @@ class TaskStaging:
         task["git"]["after_status"] = self._git_output(workspace, ["status", "--short"], allow_fail=True) or ""
         task["paths"]["repo_after"] = None
 
-        # Reconcile deletions: detect files deleted via Bash rm
+        # Reconcile deletions and sync final working-tree state into index
         if self._index is not None:
             self._index.reconcile_deletions()
+            self._index.sync_workspace()
 
-        # Write diff.patch if we have recorded steps
+        # Step-by-step diff.patch (incremental diffs per recorded step)
         if self._diff_buffer is not None and not self._diff_buffer.is_empty():
             patch_content = self._diff_buffer.format_patch()
             (task_dir / "diff.patch").write_text(patch_content, encoding="utf-8")
@@ -106,6 +111,22 @@ class TaskStaging:
         else:
             task["paths"]["diff"] = None
             task["evidence_availability"]["diff"] = False
+
+        # Total diff.patch (full working tree vs task start commit)
+        # Captures every on-disk change regardless of which tool made it.
+        if self._index is not None:
+            before_commit = task["git"].get("before_commit")
+            total_diff = self._index.diff_working(before_commit)
+            if total_diff.strip():
+                (task_dir / "diff_total.patch").write_text(total_diff, encoding="utf-8")
+                task["paths"]["diff_total"] = "diff_total.patch"
+                task["evidence_availability"]["diff_total"] = True
+            else:
+                task["paths"]["diff_total"] = None
+                task["evidence_availability"]["diff_total"] = False
+        else:
+            task["paths"]["diff_total"] = None
+            task["evidence_availability"]["diff_total"] = False
 
         task["evidence_availability"]["repo_after"] = False
 
@@ -134,6 +155,7 @@ class TaskStaging:
         self._index = None
         self._diff_buffer = None
         self._current_task_dir = None
+        self._prev_tree = None
 
         return task
 
@@ -151,6 +173,7 @@ class TaskStaging:
         self._index = None
         self._diff_buffer = None
         self._current_task_dir = None
+        self._prev_tree = None
 
         return task
 
@@ -162,7 +185,11 @@ class TaskStaging:
         }
 
     def record_step(self, tool_name: str, file_path: str) -> int:
-        """Record a step diff for a file change.
+        """Record an incremental step diff for a file change.
+
+        The diff captures what changed on disk since the previous step (or
+        since task start for the first step), so each step is independently
+        attributable to its tool call.
 
         Args:
             tool_name: Name of the tool (e.g., "Write", "Edit")
@@ -180,38 +207,43 @@ class TaskStaging:
         # Add file to isolated index
         self._index.add(file_path)
 
-        # Generate diff from HEAD to current index
-        diff = self._index.diff("HEAD")
+        # Incremental diff: working tree vs previous step's tree (or HEAD)
+        diff = self._index.diff_working(self._prev_tree)
+        self._prev_tree = self._index.write_tree()
 
-        # Add to buffer (only if there's actual diff content)
         step_index = self._diff_buffer.add_step(tool_name, file_path, diff)
-
         return step_index
 
     def remove_step(self, file_path: str) -> int:
-        """Record a step for a file deletion.
+        """Record an incremental step diff for a file deletion."""
+        if self._index is None or self._diff_buffer is None:
+            raise RuntimeTaskError("no active task for recording step")
 
-        Args:
-            file_path: Path to the deleted file
+        self._index.remove(file_path)
+        self._index.sync_workspace()
 
-        Returns:
-            The assigned step index
+        diff = self._index.diff_working(self._prev_tree)
+        self._prev_tree = self._index.write_tree()
 
-        Raises:
-            RuntimeTaskError: If no active task or index not initialized
+        step_index = self._diff_buffer.add_step("Bash", file_path, diff, action="delete")
+        return step_index
+
+    def sync_step(self, tool_name: str) -> int:
+        """Record an incremental step after a Bash command that may have
+        modified files via mv/sed/cp/echo redirection.
+
+        Syncs the whole working tree into the isolated index and emits a
+        diff of everything changed since the previous step.
         """
         if self._index is None or self._diff_buffer is None:
             raise RuntimeTaskError("no active task for recording step")
 
-        # Remove file from isolated index
-        self._index.remove(file_path)
+        self._index.sync_workspace()
 
-        # Generate diff from HEAD to current index
-        diff = self._index.diff("HEAD")
+        diff = self._index.diff_working(self._prev_tree)
+        self._prev_tree = self._index.write_tree()
 
-        # Add to buffer
-        step_index = self._diff_buffer.add_step("Bash", file_path, diff, action="delete")
-
+        step_index = self._diff_buffer.add_step(tool_name, "", diff, action="sync")
         return step_index
 
 

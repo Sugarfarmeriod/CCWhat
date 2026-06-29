@@ -136,7 +136,7 @@ def _install_posttooluse_hook(hooks: dict, claude_dir: Path) -> None:
 
     diff_hook_path = claude_dir / "hooks" / "ccwhat-diff-hook.sh"
     managed_entry = {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "Write|Edit|MultiEdit|Bash",
         "hooks": [{"type": "command", "command": str(diff_hook_path), "timeout": 5}],
     }
 
