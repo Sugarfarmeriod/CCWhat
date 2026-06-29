@@ -510,6 +510,7 @@ def run(
         child_env["CCWHAT_RUNTIME_CONTROL_PORT"] = str(control_port)
         child_env["CCWHAT_RUNTIME_TOKEN"] = runtime_token
         child_env["CCWHAT_RUNTIME_WORKSPACE"] = str(Path.cwd().resolve())
+        child_env["CCWHAT_ENABLED"] = "1"
     # NO_PROXY is preserved unless already overridden
 
     target_proc: subprocess.Popen | None = None

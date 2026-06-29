@@ -14,6 +14,7 @@ from ccwhat.task_segments.models import NormalizedEvent
 
 
 _CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+_CCWHAT_RAW_REQ_RESP_DIR = Path.home() / ".ccwhat" / "raw-req-resp"
 
 
 def extract_task_trace(
@@ -33,7 +34,8 @@ def extract_task_trace(
     - "log_not_found": Session log not found
     - "no_events": No events in time window
     """
-    if agent != "claude":
+    supported_agents = {"claude", "opencode"}
+    if agent not in supported_agents:
         return _empty_trace(
             agent=agent,
             workspace=workspace,
@@ -43,7 +45,6 @@ def extract_task_trace(
             reason=f"Agent '{agent}' is not supported for trace extraction",
         )
 
-    pd = projects_dir or _CLAUDE_PROJECTS_DIR
     lower, upper = _time_bounds(started_at, finished_at)
     if lower is None or upper is None:
         return _empty_trace(
@@ -55,18 +56,34 @@ def extract_task_trace(
             reason="Failed to parse started_at or finished_at timestamps",
         )
 
-    project_dir = _project_dir_for_workspace(pd, workspace)
-    if project_dir is None:
-        return _empty_trace(
-            agent=agent,
-            workspace=workspace,
-            started_at=started_at,
-            finished_at=finished_at,
-            status="log_not_found",
-            reason=f"No session log found for workspace: {workspace}",
-        )
-
-    events = _collect_events(project_dir, lower, upper)
+    # Choose data source based on agent type
+    if agent == "claude":
+        pd = projects_dir or _CLAUDE_PROJECTS_DIR
+        project_dir = _project_dir_for_workspace(pd, workspace)
+        if project_dir is None:
+            return _empty_trace(
+                agent=agent,
+                workspace=workspace,
+                started_at=started_at,
+                finished_at=finished_at,
+                status="log_not_found",
+                reason=f"No Claude session log found for workspace: {workspace}",
+            )
+        events = _collect_events(project_dir, lower, upper)
+    else:  # opencode
+        session_dirs = _find_ccwhat_session_dirs(workspace)
+        if not session_dirs:
+            return _empty_trace(
+                agent=agent,
+                workspace=workspace,
+                started_at=started_at,
+                finished_at=finished_at,
+                status="log_not_found",
+                reason=f"No ccwhat session log found for workspace: {workspace}",
+            )
+        events = []
+        for session_dir in session_dirs:
+            events.extend(_collect_events(session_dir, lower, upper))
     if not events:
         return _empty_trace(
             agent=agent,
@@ -161,6 +178,28 @@ def _project_dir_for_workspace(projects_dir: Path, workspace: str) -> Path | Non
         if d.is_dir() and d.name.endswith(f"-{workspace_stem}"):
             return d
     return None
+
+
+def _find_ccwhat_session_dirs(workspace: str) -> list[Path]:
+    """Find ccwhat session directories for the given workspace.
+
+    For OpenCode, session logs are stored in ~/.ccwhat/raw-req-resp/<session-id>/
+    We scan all session directories and return those with matching workspace.
+    """
+    if not _CCWHAT_RAW_REQ_RESP_DIR.is_dir():
+        return []
+
+    workspace_path = Path(workspace).resolve()
+    session_dirs: list[Path] = []
+
+    for session_dir in _CCWHAT_RAW_REQ_RESP_DIR.iterdir():
+        if not session_dir.is_dir():
+            continue
+        # Check if this session has any JSONL files
+        if list(session_dir.glob("*.jsonl")):
+            session_dirs.append(session_dir)
+
+    return session_dirs
 
 
 def _time_bounds(

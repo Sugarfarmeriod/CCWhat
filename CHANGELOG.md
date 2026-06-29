@@ -2,6 +2,27 @@
 
 这里记录 AgentLens / agentlens 的重要版本变化。版本号以 `pyproject.toml` 和 `agentlens.__version__` 为准，发布标签使用 `v<version>`。
 
+## v2.3.5 - 2026-06-29
+
+### Runtime Dataset V2 修复：OpenCode 完整支持
+
+修复 OpenCode 集成中的关键问题，使其与 Claude Code 达到功能 parity。
+
+### 修复
+
+- **CCWHAT_ENABLED 环境变量**: 添加缺失的环境变量，使 OpenCode plugin 的 `tool.execute.after` hook 能正常工作
+- **trace_extractor 支持 opencode**: 从 `agent != "claude"` 改为 `agent not in {"claude", "opencode"}`
+- **OpenCode session log 提取**: 添加 `_find_ccwhat_session_dirs()` 函数，支持从 ccwhat proxy 日志 (`~/.ccwhat/raw-req-resp/`) 提取事件
+- **task.json instruction 填充**: 现在 opencode 的 task 也能正确提取 `first_user_message` 作为 instruction
+
+### 技术细节
+
+- `ccwhat/commands/run.py`: 添加 `child_env["CCWHAT_ENABLED"] = "1"`
+- `ccwhat/runtime/trace_extractor.py`: 支持多 agent 类型，为 opencode 添加 ccwhat 日志源
+- `ccwhat/runtime/integrations/opencode.py`: plugin 添加 `tool.execute.after` hook 支持
+
+---
+
 ## v2.3.4 - 2026-06-28
 
 ### Runtime Dataset 增强：完整文件操作追踪
