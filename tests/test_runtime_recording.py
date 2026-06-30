@@ -349,11 +349,28 @@ def test_opencode_integration_generates_managed_files_and_detects_conflicts() ->
             raise AssertionError("expected OpenCodeIntegrationConflict")
 
 
+def test_opencode_integration_removes_legacy_colon_commands_on_posix() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = Path(tmp)
+        command_dir = workspace / ".opencode" / "command"
+        command_dir.mkdir(parents=True)
+        marker = "<!-- CCWHAT MANAGED OPENCODE RUNTIME TASK COMMAND v1 -->\nold\n"
+        legacy_start = command_dir / "ccwhat:start.md"
+        legacy_finish = command_dir / "ccwhat:finish.md"
+        legacy_start.write_text(marker, encoding="utf-8")
+        legacy_finish.write_text(marker, encoding="utf-8")
+
+        install_opencode_integration(workspace)
+
+        assert not legacy_start.exists()
+        assert not legacy_finish.exists()
+
+
 def test_runtime_hook_commands_quote_windows_python_paths() -> None:
     with mock.patch("sys.executable", r"C:\Program Files\Python313\python.exe"), \
          mock.patch("ccwhat.runtime.platform.os.name", "nt"):
         assert codex_hook_command().startswith(r'"C:\Program Files\Python313\python.exe" -m ')
-        assert 'exec "C:\\Program Files\\Python313\\python.exe" -m ccwhat.runtime.claude_hook' in claude_hook_content()
+        assert "exec 'C:\\Program Files\\Python313\\python.exe' -m ccwhat.runtime.claude_hook" in claude_hook_content()
 
 
 def test_claude_hook_command_drives_controller_and_staging() -> None:

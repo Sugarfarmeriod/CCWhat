@@ -5789,8 +5789,8 @@ function buildThinkingSection(entry) {
 }
 
 // Build Raw JSON section HTML
-function buildRawJsonSectionNew(entry, turn, block = null) {
-  const rawData = { entry, turn, contentBlock: block || null };
+function buildRawJsonSectionNew(entry, turn) {
+  const rawData = { entry, turn };
   return `<details class="detail-panel-section">
     <summary>完整 JSON</summary>
     <div class="panel-section-body">
@@ -5840,7 +5840,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
   html += buildMessageSection(e);
   html += buildThinkingSection(e);
   html += buildToolsSection(e);
-  html += buildRawJsonSectionNew(e, turn, block);
+  html += buildRawJsonSectionNew(e, turn);
 
   html += '</div>';
   return html;
