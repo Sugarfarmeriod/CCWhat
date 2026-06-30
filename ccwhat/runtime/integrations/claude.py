@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import shlex
 import sys
+
+from ccwhat.runtime.platform import quote_command
 
 
 INTEGRATION_VERSION = "1"
@@ -64,7 +65,7 @@ def _command_content(name: str, description: str, argument_hint: str) -> str:
 
 
 def _hook_content() -> str:
-    python = shlex.quote(sys.executable)
+    python = quote_command([sys.executable])
     return (
         f"#!/bin/sh\n"
         f"# {MANAGED_MARKER} v{INTEGRATION_VERSION}\n"

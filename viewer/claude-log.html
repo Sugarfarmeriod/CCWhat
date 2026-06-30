@@ -5789,8 +5789,8 @@ function buildThinkingSection(entry) {
 }
 
 // Build Raw JSON section HTML
-function buildRawJsonSectionNew(entry, turn) {
-  const rawData = { entry, turn };
+function buildRawJsonSectionNew(entry, turn, block = null) {
+  const rawData = { entry, turn, contentBlock: block || null };
   return `<details class="detail-panel-section">
     <summary>完整 JSON</summary>
     <div class="panel-section-body">
@@ -5840,7 +5840,7 @@ function buildMinimalTurnDetailHtml(groupId, turn) {
   html += buildMessageSection(e);
   html += buildThinkingSection(e);
   html += buildToolsSection(e);
-  html += buildRawJsonSectionNew(e, turn);
+  html += buildRawJsonSectionNew(e, turn, block);
 
   html += '</div>';
   return html;
@@ -8354,11 +8354,7 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
     return;
   }
 
-  // Unconfirm previous Task Trace when re-segmenting
-  unconfirmTaskTraceForSession(sessionId);
-  delete activeTaskTraceOverlayBySession[sessionId];
-
-  const previous = taskSegmentReports[sessionId] || null;
+  const previous = activeTaskTraceData(sessionId) || taskSegmentReports[sessionId] || null;
   taskSegmentsInFlight = true;
   updateTaskSegmentsButton();
   if (navigate && workbenchState.activeView !== 'tasks') navigateToPage('tasks');
@@ -8366,6 +8362,7 @@ async function runTaskSegmentationForCurrentSession({ navigate = true } = {}) {
   if (panel) panel.innerHTML = `<div class="analysis-status"><span class="spinner"></span> 正在切分任务…</div>`;
   try {
     const data = await requestTaskSegments(sessionId);
+    unconfirmTaskTraceForSession(sessionId);
     taskSegmentReports[sessionId] = data;
     rebuildTurnTaskAssociation(data);
     const overlay = ensureTaskTraceOverlayFromSegments(sessionId, data);
